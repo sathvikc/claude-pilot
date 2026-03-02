@@ -2,6 +2,12 @@
 
 All notable changes to Pilot Shell will be documented in this file.
 
+## [7.1.3] - 2026-03-02
+
+### Bug Fixes
+
+- Add hash redirect so console dashboard loads without explicit /#/ fragment
+
 ## [7.1.2] - 2026-03-02
 
 ### Bug Fixes
