@@ -2,6 +2,12 @@
 
 All notable changes to Pilot Shell will be documented in this file.
 
+## [7.2.0] - 2026-03-05
+
+### Features
+
+- New Teams asset sharing dashboard for skills, rules, commands and agents 
+
 ## [7.1.5] - 2026-03-05
 
 ### Bug Fixes
