@@ -126,7 +126,7 @@ Plan  →  Approve  →  Implement (TDD)  →  Verify  →  Done
 
 Full exploration workflow for new functionality, refactoring, or architectural changes.
 
-**Plan:** Explores codebase with semantic search → asks clarifying questions → writes detailed spec with scope, tasks, and definition of done → **plan-reviewer sub-agent** validates completeness (conditional: skipped for simple plans ≤3 tasks) → waits for your approval.
+**Plan:** Explores codebase with semantic search → asks clarifying questions → writes detailed spec with scope, tasks, and definition of done → **plan-reviewer sub-agent** validates completeness → waits for your approval.
 
 **Implement:** Creates an isolated git worktree → implements each task with strict TDD (RED → GREEN → REFACTOR) → quality hooks auto-lint, format, and type-check every edit → full test suite after each task.
 
@@ -137,15 +137,15 @@ Full exploration workflow for new functionality, refactoring, or architectural c
 <details>
 <summary><b>Bugfix Mode</b></summary>
 
-Lighter, property-aware workflow for targeted fixes. Defines the bug precisely before touching any code.
+Investigation-first workflow for targeted fixes. Finds the root cause before touching any code.
 
-**Analysis:** Traces the bug to a specific `file:line` root cause → formalizes the Bug Condition (C) and Postcondition (P) → creates a **Behavior Contract** defining what must change and what must NOT change.
+**Investigate:** Reproduces the bug → traces backward through the call chain to find the **root cause** at a specific `file:line` → compares against working code patterns → states the fix with confidence level. If 3+ hypotheses fail, escalates as an architectural problem.
 
-**Test-Before-Fix:** Writes a bug-condition test that FAILS on current code → writes preservation tests that PASS on current code → implements the minimal fix → verifies all tests pass.
+**Test-Before-Fix:** Writes a regression test that FAILS on current code → implements the minimal fix at the root cause → verifies all tests pass. Defense-in-depth validation at multiple layers when the bug involves data flowing through shared code paths.
 
-**Verify:** Lightweight verification — **Behavior Contract audit** (explicitly verifies Fix Property and Preservation Property) → full test suite → lint + type check → process compliance. No review sub-agents — the Behavior Contract mathematically proves correctness through tests.
+**Verify:** Lightweight verification — regression test confirmation → full test suite → lint + type check → quality checks. No review sub-agents — the regression test proves the fix works, the full suite proves nothing else broke.
 
-**Why this matters:** The Behavior Contract prevents regressions. The bug test proves the fix works. The preservation tests prove nothing else broke. No guessing, no "fix one thing, break another."
+**Why this matters:** Root cause investigation prevents "fix one thing, break another." The regression test locks in the fix. No formal notation overhead — just trace, test, fix, verify.
 
 </details>
 
@@ -290,7 +290,7 @@ Opus for planning — where reasoning quality matters most. Sonnet for implement
 | Phase                 | Default | Why                                                                                                                                                |
 | --------------------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Planning**          | Opus    | Exploring your codebase, designing architecture, and writing the spec requires deep reasoning. A good plan is the foundation of everything.        |
-| **Plan Verification** | Sonnet  | The plan-reviewer sub-agent validates completeness and challenges assumptions. Conditional: skipped for simple plans (≤3 tasks, clear scope).      |
+| **Plan Verification** | Sonnet  | The plan-reviewer sub-agent validates completeness and challenges assumptions on every feature spec.                                               |
 | **Implementation**    | Sonnet  | With a solid plan, writing code is straightforward. Sonnet is fast, cost-effective, and produces high-quality code when guided by a clear spec.    |
 | **Code Verification** | Sonnet  | The unified spec-reviewer agent handles deep code review (compliance + quality + goal). The orchestrator runs mechanical checks and applies fixes. |
 

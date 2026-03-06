@@ -14,7 +14,7 @@ const routingTable = [
     model: "Sonnet",
     color: "text-sky-400",
     bg: "bg-sky-400/10",
-    why: "The plan-reviewer sub-agent validates completeness and challenges assumptions. Conditional: skipped for simple plans (≤3 tasks) to save time and tokens.",
+    why: "The plan-reviewer sub-agent validates completeness and challenges assumptions on every feature spec.",
   },
   {
     phase: "Implementation",

@@ -19,7 +19,7 @@ model: sonnet
 
 ```
 /spec → Detect type → Feature: Skill('spec-plan')       → Plan → Implement → Verify
-                    → Bugfix:  Skill('spec-bugfix-plan') → Plan → Implement → Bugfix-Verify
+                    → Bugfix:  Skill('spec-bugfix-plan') → Investigate → Plan → Implement → Verify
 ```
 
 | Phase | Skill | Model |

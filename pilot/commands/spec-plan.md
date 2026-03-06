@@ -21,7 +21,7 @@ hooks:
 ## ⛔ Critical Constraints
 
 - **NO sub-agents during planning** except Step 1.7 (plan-reviewer)
-- **NEVER skip plan-reviewer** when criteria are met (>3 tasks, migration, open questions) — context level is NOT a valid reason to skip
+- **NEVER skip plan-reviewer** — it runs for every feature spec, regardless of size. Context level is NOT a valid reason to skip.
 - **NEVER write code during planning** — planning and implementation are separate phases
 - **NEVER assume — verify by reading files**
 - **ONLY stopping point is plan approval** — everything else is automatic. Never ask "Should I fix these?"
@@ -145,12 +145,13 @@ For each: document hypotheses, note full file paths, track unanswered questions.
 **Only when exploration revealed multiple possible directions or scope is ambiguous.** Skip for straightforward tasks.
 
 1. Notify user, list discovered gaps/opportunities with brief assessments
-2. `AskUserQuestion(multiSelect: true)` — let user pick which items to include
-3. Unselected items go to "Out of Scope" or "Deferred Ideas"
+2. For non-trivial decisions: present 2-3 approaches with trade-offs and your recommendation — don't just list discoveries, show the design space
+3. `AskUserQuestion(multiSelect: true)` — let user pick which items to include
+4. Unselected items go to "Out of Scope" or "Deferred Ideas"
 
 ### Step 1.4: Design Decisions
 
-**⛔ Do NOT skip this step.** After exploration, there are always design choices to validate — even confirming the "obvious" approach ensures alignment. Summarize findings, notify, then use `AskUserQuestion` (Batch 2) — each decision as a separate question with concrete options:
+**⛔ Do NOT skip this step.** After exploration, there are always design choices to validate — even confirming the "obvious" approach ensures alignment. For each decision, propose 2-3 concrete approaches with trade-offs and your recommendation. Summarize findings, notify, then use `AskUserQuestion` (Batch 2) — each decision as a separate question with the approaches as options:
 
 ```bash
 ~/.pilot/bin/pilot notify plan_approval "Design Decisions" "<plan_name> — architecture choices" --plan-path "<plan_path>" 2>/dev/null || true
@@ -261,13 +262,9 @@ Type: Feature
 ### Deferred Ideas (only if any surfaced)
 ```
 
-### Step 1.7: Plan Verification — CONDITIONAL
+### Step 1.7: Plan Verification
 
-**Run plan-reviewer when:** plan has >3 tasks, OR includes a Feature Inventory (migration), OR has unresolved open questions.
-
-**Skip when:** plan has ≤3 tasks with clear scope and no migration — proceed directly to Step 1.8.
-
-**When running:**
+**Always run plan-reviewer for every feature spec.** Small plans benefit from a second pair of eyes just as much as large ones — missing edge cases and unclear DoD criteria are size-independent.
 
 ```bash
 SESS_ID=$(echo $PILOT_SESSION_ID)

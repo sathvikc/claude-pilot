@@ -87,9 +87,9 @@ const QuickModeSection = () => {
             <code className="text-primary bg-primary/10 px-1 py-0.5 rounded">
               /spec
             </code>{" "}
-            for bug fixes (structured bug analysis with Behavior Contract and
-            test-before-fix), complex features that need a plan before
-            implementation, or refactors with many interdependent changes.
+            for bug fixes (root cause investigation with test-before-fix),
+            complex features that need a plan before implementation, or
+            refactors with many interdependent changes.
           </p>
         </div>
       </div>

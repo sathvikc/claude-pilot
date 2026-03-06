@@ -46,7 +46,7 @@ Complete user workflow? YES → E2E test | NO → Unit or integration
 | TypeScript | `fast-check` | `fc.assert(fc.property(fc.array(fc.integer()), ...))` |
 | Go | `go test -fuzz` | `func FuzzFoo(f *testing.F) { f.Fuzz(...) }` |
 
-**When to use:** Parsers, serializers, data structure invariants, encode/decode roundtrips, bugfix preservation properties (see `/spec` bugfix workflow).
+**When to use:** Parsers, serializers, data structure invariants, encode/decode roundtrips, bugfix preservation properties.
 
 **When NOT to use:** Simple CRUD, UI interactions, fixed-input validation, config changes.
 

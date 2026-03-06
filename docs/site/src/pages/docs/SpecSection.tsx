@@ -20,7 +20,7 @@ const phases = [
     steps: [
       "Explores codebase with semantic search, asks clarifying questions",
       "Writes detailed spec with scope, tasks, and definition of done",
-      "Plan-reviewer sub-agent validates completeness (conditional, skipped for simple plans)",
+      "Plan-reviewer sub-agent validates completeness on every spec",
       "Waits for your approval — edit the plan directly before accepting",
     ],
   },
@@ -46,7 +46,7 @@ const phases = [
     steps: [
       "Full test suite + type checking + lint + build verification",
       "Features: unified review sub-agent (compliance + quality + goal)",
-      "Bugfixes: Behavior Contract audit — no sub-agents needed",
+      "Bugfixes: regression test + full suite — no sub-agents needed",
       "Auto-fixes findings, loops back until all checks pass",
     ],
   },
@@ -186,15 +186,15 @@ const SpecSection = () => {
               </h3>
             </div>
             <p className="text-xs text-muted-foreground leading-relaxed mb-3">
-              Lighter, property-aware flow for targeted fixes. Defines the bug
-              precisely before touching any code.
+              Investigation-first flow for targeted fixes. Finds the root cause
+              before touching any code.
             </p>
             <div className="space-y-1.5">
               {[
-                "Bug Condition (C): exact broken state description",
-                "Behavior Contract: Must Change / Must NOT Change",
-                "Test-before-fix: bug test FAILS → preservation tests PASS → fix",
-                "Lightweight verify: Contract audit replaces review agents",
+                "Root cause tracing: backward through call chain to file:line",
+                "Pattern analysis: compare broken vs working code paths",
+                "Test-before-fix: regression test FAILS → fix → all tests PASS",
+                "Lightweight verify: regression test + full suite, no sub-agents",
               ].map((item) => (
                 <div
                   key={item}

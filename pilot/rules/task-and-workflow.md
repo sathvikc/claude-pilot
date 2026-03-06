@@ -68,11 +68,11 @@ When resuming same session (same `CLAUDE_CODE_TASK_LIST_ID`): run `TaskList` fir
 
 | Phase | Agent (background) | `subagent_type` |
 |-------|-------------------|-----------------|
-| `spec-plan` 1.7 (features >3 tasks) | plan-reviewer | `pilot:plan-reviewer` |
+| `spec-plan` 1.7 (all features) | plan-reviewer | `pilot:plan-reviewer` |
 | `spec-verify` 3.1, 3.4 (features only) | spec-reviewer | `pilot:spec-reviewer` |
 
-**Plan-reviewer is conditional:** Skip for plans with ≤3 tasks, no Feature Inventory, and no open questions.
-**Bugfixes skip sub-agents** in both planning and verification — the Behavior Contract proves correctness through tests.
+**Plan-reviewer is mandatory** for all feature specs. Spec-reviewer is mandatory during verification.
+**Bugfixes skip sub-agents** in both planning and verification — the regression test proves the fix, the full suite proves preservation.
 
 **Rules:**
 - Launch with `run_in_background=true`
@@ -114,10 +114,10 @@ Call after creating plan header, reading existing plan, and after status changes
 
 ```
 /spec → Dispatcher → Detect type (LLM intent) → Feature: Skill('spec-plan') → Plan, verify, approve
-                                                → Bugfix:  Skill('spec-bugfix-plan') → Bug analysis, verify, approve
+                                                → Bugfix:  Skill('spec-bugfix-plan') → Root cause investigation, plan, approve
                    → Skill('spec-implement')   → TDD loop for each task (both types)
                    → Feature: Skill('spec-verify')        → Tests, execution, code review, 1 review agent
-                   → Bugfix:  Skill('spec-bugfix-verify') → Behavior Contract audit, tests, process compliance
+                   → Bugfix:  Skill('spec-bugfix-verify') → Tests, quality checks, fix confirmation
 ```
 
 ### ⛔ Dispatcher Integrity
@@ -141,7 +141,7 @@ Call after creating plan header, reading existing plan, and after status changes
 | COMPLETE | * | Bugfix | `Skill(skill='spec-bugfix-verify', args='<plan-path>')` |
 | VERIFIED | * | * | Report completion, done |
 
-**`spec-implement` works identically for both plan types** — the plan file is the interface. **Verification dispatches by type:** features → `spec-verify` (1 review agent, automated checks, runtime profile-based E2E), bugfixes → `spec-bugfix-verify` (Behavior Contract audit, tests, process compliance — no sub-agents).
+**`spec-implement` works identically for both plan types** — the plan file is the interface. **Verification dispatches by type:** features → `spec-verify` (1 review agent, automated checks, runtime profile-based E2E), bugfixes → `spec-bugfix-verify` (tests, quality checks, fix confirmation — no sub-agents).
 
 ### Feedback Loop
 
