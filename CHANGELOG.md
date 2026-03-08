@@ -2,6 +2,12 @@
 
 All notable changes to Pilot Shell will be documented in this file.
 
+## [7.3.0] - 2026-03-08
+
+### Features
+
+- Replace Vexor with Probe for code search 
+
 ## [7.2.2] - 2026-03-06
 
 ### Bug Fixes
