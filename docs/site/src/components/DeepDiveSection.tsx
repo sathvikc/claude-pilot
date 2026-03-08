@@ -36,7 +36,7 @@ const hooksPipeline = [
     hooks: [
       "Block WebSearch/WebFetch — redirect to MCP alternatives",
       "Block EnterPlanMode/ExitPlanMode — project uses /spec",
-      "Hint Probe MCP for semantic Grep patterns",
+      "Hint Probe CLI for semantic Grep patterns",
     ],
     color: "text-amber-400",
     bgColor: "bg-amber-400/10",

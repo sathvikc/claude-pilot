@@ -70,16 +70,16 @@ def is_semantic_pattern(pattern: str) -> bool:
 
 
 EXPLORE_HINT = {
-    "message": "Consider using Probe MCP `search_code` instead (better semantic ranking)",
-    "alternative": "Probe MCP search_code for semantic codebase search, or Grep/Glob for exact patterns",
-    "example": 'ToolSearch(query="+probe search") then mcp__plugin_pilot_probe__search_code(query="where is config loaded")',
+    "message": "Consider using Probe CLI instead (better semantic ranking, instant results)",
+    "alternative": "Probe CLI `probe search` for semantic codebase search, or Grep/Glob for exact patterns",
+    "example": 'Bash: probe search "where is config loaded" ./ --max-results 5 --max-tokens 2000',
 }
 
 HINTS: dict[str, dict] = {
     "Grep": {
-        "message": "Semantic pattern detected — Probe MCP `search_code` may give better results",
-        "alternative": "Probe MCP search_code for intent-based file discovery",
-        "example": 'ToolSearch(query="+probe search") then mcp__plugin_pilot_probe__search_code(query="<pattern>")',
+        "message": "Semantic pattern detected — Probe CLI `probe search` may give better results",
+        "alternative": "Probe CLI for intent-based file discovery",
+        "example": 'Bash: probe search "<pattern>" ./ --max-results 5 --max-tokens 2000',
         "condition": lambda data: is_semantic_pattern(
             data.get("tool_input", {}).get("pattern", "") if isinstance(data.get("tool_input"), dict) else ""
         ),

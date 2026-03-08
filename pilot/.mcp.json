@@ -4,10 +4,6 @@
       "command": "npx",
       "args": ["-y", "@upstash/context7-mcp"]
     },
-    "probe": {
-      "command": "npx",
-      "args": ["-y", "@probelabs/probe@latest", "agent", "--mcp"]
-    },
     "mem-search": {
       "type": "stdio",
       "command": "sh",

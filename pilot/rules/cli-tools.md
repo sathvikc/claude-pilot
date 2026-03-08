@@ -25,29 +25,86 @@ Slug = plan filename without date prefix and `.md`. `create` auto-stashes uncomm
 
 ### Probe — Code Search (CLI)
 
-**Secondary search tool.** Use Probe MCP (`search_code`/`extract_code`) first. Fall back to CLI for quick terminal searches when MCP is unavailable.
+**⛔ Primary codebase search tool.** Instant results (<0.3s), runs via Bash. Always use Probe first for codebase search. Fallback: Grep/Glob for exact patterns.
 
 Probe is installed globally via npm: `npm install -g @probelabs/probe`
 
+**⛔ Always use `--max-results 5 --max-tokens 2000`** to keep context lean. This returns ~5 relevant code snippets within ~300 tokens — enough to understand patterns without bloating the 200k context window.
+
+#### `probe search` — Semantic Code Search
+
 ```bash
-# Semantic search (Elasticsearch syntax)
-probe search "authentication AND login" ./src
-probe search "error AND handling" ./
-probe search "database NOT sqlite" ./
+# ⛔ Default: always limit results to protect context
+probe search "authentication AND login" ./src --max-results 5 --max-tokens 2000
 
-# Extract code block by line or symbol
-probe extract src/auth.ts:42
-probe extract src/auth.ts#authenticate
-probe extract src/auth.ts:10-50
+# Boolean operators (Elasticsearch syntax)
+probe search "error AND handling" ./ --max-results 5 --max-tokens 2000
+probe search "database NOT sqlite" ./ --max-results 5 --max-tokens 2000
+probe search "(error OR exception) AND handle" ./ --max-results 5 --max-tokens 2000
 
-# AST pattern matching
-probe query "async function $NAME($$$)" --language typescript
-probe query "class $CLASS: def __init__($$$)" --language python
+# Wildcards
+probe search "auth* connect*" ./ --max-results 5 --max-tokens 2000
+
+# Language filter
+probe search "interface" ./ --language typescript --max-results 5 --max-tokens 2000
+
+# File filters (inside query string)
+probe search "function AND ext:rs" ./           # By extension
+probe search "class AND file:src/**/*.py" ./    # By file path
+probe search "error AND dir:tests" ./           # By directory
+
+# Include test files (excluded by default)
+probe search "mock" ./ --allow-tests --max-results 5 --max-tokens 2000
 ```
 
-**Search options:** `--max-tokens <n>`, `--max-results <n>`, `--allow-tests`, `--format markdown|json`
+**Key options:** `--max-tokens <n>` (always use), `--max-results <n>` (always use), `--allow-tests`, `--format color|markdown|json`, `--language <lang>`, `--session <id>` (dedup across related searches)
 
-**File filters (inside query):** `ext:rs`, `file:src/**/*.py`, `dir:tests`
+#### `probe extract` — AST-Aware Code Extraction
+
+```bash
+# Extract by line (finds enclosing function/class)
+probe extract src/auth.ts:42
+
+# Extract by symbol name
+probe extract src/auth.ts#authenticate
+
+# Extract line range
+probe extract src/auth.ts:10-50
+
+# Multiple files at once
+probe extract src/auth.ts:42 src/user.ts#User src/api.ts:10-50
+
+# From git diff (extract changed code blocks)
+git diff | probe extract --diff
+git diff --cached | probe extract --diff
+
+# Output formats
+probe extract src/auth.ts:42 --format json
+probe extract src/auth.ts:42 --format markdown
+
+# Add context lines
+probe extract src/auth.ts:42 --context 5
+```
+
+**Formats:** `"file.ts:42"` (block at line), `"file.ts:10-50"` (range), `"file.ts#symbolName"` (by symbol), `"file.ts"` (whole file).
+
+#### `probe query` — AST Pattern Matching
+
+```bash
+# Find all async functions
+probe query "async function $NAME($$$)" --language typescript
+
+# Find Python classes
+probe query "class $CLASS: def __init__($$$)" --language python
+
+# Find React hooks
+probe query "useState($INITIAL)" ./src --language javascript
+
+# Find Go structs
+probe query "type $NAME struct { $$$FIELDS }" ./src --language go
+```
+
+**Metavariables:** `$NAME` (single node), `$$$BODY` (multiple nodes), `$_` (any single node).
 
 `probe --version` to verify installation.
 

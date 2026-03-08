@@ -47,7 +47,6 @@
       "WebSearch",
       "Write",
       "mcp__ide__*",
-      "mcp__plugin_pilot_probe__*",
       "mcp__plugin_pilot_mem-search__*",
       "mcp__plugin_pilot_context7__*",
       "mcp__plugin_pilot_web-search__*",

@@ -11,7 +11,7 @@ const syncPhases = [
     phase: 2,
     action: "Check Probe availability (no indexing required)",
   },
-  { phase: 3, action: "Explore codebase with Probe MCP/Grep to find patterns" },
+  { phase: 3, action: "Explore codebase with Probe CLI/Grep to find patterns" },
   { phase: 4, action: "Compare discovered vs documented patterns" },
   { phase: 5, action: "Sync/update project rule with tech stack and commands" },
   { phase: 6, action: "Sync MCP server documentation" },

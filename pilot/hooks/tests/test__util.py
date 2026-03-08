@@ -168,11 +168,11 @@ class TestJsonHelpers:
     def test_pre_tool_use_context(self) -> None:
         from _util import pre_tool_use_context
 
-        result = json.loads(pre_tool_use_context("Try Probe MCP first"))
+        result = json.loads(pre_tool_use_context("Try Probe CLI first"))
         assert result == {
             "hookSpecificOutput": {
                 "hookEventName": "PreToolUse",
-                "additionalContext": "Try Probe MCP first",
+                "additionalContext": "Try Probe CLI first",
             }
         }
 

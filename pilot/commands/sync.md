@@ -99,41 +99,39 @@ AskUserQuestion: "Found unscoped assets that should be prefixed with '{slug}-' f
 ### Step 2.1: Setup
 
 1. Check `probe --version` — if not installed, inform user, use Grep/Glob as fallback for all Probe steps below
-2. `ToolSearch(query="+probe search")` to load Probe MCP tools
-3. **Directory structure:** `tree -L 3 -I 'node_modules|.git|__pycache__|dist|build|.venv|.next|coverage|.cache|cdk.out'`
-4. **Technologies:** Check `package.json`, `pyproject.toml`, `tsconfig.json`, `go.mod`
-5. **Source documents:** Find and read canonical docs — `docs/`, `**/ARCHITECTURE.md`, `**/CONTRIBUTING.md`, `**/docs/*.md`. These are the source of truth for generated rules — keep them open when writing.
+2. **Directory structure:** `tree -L 3 -I 'node_modules|.git|__pycache__|dist|build|.venv|.next|coverage|.cache|cdk.out'`
+3. **Technologies:** Check `package.json`, `pyproject.toml`, `tsconfig.json`, `go.mod`
+4. **Source documents:** Find and read canonical docs — `docs/`, `**/ARCHITECTURE.md`, `**/CONTRIBUTING.md`, `**/docs/*.md`. These are the source of truth for generated rules — keep them open when writing.
 
 ### Step 2.2: Probe Deep Exploration
 
-Use `search_code` to understand each area that rules need to cover. Adapt queries to what the project actually does — these are starting points, not a checklist:
+Use `probe search` (via Bash) to understand each area that rules need to cover. **Always use `--max-results 5 --max-tokens 2000`** to keep context lean. Adapt queries to what the project actually does — these are starting points, not a checklist:
 
-```
+```bash
 # Architecture & structure
-search_code(query="how is the application structured and what are the main entry points")
-search_code(query="how are services or modules organized")
+probe search "how is the application structured and what are the main entry points" ./ --max-results 5 --max-tokens 2000
+probe search "how are services or modules organized" ./ --max-results 5 --max-tokens 2000
 
 # Patterns & conventions
-search_code(query="how are API endpoints defined and routed")
-search_code(query="how is authentication and authorization handled")
-search_code(query="how is configuration loaded and environment variables used")
-search_code(query="how is error handling done")
-search_code(query="how are database models or data access patterns structured")
+probe search "how are API endpoints defined and routed" ./ --max-results 5 --max-tokens 2000
+probe search "how is authentication and authorization handled" ./ --max-results 5 --max-tokens 2000
+probe search "how is configuration loaded and environment variables used" ./ --max-results 5 --max-tokens 2000
+probe search "how is error handling done" ./ --max-results 5 --max-tokens 2000
+probe search "how are database models or data access patterns structured" ./ --max-results 5 --max-tokens 2000
 
 # Testing
-search_code(query="how are tests organized and what testing patterns are used")
-search_code(query="test fixtures and helpers")
+probe search "how are tests organized and what testing patterns are used" ./ --max-results 5 --max-tokens 2000
+probe search "test fixtures and helpers" ./ --max-results 5 --max-tokens 2000
 
 # Build & deploy
-search_code(query="how is the application built and deployed")
-search_code(query="CI/CD pipeline configuration")
+probe search "how is the application built and deployed" ./ --max-results 5 --max-tokens 2000
+probe search "CI/CD pipeline configuration" ./ --max-results 5 --max-tokens 2000
 ```
 
-**Follow up with `extract_code`** to pull concrete examples for rules:
-```
-# Extract a representative pattern to use as a code example in a rule
-extract_code(path="/abs/path", files=["src/routes/users.ts#createUser"])
-extract_code(path="/abs/path", files=["tests/conftest.py:1-30"])
+**Follow up with `probe extract`** to pull concrete examples for rules:
+```bash
+probe extract src/routes/users.ts#createUser
+probe extract tests/conftest.py:1-30
 ```
 
 ### Step 2.3: Fill Gaps
@@ -203,7 +201,7 @@ If doesn't exist, create:
 
 ## Phase 5: Sync MCP Rules
 
-**Document user-configured MCP servers (skip Pilot core: context7, mem-search, web-search, web-fetch, grep-mcp, probe).**
+**Document user-configured MCP servers (skip Pilot core: context7, mem-search, web-search, web-fetch, grep-mcp).**
 
 ### Step 5.1: Discover
 
@@ -262,16 +260,16 @@ If obsolete: AskUserQuestion "Yes, remove it" | "Keep it" | "Update instead". If
 
 1. List undocumented areas (comparing Phase 1 + Phase 2)
 2. For each candidate area, use Probe to find the actual patterns before drafting:
-   ```
-   search_code(query="how is [pattern] implemented across the codebase")
-   extract_code(path="/abs/path", files=["src/example.ts#patternFunction"])
+   ```bash
+   probe search "how is [pattern] implemented across the codebase" ./ --max-results 5 --max-tokens 2000
+   probe extract src/example.ts#patternFunction
    ```
 3. Prioritize by: frequency, uniqueness, mistake likelihood
 4. AskUserQuestion (multiSelect): which areas to document
 5. For each: ask clarifying questions, draft rule using Probe results and extracted examples, confirm before creating
 6. Write to `.claude/rules/{slug}-{pattern-name}.md`
 
-**Rule format:** Standard Name → When to Apply → The Pattern (code from `extract_code`) → Why (if not obvious) → Common Mistakes → Good/Bad examples.
+**Rule format:** Standard Name → When to Apply → The Pattern (code from `probe extract`) → Why (if not obvious) → Common Mistakes → Good/Bad examples.
 
 ## Phase 8: Discover & Create Skills
 
@@ -288,7 +286,7 @@ Skills are appropriate for: multi-step workflows, tool integrations, reusable sc
 
 1. **Build entity index** — collect all services, entry points, modules, config keys, and enum values mentioned across generated files
 2. **Cross-file completeness** — for each entity, verify it appears in all related files (e.g., a service in `{slug}-deployment.md` must also be in `{slug}-architecture.md` and `{slug}-project.md`)
-3. **Source fidelity** — for each identifier in generated rules, `search_code` or grep source docs to confirm exact spelling. If spelling differs between source and generated rule, fix the rule to match the source verbatim
+3. **Source fidelity** — for each identifier in generated rules, `probe search` or grep source docs to confirm exact spelling. If spelling differs between source and generated rule, fix the rule to match the source verbatim
 4. **Section coverage** — for each significant section in source docs (CLAUDE.md, `docs/`), confirm a corresponding rule section exists
 5. **Reference validity** — cross-references between files point to files that actually exist
 

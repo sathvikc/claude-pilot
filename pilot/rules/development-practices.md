@@ -1,20 +1,19 @@
 ## Development Practices
 
-### Codebase Search — Probe MCP First
+### Codebase Search — Probe CLI First
 
-**⛔ Always use Probe MCP (`search_code`) as the first tool for codebase search.** It finds by intent, not exact text. Only fall back to Grep/Glob when you need an exact symbol or pattern match that Probe missed.
+**⛔ Always use Probe CLI (`probe search`) as the first tool for codebase search.** Finds by intent, not exact text. Instant results (<0.3s) via Bash. Only fall back to Grep/Glob when you need an exact symbol or pattern match that Probe missed.
 
-```
-ToolSearch(query="+probe search")
-mcp__plugin_pilot_probe__search_code(query="how is authentication handled")
-mcp__plugin_pilot_probe__search_code(query="database connection setup")
+```bash
+probe search "how is authentication handled" ./
+probe search "database connection setup" ./
 ```
 
 ### Project-Specific Policies
 
 **File Size:** Aim for production files under 800 lines. Over 1000 lines is a signal to consider splitting — but only when it's the focus of the current task, not as a side-refactor. Test files exempt.
 
-**Dependency Check:** Before modifying any function, use Probe MCP first (then `Grep` or LSP `findReferences` if needed) to find all callers. Update all affected call sites.
+**Dependency Check:** Before modifying any function, use Probe CLI first (then `Grep` or LSP `findReferences` if needed) to find all callers. Update all affected call sites.
 
 **Self-Correction:** Fix obvious mistakes (syntax errors, typos, missing imports) in code you are actively writing. Do not auto-fix errors in code the user edited — report them and let the user decide.
 
@@ -28,7 +27,7 @@ mcp__plugin_pilot_probe__search_code(query="database connection setup")
 
 **Phase 1 — Root Cause:** Read errors completely, reproduce consistently, check recent changes (git diff), instrument at boundaries.
 
-**Phase 2 — Pattern Analysis:** Use Probe MCP to find working examples in codebase by intent. Compare against references, identify ALL differences.
+**Phase 2 — Pattern Analysis:** Use Probe CLI to find working examples in codebase by intent. Compare against references, identify ALL differences.
 
 **Phase 3 — Hypothesis:** Form specific, falsifiable hypothesis ("state resets because component remounts on route change"). Test with minimal change — one variable at a time.
 

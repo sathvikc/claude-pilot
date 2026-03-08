@@ -113,7 +113,7 @@ Read as many files as needed. For each: read completely, trace execution path fr
 - What data enters each component? What exits?
 - WHERE does it break? Run once to gather evidence, THEN investigate the failing component.
 
-Tools: Probe MCP `search_code` (find by intent), `extract_code` (extract functions by symbol), Read/Grep/Glob (direct exploration).
+Tools: Probe CLI `probe search` (find by intent), `probe extract` (extract functions by symbol), Read/Grep/Glob (direct exploration).
 
 ### 1.2.4: Pattern Analysis
 

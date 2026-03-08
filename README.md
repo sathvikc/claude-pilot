@@ -239,7 +239,7 @@ Hooks fire automatically across the entire lifecycle — formatting, linting, ty
 
 | Hook                 | Type     | What it does                                                                                                                             |
 | -------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `tool_redirect.py` | Blocking | Blocks WebSearch/WebFetch (MCP alternatives exist), EnterPlanMode/ExitPlanMode (/spec conflict). Hints Probe MCP for semantic Grep patterns. |
+| `tool_redirect.py` | Blocking | Blocks WebSearch/WebFetch (MCP alternatives exist), EnterPlanMode/ExitPlanMode (/spec conflict). Hints Probe CLI for semantic Grep patterns. |
 
 #### PostToolUse (after every Write / Edit / MultiEdit)
 

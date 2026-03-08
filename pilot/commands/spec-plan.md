@@ -132,8 +132,8 @@ When adding tasks to an existing plan: load it, parse structure, verify compatib
 | Tool | When |
 |------|------|
 | **Context7** | Library/framework docs |
-| **Probe MCP** (`search_code`) | Semantic code search by intent |
-| **Probe MCP** (`extract_code`) | Extract specific functions/classes by symbol or line |
+| **Probe CLI** (`probe search`) | Semantic code search by intent (via Bash) |
+| **Probe CLI** (`probe extract`) | Extract specific functions/classes by symbol or line |
 | **grep-mcp** | Real-world GitHub examples |
 | **Read/Grep/Glob** | Direct file exploration |
 
