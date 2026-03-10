@@ -2,6 +2,12 @@
 
 All notable changes to Pilot Shell will be documented in this file.
 
+## [7.4.7] - 2026-03-10
+
+### Bug Fixes
+
+- Improvements for learn and sync commands
+
 ## [7.4.6] - 2026-03-10
 
 ### Bug Fixes
