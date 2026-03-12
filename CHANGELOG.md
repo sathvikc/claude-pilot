@@ -2,6 +2,12 @@
 
 All notable changes to Pilot Shell will be documented in this file.
 
+## [7.5.2] - 2026-03-12
+
+### Bug Fixes
+
+- Prevent Vercel auto-deploy from overwriting git-crypt CI/CD deployments
+
 ## [7.5.1] - 2026-03-12
 
 ### Bug Fixes
