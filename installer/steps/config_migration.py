@@ -11,7 +11,7 @@ import os
 from pathlib import Path
 from typing import Any
 
-CURRENT_CONFIG_VERSION = 3
+CURRENT_CONFIG_VERSION = 4
 
 # Old agent names removed in v7.1 (merged into plan-reviewer + spec-reviewer)
 _STALE_AGENT_KEYS = frozenset(
@@ -59,6 +59,9 @@ def migrate_model_config(config_path: Path | None = None) -> bool:
 
     if version < 3:
         modified = _migration_v3(raw) or modified
+
+    if version < 4:
+        modified = _migration_v4(raw) or modified
 
     raw["_configVersion"] = CURRENT_CONFIG_VERSION
     modified = True
@@ -153,6 +156,41 @@ def _migration_v3(raw: dict[str, Any]) -> bool:
     else:
         raw["specWorkflow"] = {
             "worktreeSupport": False,
+            "askQuestionsDuringPlanning": True,
+            "planApproval": True,
+        }
+        modified = True
+
+    return modified
+
+
+def _migration_v4(raw: dict[str, Any]) -> bool:
+    """v3 → v4: Enable worktree support and reviewer subagents by default.
+
+    Re-enables the features disabled in v3 now that token costs are acceptable.
+    """
+    modified = False
+
+    reviewer_agents = raw.get("reviewerAgents")
+    if isinstance(reviewer_agents, dict):
+        if reviewer_agents.get("planReviewer") is False:
+            reviewer_agents["planReviewer"] = True
+            modified = True
+        if reviewer_agents.get("specReviewer") is False:
+            reviewer_agents["specReviewer"] = True
+            modified = True
+    else:
+        raw["reviewerAgents"] = {"planReviewer": True, "specReviewer": True}
+        modified = True
+
+    spec_workflow = raw.get("specWorkflow")
+    if isinstance(spec_workflow, dict):
+        if spec_workflow.get("worktreeSupport") is False:
+            spec_workflow["worktreeSupport"] = True
+            modified = True
+    else:
+        raw["specWorkflow"] = {
+            "worktreeSupport": True,
             "askQuestionsDuringPlanning": True,
             "planApproval": True,
         }
