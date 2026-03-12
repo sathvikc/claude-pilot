@@ -2,6 +2,12 @@
 
 All notable changes to Pilot Shell will be documented in this file.
 
+## [7.5.4] - 2026-03-12
+
+### Bug Fixes
+
+- Clean up memory observer session files from claude -r resume list
+
 ## [7.5.3] - 2026-03-12
 
 ### Bug Fixes
