@@ -2,6 +2,12 @@
 
 All notable changes to Pilot Shell will be documented in this file.
 
+## [7.5.3] - 2026-03-12
+
+### Bug Fixes
+
+- Warn instead of block Agent sub-agent calls, allow /spec reviewers silently
+
 ## [7.5.2] - 2026-03-12
 
 ### Bug Fixes
