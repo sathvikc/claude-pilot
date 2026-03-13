@@ -2,6 +2,13 @@
 
 All notable changes to Pilot Shell will be documented in this file.
 
+## [7.5.5] - 2026-03-13
+
+### Bug Fixes
+
+- Support running as root in containers and remove remote fetch/browse UI
+- Enable git worktrees and reviewer subagents by default
+
 ## [7.5.4] - 2026-03-12
 
 ### Bug Fixes
