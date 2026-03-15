@@ -79,7 +79,7 @@ Installs globally on macOS, Linux, and Windows (WSL2). All tools and rules go to
 **Specific version** (see [releases](https://github.com/maxritter/pilot-shell/releases)):
 
 ```bash
-export VERSION=7.5.7
+export VERSION=7.5.8
 curl -fsSL https://raw.githubusercontent.com/maxritter/pilot-shell/main/install.sh | bash
 ```
 

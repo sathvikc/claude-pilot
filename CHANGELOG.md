@@ -2,6 +2,12 @@
 
 All notable changes to Pilot Shell will be documented in this file.
 
+## [7.5.8] - 2026-03-15
+
+### Bug Fixes
+
+- Add RTK CLI installation and standardize dependency UI
+
 ## [7.5.7] - 2026-03-14
 
 ### Bug Fixes
