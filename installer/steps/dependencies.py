@@ -145,7 +145,6 @@ def install_skillshare() -> bool:
     dev containers). It then configures extras (non-destructive).
     """
     if not command_exists("skillshare"):
-        # Fallback for environments without Homebrew (dev containers, minimal Linux)
         if not _run_bash_with_retry(
             "curl -fsSL https://raw.githubusercontent.com/runkids/skillshare/main/install.sh | sh",
             timeout=120,
@@ -198,6 +197,16 @@ def _configure_skillshare_extras() -> None:
     for name in ("rules", "commands", "agents"):
         (base / name).mkdir(parents=True, exist_ok=True)
 
+
+def install_rtk() -> bool:
+    """Install RTK (Rust Token Killer) CLI for token-optimized dev operations."""
+    if command_exists("rtk"):
+        return True
+
+    return _run_bash_with_retry(
+        "curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh | sh",
+        timeout=120,
+    )
 
 
 def _is_vtsls_installed() -> bool:
@@ -373,7 +382,7 @@ def _is_playwright_cli_ready() -> bool:
     return False
 
 
-def _install_playwright_system_deps(ui: Any = None) -> bool:
+def _install_playwright_system_deps() -> bool:
     """Install OS-level system dependencies required by Playwright browsers.
 
     Runs 'npx playwright install-deps' which installs system libraries
@@ -383,11 +392,7 @@ def _install_playwright_system_deps(ui: Any = None) -> bool:
     cmd = ["npx", "-y", "playwright", "install-deps"]
     for attempt in range(MAX_RETRIES):
         try:
-            if ui:
-                with ui.spinner("Installing browser system dependencies..."):
-                    result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
-            else:
-                result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
             if result.returncode == 0:
                 return True
         except Exception:
@@ -397,11 +402,9 @@ def _install_playwright_system_deps(ui: Any = None) -> bool:
     return False
 
 
-def install_playwright_cli(ui: Any = None) -> bool:
+def install_playwright_cli() -> bool:
     """Install playwright-cli for headless browser automation.
 
-    Shows verbose output during installation with download progress.
-    Skips verbose output if already installed.
     On Linux ARM64, installs chromium specifically (Chrome has no ARM64 builds).
     """
     if _is_playwright_cli_ready():
@@ -411,18 +414,14 @@ def install_playwright_cli(ui: Any = None) -> bool:
         return False
 
     if _is_playwright_cli_ready():
-        _install_playwright_system_deps(ui)
+        _install_playwright_system_deps()
         return True
 
     install_cmd = ["playwright-cli", "install", "chromium"] if is_linux_arm64() else ["playwright-cli", "install"]
 
     for attempt in range(MAX_RETRIES):
         try:
-            if ui:
-                with ui.spinner("Downloading Chromium browser..."):
-                    result = subprocess.run(install_cmd, capture_output=True, text=True, timeout=300)
-            else:
-                result = subprocess.run(install_cmd, capture_output=True, text=True, timeout=300)
+            result = subprocess.run(install_cmd, capture_output=True, text=True, timeout=300)
             if result.returncode == 0:
                 break
         except Exception:
@@ -432,7 +431,7 @@ def install_playwright_cli(ui: Any = None) -> bool:
             continue
         return False
 
-    _install_playwright_system_deps(ui)
+    _install_playwright_system_deps()
     return True
 
 
@@ -483,55 +482,6 @@ def _setup_pilot_memory(ui: Any) -> bool:
     return True
 
 
-def _install_claude_code_with_ui(ui: Any) -> bool:
-    """Install Claude Code with UI feedback."""
-    if command_exists("claude"):
-        if ui:
-            ui.info("Claude Code already installed")
-        return True
-
-    if ui:
-        ui.info("Claude Code not found — installing via native installer (this can take a few minutes)...")
-        with ui.spinner("Installing Claude Code..."):
-            result = install_claude_code()
-        if result:
-            ui.success("Claude Code installed")
-        else:
-            ui.warning(
-                "Could not install Claude Code - please install manually: https://docs.anthropic.com/en/docs/claude-code/setup"
-            )
-        return result
-    else:
-        return install_claude_code()
-
-
-def _install_playwright_cli_with_ui(ui: Any) -> bool:
-    """Install playwright-cli with UI feedback."""
-    if ui:
-        ui.status("Installing playwright-cli...")
-    if install_playwright_cli(ui):
-        if ui:
-            ui.success("playwright-cli installed")
-        return True
-    else:
-        if ui:
-            ui.warning("Could not install playwright-cli - please install manually")
-        return False
-
-
-def _install_probe_with_ui(ui: Any) -> bool:
-    """Install Probe code search tool via npm."""
-    if ui:
-        ui.status("Installing Probe (code search)...")
-
-    if install_probe():
-        if ui:
-            ui.success("Probe installed")
-        return True
-    else:
-        if ui:
-            ui.warning("Could not install Probe - please install manually: npm install -g @probelabs/probe")
-        return False
 
 
 def _extract_npx_package_name(package: str) -> str:
@@ -668,7 +618,7 @@ class DependenciesStep(BaseStep):
         ui = ctx.ui
         installed: list[str] = []
 
-        if _install_claude_code_with_ui(ui):
+        if _install_with_spinner(ui, "Claude Code", install_claude_code):
             installed.append("claude_code")
 
         if _install_with_spinner(ui, "Node.js", install_nodejs):
@@ -701,11 +651,14 @@ class DependenciesStep(BaseStep):
         if _install_with_spinner(ui, "ccusage (usage tracking)", install_ccusage):
             installed.append("ccusage")
 
-        if _install_playwright_cli_with_ui(ui):
+        if _install_with_spinner(ui, "playwright-cli (browser automation)", install_playwright_cli):
             installed.append("playwright_cli")
 
-        if _install_probe_with_ui(ui):
+        if _install_with_spinner(ui, "Probe (code search)", install_probe):
             installed.append("probe")
+
+        if _install_with_spinner(ui, "RTK (token optimizer)", install_rtk):
+            installed.append("rtk")
 
         if _install_with_spinner(ui, "Skillshare (skill sharing)", install_skillshare):
             installed.append("skillshare")

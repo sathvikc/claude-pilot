@@ -27,7 +27,7 @@ Rules are loaded automatically at session start. They're not suggestions — the
 ### Tools (3 rules)
 
 - `research-tools.md` — Search priority and tool selection guide
-- `cli-tools.md` — Pilot CLI, Probe code search
+- `cli-tools.md` — Pilot CLI, Probe code search, RTK token optimization
 - `playwright-cli.md` — Browser automation for E2E UI testing
 
 ### Collaboration (1 rule)

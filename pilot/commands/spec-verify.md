@@ -73,6 +73,14 @@ Read the plan's Runtime Environment section (if present) and the changed file ty
 
 ## Phase A: Finalize the Code
 
+### Step 3.0b: Clean Up Stale Plan-Reviewer Findings
+
+**⛔ ALWAYS run this step** — regardless of whether spec-reviewer is enabled. Plan-reviewer findings are stale artifacts from the planning phase that were already addressed during implementation.
+
+```bash
+rm -f ~/.pilot/sessions/$PILOT_SESSION_ID/findings-plan-reviewer-*.json
+```
+
 ### Step 3.1: Launch Code Review Agent (Early)
 
 **⛔ If `PILOT_SPEC_REVIEWER_ENABLED` is `"false"` (from Step 0),** skip this step entirely and proceed to Step 3.2. (Automated checks in Step 3.2 still run; only the agent-based review is skipped.)
@@ -96,11 +104,10 @@ Output path: `~/.pilot/sessions/<session-id>/findings-spec-reviewer-<plan-slug>.
 
 #### 3.1b: Launch
 
-**⛔ Delete ALL stale findings before launching** — both spec-reviewer AND plan-reviewer files (plan-reviewer findings are stale artifacts from the planning phase):
+**⛔ Delete stale spec-reviewer findings before launching** (previous run may have left a file):
 
 ```bash
 rm -f ~/.pilot/sessions/$PILOT_SESSION_ID/findings-spec-reviewer-*.json
-rm -f ~/.pilot/sessions/$PILOT_SESSION_ID/findings-plan-reviewer-*.json
 ```
 
 ```

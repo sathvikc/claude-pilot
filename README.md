@@ -64,7 +64,7 @@ Installs globally on macOS, Linux, and Windows (WSL2). All tools and rules go to
 7-step installer with progress tracking, rollback on failure, and idempotent re-runs:
 
 1. **Prerequisites** — Checks Homebrew, Node.js, Python 3.12+, uv, git
-2. **Dependencies** — Installs Probe, playwright-cli, language servers, property-based testing tools
+2. **Dependencies** — Installs Probe, RTK, playwright-cli, language servers, property-based testing tools
 3. **Shell integration** — Auto-configures bash, fish, and zsh with `pilot` alias
 4. **Config & Claude files** — Sets up `.claude/` plugin, rules, commands, hooks, MCP servers
 5. **VS Code extensions** — Installs recommended extensions for your stack
@@ -324,7 +324,7 @@ Production-tested best practices loaded into every session. Core rules cover wor
 <summary><b>Tools</b></summary>
 
 - `research-tools.md` — Search priority and tool selection guide
-- `cli-tools.md` — Pilot CLI, Probe CLI semantic search
+- `cli-tools.md` — Pilot CLI, Probe CLI semantic search, RTK token optimization
 - `playwright-cli.md` — Browser automation for E2E UI testing
 
 </details>
@@ -483,7 +483,7 @@ Yes. Your source code, project files, and development context never leave your m
 <details>
 <summary><b>What are the licenses of Pilot Shell's dependencies?</b></summary>
 
-All external tools and dependencies that Pilot Shell installs and uses are open source with permissive licenses (MIT, Apache 2.0, BSD). This includes ruff, basedpyright, Prettier, ESLint, gofmt, uv, Probe, playwright-cli, and all MCP servers. No copyleft or restrictive-licensed dependencies are introduced into your environment.
+All external tools and dependencies that Pilot Shell installs and uses are open source with permissive licenses (MIT, Apache 2.0, BSD). This includes ruff, basedpyright, Prettier, ESLint, gofmt, uv, Probe, RTK, playwright-cli, and all MCP servers. No copyleft or restrictive-licensed dependencies are introduced into your environment.
 
 </details>
 

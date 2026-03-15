@@ -34,6 +34,7 @@ HOMEBREW_PACKAGES = [
     "go",
     "gopls",
     "ripgrep",
+    "rtk",
     "skillshare",
 ]
 

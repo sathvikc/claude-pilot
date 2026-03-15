@@ -32,8 +32,9 @@ class TestDependenciesStep:
             assert step.check(ctx) is False
 
     @patch("installer.steps.dependencies.install_skillshare", return_value=True)
-    @patch("installer.steps.dependencies._install_probe_with_ui", return_value=True)
-    @patch("installer.steps.dependencies._install_playwright_cli_with_ui", return_value=True)
+    @patch("installer.steps.dependencies.install_rtk", return_value=True)
+    @patch("installer.steps.dependencies.install_probe", return_value=True)
+    @patch("installer.steps.dependencies.install_playwright_cli", return_value=True)
     @patch("installer.steps.dependencies.install_ccusage", return_value=True)
     @patch("installer.steps.dependencies.install_pbt_tools", return_value=True)
     @patch("installer.steps.dependencies.install_golangci_lint", return_value=True)
@@ -45,7 +46,7 @@ class TestDependenciesStep:
     @patch("installer.steps.dependencies.install_python_tools")
     @patch("installer.steps.dependencies.install_uv")
     @patch("installer.steps.dependencies.install_nodejs")
-    @patch("installer.steps.dependencies._install_claude_code_with_ui")
+    @patch("installer.steps.dependencies.install_claude_code", return_value=True)
     def test_dependencies_run_installs_core(
         self,
         mock_claude_code,
@@ -61,7 +62,8 @@ class TestDependenciesStep:
         _mock_pbt_tools,
         _mock_ccusage,
         _mock_playwright,
-        _mock_probe_ui,
+        _mock_probe,
+        _mock_rtk,
         _mock_skillshare,
     ):
         """DependenciesStep installs all dependencies including Python tools."""
@@ -225,6 +227,51 @@ class TestProbeInstall:
         mock_bash.return_value = False
 
         result = install_probe()
+
+        assert result is False
+
+
+class TestInstallRtk:
+    """Tests for install_rtk() — RTK CLI installation (brew primary, curl fallback)."""
+
+    def test_install_rtk_exists(self):
+        """install_rtk function exists and is callable."""
+        from installer.steps.dependencies import install_rtk
+
+        assert callable(install_rtk)
+
+    @patch("installer.steps.dependencies.command_exists", return_value=True)
+    def test_install_rtk_skips_if_already_installed(self, _mock_cmd):
+        """install_rtk skips installation when rtk is already in PATH."""
+        from installer.steps.dependencies import install_rtk
+
+        with patch("installer.steps.dependencies._run_bash_with_retry") as mock_bash:
+            result = install_rtk()
+
+        assert result is True
+        mock_bash.assert_not_called()
+
+    @patch("installer.steps.dependencies.command_exists", return_value=False)
+    def test_install_rtk_runs_curl_when_not_installed(self, _mock_cmd):
+        """install_rtk runs curl installer when rtk not in PATH."""
+        from installer.steps.dependencies import install_rtk
+
+        with patch("installer.steps.dependencies._run_bash_with_retry", return_value=True) as mock_bash:
+            result = install_rtk()
+
+        assert result is True
+        mock_bash.assert_called_once()
+        call_args = str(mock_bash.call_args)
+        assert "rtk-ai/rtk" in call_args
+        assert "install.sh" in call_args
+
+    @patch("installer.steps.dependencies.command_exists", return_value=False)
+    def test_install_rtk_returns_false_when_curl_fails(self, _mock_cmd):
+        """install_rtk returns False when curl installer fails."""
+        from installer.steps.dependencies import install_rtk
+
+        with patch("installer.steps.dependencies._run_bash_with_retry", return_value=False):
+            result = install_rtk()
 
         assert result is False
 
