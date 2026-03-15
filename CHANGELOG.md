@@ -2,6 +2,16 @@
 
 All notable changes to Pilot Shell will be documented in this file.
 
+## [7.5.10] - 2026-03-15
+
+### Bug Fixes
+
+- Block plan mode and Explore agent, consolidate hook tests, add /clear instruction
+
+### Miscellaneous
+
+- Updated Demo gifs
+
 ## [7.5.9] - 2026-03-15
 
 ### Bug Fixes
