@@ -32,6 +32,19 @@ model: sonnet
 
 ---
 
+## 0.0 Permission Mode Pre-Flight Check
+
+**⛔ Before ANY other step, check if the spec_mode_guard hook injected a permission mode warning.** If you see a system-reminder containing "Current permission mode is" or "requires 'bypassPermissions' mode", you MUST:
+
+1. Tell the user their current mode is not optimal for `/spec` autonomous execution
+2. Instruct them to press **Shift+Tab** to cycle to **Bypass Permissions** mode
+3. **STOP** — do NOT read env vars, invoke any skill, or proceed with the workflow
+4. Wait for the user to confirm they have switched, then re-invoke `/spec` with the same arguments
+
+**This check takes priority over all workflow steps below.** The hook warning is authoritative — never override it.
+
+---
+
 ## 0.1 Parse & Route
 
 ```

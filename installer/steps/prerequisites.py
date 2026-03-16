@@ -33,6 +33,7 @@ HOMEBREW_PACKAGES = [
     "uv",
     "go",
     "gopls",
+    "jq",
     "ripgrep",
     "rtk",
     "skillshare",

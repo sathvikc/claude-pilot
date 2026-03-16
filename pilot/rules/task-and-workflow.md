@@ -62,6 +62,18 @@ When resuming same session (same `CLAUDE_CODE_TASK_LIST_ID`): run `TaskList` fir
 
 ## Tool Usage
 
+### ⛔ Tool Parameter Names
+
+Use EXACT parameter names — abbreviated names cause `InputValidationError`:
+
+| Tool | Correct | Wrong (causes error) |
+|------|---------|---------------------|
+| `Bash` | `command` | `cmd`, `bash_command`, `shell` |
+| `Write`/`Edit`/`Read` | `file_path` | `path`, `filepath`, `file` |
+| `Write` | `content` | `contents`, `text`, `body` |
+| `Edit` | `old_string`, `new_string` | `old`, `new`, `search`, `replace` |
+| `Grep` | `pattern` | `query`, `search`, `regex` |
+
 ### Agent Tool — Prefer Direct Tools
 
 **Prefer doing work directly** with Probe CLI, codebase-memory-mcp, Grep/Glob, Bash, and other built-in tools instead of launching sub-agents. The Explore agent is blocked by hook — use Probe + codebase-memory-mcp instead.
