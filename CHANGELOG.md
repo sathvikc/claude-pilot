@@ -2,6 +2,13 @@
 
 All notable changes to Pilot Shell will be documented in this file.
 
+## [7.6.5] - 2026-03-18
+
+### Bug Fixes
+
+- Shorten full model IDs in statusline display
+- Use env vars for extended context instead of model name suffix
+
 ## [7.6.4] - 2026-03-18
 
 ### Bug Fixes
