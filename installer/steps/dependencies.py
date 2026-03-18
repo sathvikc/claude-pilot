@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import time
 from pathlib import Path
@@ -157,15 +158,36 @@ def install_skillshare() -> bool:
 
 
 def _configure_skillshare_extras() -> None:
-    """Add extras config (rules, commands, agents) to skillshare global config.
+    """Configure extras (rules, commands, agents) in skillshare global config.
 
     Extras allow syncing non-skill resources to Claude's directories via
-    `skillshare sync --all`. Uses merge mode so user-created and Pilot-managed
-    files are preserved alongside shared extras.
+    `skillshare sync --all` (Skillshare 0.17+). Uses merge mode so
+    user-created and Pilot-managed files coexist.
+
+    Sequencing (MUST be in this order):
+    1. Migrate old flat dirs -> new nested dirs (runs even when extras: in config)
+    2. Create new nested dirs if missing
+    3. Append extras: YAML block only if not already present
     """
     config_path = Path.home() / ".config" / "skillshare" / "config.yaml"
     if not config_path.exists():
         return
+
+    base = Path.home() / ".config" / "skillshare"
+    extras_base = base / "extras"
+
+    for name in ("rules", "commands", "agents"):
+        old_dir = base / name
+        new_dir = extras_base / name
+        if old_dir.is_dir() and not new_dir.exists():
+            try:
+                new_dir.parent.mkdir(parents=True, exist_ok=True)
+                shutil.move(str(old_dir), str(new_dir))
+            except OSError:
+                pass
+
+    for name in ("rules", "commands", "agents"):
+        (extras_base / name).mkdir(parents=True, exist_ok=True)
 
     try:
         content = config_path.read_text()
@@ -192,10 +214,6 @@ def _configure_skillshare_extras() -> None:
         config_path.write_text(content.rstrip() + "\n" + extras_block)
     except OSError:
         return
-
-    base = Path.home() / ".config" / "skillshare"
-    for name in ("rules", "commands", "agents"):
-        (base / name).mkdir(parents=True, exist_ok=True)
 
 
 def _is_brew_managed(package: str) -> bool:
@@ -511,8 +529,6 @@ def _install_plugin_dependencies(_project_dir: Path, ui: Any = None) -> bool:
 def _setup_pilot_memory(ui: Any) -> bool:
     """Setup pilot-memory (no-op, kept for compatibility)."""
     return True
-
-
 
 
 def _extract_npx_package_name(package: str) -> str:

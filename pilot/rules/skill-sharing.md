@@ -1,6 +1,6 @@
 ## Skill Sharing
 
-Share skills, rules, commands, and agents across machines and teams using **Skillshare** and a Git repository.
+Share skills, rules, commands, and agents across machines and teams using **Skillshare** (v0.17+) and a Git repository.
 
 ### Two Modes
 
@@ -9,7 +9,7 @@ Share skills, rules, commands, and agents across machines and teams using **Skil
 | **Global** (`-g`) | `~/.config/skillshare/skills/` | All projects | Git remote (Team Remote) |
 | **Project** (`-p`) | `.skillshare/skills/` | This repo only | Committed to repo |
 
-Skills in the **source** are synced to the **target** (`~/.claude/skills/`) where Claude uses them. The sync button only appears when source and target differ.
+Skills in the **source** are synced to the **target** (`~/.claude/skills/`) where Claude uses them.
 
 ### Sharing Tiers
 
@@ -22,63 +22,154 @@ Skills in the **source** are synced to the **target** (`~/.claude/skills/`) wher
 
 **Use the Share page in the Pilot Shell Console dashboard** (`http://localhost:41777/#/share`):
 
-- **Source & Sync card** — shows Project (first) and Global sections with source → target arrows, per-section sync buttons (only when out of sync), and Collect button for local-only skills
-- **Team Remote card** — manage multiple git remotes for global skills (Team/Trial plan). Push uploads current global state; Pull downloads from remote
-- **Skills grid** — merged view of all global + project skills with scope badges
-- **Install from URL** — paste a GitHub URL to install globally or to a project
-- **How does this work?** — collapsed help section with explanations and documentation links
-- **CLI Reference** — collapsed section with global and project commands side by side
+- **Source & Sync card** — Project (first) and Global sections; Sync/Collect buttons appear when out of sync
+- **Remote Share card** — configure git remotes, Push/Pull buttons for cross-machine sync
+- **Assets grid** — merged view of all global + project skills with scope/type badges
+- **Install from URL** — install skills globally or to a project
+- **How does this work?** / **CLI Reference** — collapsed help sections
+
+### Extras — First-Class Resource Management (v0.17+)
+
+Extras manage non-skill resources (rules, commands, agents, prompts) with their own CLI command group. Each extra has a name, a source directory, and one or more target directories.
+
+**Directory structure:**
+
+```
+~/.config/skillshare/
+├── skills/           ← skill source
+└── extras/           ← extras source root (new in v0.17)
+    ├── rules/        ← synced to ~/.claude/rules
+    ├── commands/     ← synced to ~/.claude/commands
+    └── agents/       ← synced to ~/.claude/agents
+```
+
+**Core commands:**
+
+```bash
+# Create a new extra (interactive wizard or CLI flags)
+skillshare extras init rules --target ~/.claude/rules --target ~/.cursor/rules
+skillshare extras init rules -p --target .claude/rules          # project-scoped
+
+# List extras with sync status per target
+skillshare extras list                                           # interactive TUI
+skillshare extras list --json -g                                 # JSON output
+
+# Change sync mode for a target
+skillshare extras mode rules --mode copy                         # single-target shorthand
+skillshare extras mode rules --target ~/.claude/rules --mode copy
+
+# Collect files from a target back into source
+skillshare extras collect rules --from ~/.claude/rules
+skillshare extras collect rules --from ~/.claude/rules --dry-run
+
+# Remove an extra (source files preserved)
+skillshare extras remove rules
+```
+
+**Sync modes:**
+
+| Mode | Behavior |
+|------|----------|
+| `merge` (default) | Per-file symlinks from target to source |
+| `copy` | Per-file copies |
+| `symlink` | Entire directory symlink |
+
+**Project-mode extras** — extras now work at project level (`-p`), not just global:
+
+```bash
+skillshare extras init rules -p --target .claude/rules
+skillshare sync -p --all                                         # sync skills + extras
+```
+
+**Note:** Pilot-managed rules/commands (installed by the Pilot installer) are tracked via manifest and should NOT be placed in extras. Extras are for user-created assets you want to share across machines.
 
 ### Key Concepts
 
-- **Sync**: Distributes skills from source to target. **Must run after every mutation** (`install`, `uninstall`, `update`, `collect`).
-- **Collect**: Imports skills that exist only in Claude's directory (e.g., from `/create-skill`) back into the source directory so they can be pushed/shared.
+- **Sync**: Distributes assets from source to target. **Must run after every mutation** (`install`, `uninstall`, `update`, `collect`).
+- **Collect**: Imports files from a target back into the source directory so they can be pushed/shared.
 - **Team Remote**: Git remotes for **global skills only**. Project skills are shared by committing `.skillshare/` to the project repo instead.
-- **Push**: Uploads current global skills to remote. Skills removed locally will also be removed from the remote.
-- **Audit**: Security scan on install — blocks CRITICAL findings by default. Use `--skip-audit` to bypass, `--force` to override.
-- **Trash**: `uninstall` moves to trash (7-day retention), not permanent deletion. Recover with `skillshare trash restore <name>`.
 - **Hub**: Curated skill catalogs. `skillshare hub add <url>` to subscribe, `skillshare hub index` to build one.
+- **Audit**: Security scan on install. `skillshare audit --threshold high` for CI.
+
+### Health Checks & Diagnostics
+
+`skillshare doctor --json` provides machine-readable health checks for CI pipelines:
+
+```bash
+skillshare doctor                      # human-readable output
+skillshare doctor --json               # structured JSON (CI-friendly)
+
+# CI gate — fail if any errors
+skillshare doctor --json | jq -e '.summary.errors == 0'
+
+# Check .skillignore status
+skillshare doctor --json | jq '.checks[] | select(.name == "skillignore")'
+```
+
+### .skillignore — Hide Skills from Discovery
+
+Place a `.skillignore` at the source root or inside a tracked repo to hide skills from all commands. Uses full gitignore syntax:
+
+```
+# ~/.config/skillshare/skills/.skillignore
+draft-*          # hide all draft skills
+_archived/       # hide entire directory
+test-fixture     # hide specific skill
+
+# Negation, character classes, recursive globs also work
+!test-important  # keep this one despite draft-* match
+**/temp          # ignore temp at any depth
+```
 
 ### Cross-Machine Sync and Organization Sharing
 
-Two complementary mechanisms — use both for personal skills + team/org standards:
-
-**Personal remote** (`push`/`pull`) — your own skills across your machines:
+**Personal remote** — your skills across your machines:
 
 ```bash
-skillshare init --remote git@github.com:you/my-skills.git  # First machine
-skillshare push -m "Add skill"                              # Push changes
+skillshare init --remote git@github.com:you/my-skills.git  # first machine
+skillshare push -m "Add skill"
 # On another machine:
-skillshare init --remote git@github.com:you/my-skills.git  # Auto-pulls existing skills
-skillshare pull                                             # Sync updates
+skillshare init --remote git@github.com:you/my-skills.git  # auto-pulls
+skillshare pull
 ```
 
-**Tracked repos** (`install --track`) — team/org repos, multiple repos supported:
+**Tracked repos** — team/org repos:
 
 ```bash
-# Install team and org repos as tracked sources
 skillshare install github.com/my-team/team-skills --track --name team-skills
-skillshare install github.com/my-org/org-standards --track --name org-standards
-skillshare sync
-
-# Update all tracked repos at once
 skillshare update --all && skillshare sync
 ```
 
-**How they coexist:**
+**Centralized skills repo** (`--config local`) — one repo for skills, each developer manages own targets:
 
-```
-~/.config/skillshare/skills/
-├── my-personal-skill/        ← your skills (push/pull via personal remote)
-├── _team-skills/             ← tracked repo (update --all)
-│   ├── react-patterns/
-│   └── ui-guidelines/
-└── _org-standards/           ← another tracked repo
-    ├── security-audit/
-    └── code-review/
+```bash
+# Creator: set up the shared repo
+skillshare init -p --config local --targets claude
+git add .skillshare/ && git commit && git push
+
+# Teammate: clone and configure own targets
+git clone <repo> && cd <repo>
+skillshare init -p                          # auto-detects shared repo mode
+skillshare target add projB ~/DEV/projB/.cursor/skills -p
+skillshare sync -p
 ```
 
-`push`/`pull` syncs everything including tracked repos. Tracked repos also update independently via `skillshare update --all`. Collision detection warns if skills from different repos share the same `name` field.
+**Org sharing pattern** (two-channel, used at scale):
+
+| Channel | What it does | Who uses it |
+|---------|-------------|-------------|
+| Claude Code plugin marketplace | Auto-distributes to CC users via `extraKnownMarketplaces` in `.claude/settings.json` | All Claude Code users |
+| Skillshare | Multi-tool sync (Windsurf/Cursor/Codex), discoverability UI, security audit | Windsurf users, curators |
+
+Both channels read from the same repo — no lock-in, skills are plain markdown files.
+
+**Hub Index** for org-wide discoverability:
+
+```bash
+cd ~/my-org/skills-directory
+skillshare hub index --audit -o ./skillshare-hub.json
+# Commit to repo — GitHub raw URL makes it searchable by anyone
+```
 
 ### Tool Portability in Skills
 
@@ -88,14 +179,14 @@ Skills are shared with users who may not have Pilot Shell. **Only reference buil
 |---------------------|--------------------------|
 | `Grep`, `Glob` | `probe search/extract/query` |
 | `Bash` + `npx playwright` | `playwright-cli` |
-| `WebFetch`, `WebSearch` | Pilot MCP servers (`web-fetch`, `web-search`, `mem-search`, `context7`, `grep-mcp`) |
+| `WebFetch`, `WebSearch` | Pilot MCP servers |
 | `Bash` + standard CLI | `pilot` CLI, `skillshare` CLI |
 
-If a skill requires a non-standard tool, list it as a prerequisite — never silently assume it exists.
+If a skill requires a non-standard tool, list it as a prerequisite.
 
 ### /create-skill and /setup-rules Integration
 
-`/create-skill` creates skills in `.skillshare/skills/` **if it exists** in the project. Otherwise it falls back to `.claude/skills/`. When creating in `.skillshare/`, it runs `skillshare sync -p` afterward to make the skill available to Claude. This works independently — if Skillshare isn't used, skills go directly to `.claude/skills/` as before.
+`/create-skill` creates skills in `.skillshare/skills/` **if it exists** in the project (runs `skillshare sync -p` afterward). Otherwise falls back to `.claude/skills/`.
 
 `/setup-rules` focuses exclusively on rules and AGENTS.md — it does not create skills.
 
@@ -108,34 +199,8 @@ If a skill requires a non-standard tool, list it as a prerequisite — never sil
 | User wants skills on another machine | Set up Team Remote, push from source, pull on target |
 | New team member onboarding | `skillshare install -p && skillshare sync -p` |
 | Org-wide skill distribution | `skillshare install <url> --track` (Team plan) |
-
-### Extras — Sharing Rules, Commands, and Agents
-
-Skillshare can sync non-skill resources (rules, commands, agents) via **extras**. Configured automatically by the Pilot installer.
-
-**Source directories** (global only):
-
-```
-~/.config/skillshare/
-├── skills/       ← skill source
-├── rules/        ← rules to share across machines
-├── commands/     ← commands to share across machines
-└── agents/       ← agents to share across machines
-```
-
-**How it works:** Files placed in extras source directories are synced to Claude's directories via `skillshare sync -g --all`. Merge mode preserves existing local files — only symlinks from extras source are managed.
-
-**Sync:** `skillshare sync -g --all` syncs skills + extras in one command. `skillshare sync extras` syncs only extras. Extras are global only — not available in project mode.
-
-**Cross-machine:** Extras source directories are part of the same git repo as skills. `skillshare push` / `pull` includes them automatically.
-
-| To share | Place file in | Syncs to |
-|----------|---------------|----------|
-| Rule | `~/.config/skillshare/rules/my-rule.md` | `~/.claude/rules/my-rule.md` |
-| Command | `~/.config/skillshare/commands/my-cmd.md` | `~/.claude/commands/my-cmd.md` |
-| Agent | `~/.config/skillshare/agents/my-agent.md` | `~/.claude/agents/my-agent.md` |
-
-**Note:** Pilot-managed rules/commands (installed by the Pilot installer) are tracked via manifest and should NOT be placed in extras. Extras are for user-created assets you want to share across machines.
+| Share rules/commands across machines | `skillshare extras init rules --target ~/.claude/rules` |
+| Check setup health | `skillshare doctor` |
 
 ### Non-Interactive Usage (for Claude)
 
@@ -150,76 +215,50 @@ Claude cannot answer interactive prompts. Always use non-interactive flags:
 | Preview changes | `--dry-run` |
 | Structured output | `--json` |
 
-**Always sync after mutations:** `install`, `uninstall`, `update`, `collect`, and `target` all modify source only — run `skillshare sync` to propagate to targets.
-
 ### CLI Quick Reference
 
 ```bash
-# Global commands
-skillshare status -g              # Global status
-skillshare list -g                # List global skills
-skillshare sync -g                # Sync global source → Claude
-skillshare sync -g --all          # Sync skills + extras (rules, commands, agents)
-skillshare install <url> -g       # Install to global
-skillshare collect -g             # Import local-only skills to source
-skillshare diff -g                # Show pending changes
+# Skills — global
+skillshare status -g && skillshare list -g
+skillshare sync -g                            # sync skills only
+skillshare sync -g --all                      # sync skills + extras
+skillshare install <url> -g
+skillshare collect -g && skillshare diff -g
 
-# Project commands
-skillshare init -p                # Initialize project mode
-skillshare status -p              # Project status
-skillshare list -p                # List project skills
-skillshare sync -p                # Sync project source → Claude
-skillshare install <url> -p       # Install to project
-skillshare collect -p             # Import local-only skills
-skillshare diff -p                # Show pending changes
+# Skills — project
+skillshare init -p
+skillshare sync -p && skillshare sync -p --all
+skillshare install <url> -p
 
-# Skill management
-skillshare new my-skill -p        # Create new skill (project)
-skillshare new my-skill -g        # Create new skill (global)
-skillshare uninstall my-skill     # Remove (moves to trash)
-skillshare trash restore my-skill # Recover deleted skill
-skillshare update --all           # Update all tracked repos
-skillshare check                  # Check for available updates
+# Extras (v0.17+)
+skillshare extras init <name> --target <path> [-p|-g]
+skillshare extras list [--json] [-p|-g]
+skillshare extras mode <name> --mode merge|copy|symlink
+skillshare extras collect <name> --from <path>
+skillshare extras remove <name>
 
 # Cross-machine sync (global only)
-skillshare init --remote <url>    # Set up git remote
-skillshare push -m "Add skill"    # Commit and push to remote
-skillshare pull                   # Pull from remote and sync
+skillshare init --remote <url>
+skillshare push -m "Add skill"
+skillshare pull
+
+# Health & discovery
+skillshare doctor [--json]
+skillshare audit [--threshold high]
+skillshare hub add <url>
+skillshare hub index --full
 
 # Organization (Team/Trial)
-skillshare install <url> --track  # Install tracked org repo
-skillshare audit                  # Security audit of skills
-skillshare doctor                 # Diagnose issues
-skillshare hub add <url>          # Subscribe to a skill hub
-skillshare hub index --full       # Build hub index from source
-```
-
-### Setup
-
-Skillshare is installed automatically by the Pilot installer. For cross-machine sync, add a Team Remote via the Console Share page, or:
-
-```bash
-skillshare init --remote git@github.com:you/my-skills.git
-```
-
-### Project Mode
-
-Project-level skills live in `.skillshare/skills/` and are committed to the repo:
-
-```bash
-skillshare init -p                    # Initialize project config
-skillshare install <url> -p           # Install skill at project level
-skillshare sync -p                    # Sync project skills to target
-```
-
-New team members get all project skills with:
-```bash
-git clone <repo> && cd <repo> && skillshare install -p && skillshare sync -p
+skillshare install <url> --track              # tracked org repo
+skillshare update --all                       # update all tracked repos
+skillshare check                              # check for available updates
+skillshare trash restore <name>               # recover deleted skill (7-day)
 ```
 
 ### Documentation
 
 - [Quick Start](https://skillshare.runkids.cc/docs/learn/with-claude-code)
+- [Extras Reference](https://skillshare.runkids.cc/docs/reference/commands/extras)
 - [Cross-Machine Sync](https://skillshare.runkids.cc/docs/how-to/sharing/cross-machine-sync)
 - [Project Setup](https://skillshare.runkids.cc/docs/how-to/sharing/project-setup)
 - [Organization Sharing](https://skillshare.runkids.cc/docs/how-to/sharing/organization-sharing)

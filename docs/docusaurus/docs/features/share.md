@@ -102,15 +102,34 @@ skillshare diff -g              # Show pending changes
 
 ### Extras — rules, commands, agents
 
-Share non-skill assets across machines via extras (global only). Place files in `~/.config/skillshare/{rules,commands,agents}/` and sync with `skillshare sync -g --all`.
+Extras manage non-skill assets (rules, commands, agents) as first-class resources with their own CLI commands (Skillshare 0.17+). Extras support both global and project mode, multiple targets per extra, and three sync modes.
 
-| To share | Place file in | Syncs to |
-|----------|---------------|----------|
-| Rule | `~/.config/skillshare/rules/my-rule.md` | `~/.claude/rules/my-rule.md` |
-| Command | `~/.config/skillshare/commands/my-cmd.md` | `~/.claude/commands/my-cmd.md` |
-| Agent | `~/.config/skillshare/agents/my-agent.md` | `~/.claude/agents/my-agent.md` |
+```bash
+# Create a new extra
+skillshare extras init rules --target ~/.claude/rules          # Global
+skillshare extras init rules -p --target .claude/rules         # Project
 
-Extras are included when you push/pull — they sync across machines automatically. The Pilot installer configures extras automatically.
+# List extras with sync status
+skillshare extras list                                          # Interactive TUI
+skillshare extras list --json -g                                # JSON output
+
+# Collect files from a target back into source
+skillshare extras collect rules --from ~/.claude/rules
+
+# Change sync mode
+skillshare extras mode rules --mode copy                        # copy | merge | symlink
+
+# Remove an extra (source files preserved)
+skillshare extras remove rules
+```
+
+Source directories live under `~/.config/skillshare/extras/<name>/` (global) or `.skillshare/extras/<name>/` (project). Extras sync alongside skills when you push/pull. The Pilot installer configures extras automatically.
+
+| Sync Mode | Behavior |
+|-----------|----------|
+| `merge` (default) | Per-file symlinks from target to source |
+| `copy` | Per-file copies |
+| `symlink` | Entire directory symlink |
 
 ### Organization Mode — org-wide distribution
 
@@ -122,6 +141,27 @@ skillshare update --all && skillshare sync -g       # Update all tracked repos
 ```
 
 [Organization Sharing Guide →](https://skillshare.runkids.cc/docs/how-to/sharing/organization-sharing)
+
+### .skillignore — hide skills from discovery
+
+Place a `.skillignore` at the source root or inside a tracked repo to hide skills from all commands. Uses full gitignore syntax:
+
+```
+draft-*          # hide all draft skills
+_archived/       # hide entire directory
+!test-important  # negation — keep this one
+**/temp          # ignore temp at any depth
+```
+
+### Health checks
+
+Run `skillshare doctor` to validate your setup. Use `--json` for CI pipelines:
+
+```bash
+skillshare doctor                                    # Human-readable
+skillshare doctor --json                             # Structured JSON
+skillshare doctor --json | jq -e '.summary.errors == 0'  # CI gate
+```
 
 ### Console Share Page
 
@@ -155,11 +195,18 @@ The Share page in the Pilot Console provides a full management interface:
 | `skillshare pull` | Pull from remote |
 | `skillshare diff -g` / `-p` | Show pending changes |
 | `skillshare audit --json -g` | Security audit |
+| `skillshare extras init <name> --target <path>` | Create an extra |
+| `skillshare extras list [--json]` | List extras with sync status |
+| `skillshare extras collect <name> --from <path>` | Collect files into source |
+| `skillshare extras mode <name> --mode <mode>` | Change sync mode |
+| `skillshare extras remove <name>` | Remove an extra |
+| `skillshare doctor [--json]` | Health check |
 
 ### Documentation
 
 - [Quick Start](https://skillshare.runkids.cc/docs/learn/with-claude-code) — Get started with Skillshare
 - [Commands Reference](https://skillshare.runkids.cc/docs/reference/commands) — All CLI commands
+- [Extras Reference](https://skillshare.runkids.cc/docs/reference/commands/extras) — Extras CLI commands
 - [Cross-Machine Sync](https://skillshare.runkids.cc/docs/how-to/sharing/cross-machine-sync) — Sync via git push/pull
 - [Project Setup](https://skillshare.runkids.cc/docs/how-to/sharing/project-setup) — Commit skills to your repo
 - [Organization Sharing](https://skillshare.runkids.cc/docs/how-to/sharing/organization-sharing) — Tracked repos for teams

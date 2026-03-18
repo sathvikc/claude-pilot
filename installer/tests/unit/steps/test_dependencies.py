@@ -625,8 +625,24 @@ class TestConfigureSkillshareExtras:
 
         assert config.read_text() == original
 
-    def test_creates_source_directories(self, tmp_path: Path) -> None:
-        """Creates rules, commands, agents directories in skillshare source."""
+    def test_creates_nested_source_directories(self, tmp_path: Path) -> None:
+        """Creates extras/rules, extras/commands, extras/agents directories (new nested path)."""
+        from installer.steps.dependencies import _configure_skillshare_extras
+
+        config = tmp_path / ".config" / "skillshare" / "config.yaml"
+        config.parent.mkdir(parents=True)
+        config.write_text("source: /path\n")
+
+        with patch("installer.steps.dependencies.Path.home", return_value=tmp_path):
+            _configure_skillshare_extras()
+
+        extras_base = tmp_path / ".config" / "skillshare" / "extras"
+        assert (extras_base / "rules").is_dir()
+        assert (extras_base / "commands").is_dir()
+        assert (extras_base / "agents").is_dir()
+
+    def test_does_not_create_flat_directories(self, tmp_path: Path) -> None:
+        """Does NOT create old flat dirs (rules/commands/agents at skillshare root)."""
         from installer.steps.dependencies import _configure_skillshare_extras
 
         config = tmp_path / ".config" / "skillshare" / "config.yaml"
@@ -637,9 +653,83 @@ class TestConfigureSkillshareExtras:
             _configure_skillshare_extras()
 
         base = tmp_path / ".config" / "skillshare"
-        assert (base / "rules").is_dir()
-        assert (base / "commands").is_dir()
-        assert (base / "agents").is_dir()
+        assert not (base / "rules").is_dir()
+        assert not (base / "commands").is_dir()
+        assert not (base / "agents").is_dir()
+
+    def test_migrates_old_flat_dirs_to_nested(self, tmp_path: Path) -> None:
+        """Migrates old flat dirs (~/.config/skillshare/rules/) to new nested path."""
+        from installer.steps.dependencies import _configure_skillshare_extras
+
+        config = tmp_path / ".config" / "skillshare" / "config.yaml"
+        config.parent.mkdir(parents=True)
+        config.write_text("source: /path\n")
+
+        # Create old flat directories with a test file in each
+        old_base = tmp_path / ".config" / "skillshare"
+        for name in ("rules", "commands", "agents"):
+            old_dir = old_base / name
+            old_dir.mkdir(parents=True)
+            (old_dir / f"test-{name}.md").write_text(f"# {name}")
+
+        with patch("installer.steps.dependencies.Path.home", return_value=tmp_path):
+            _configure_skillshare_extras()
+
+        extras_base = old_base / "extras"
+        # New nested dirs should exist with migrated files
+        assert (extras_base / "rules" / "test-rules.md").exists()
+        assert (extras_base / "commands" / "test-commands.md").exists()
+        assert (extras_base / "agents" / "test-agents.md").exists()
+        # Old flat dirs should be gone
+        assert not (old_base / "rules").exists()
+        assert not (old_base / "commands").exists()
+        assert not (old_base / "agents").exists()
+
+    def test_migration_skipped_if_new_path_exists(self, tmp_path: Path) -> None:
+        """Does not overwrite new nested dirs if they already exist (idempotent)."""
+        from installer.steps.dependencies import _configure_skillshare_extras
+
+        config = tmp_path / ".config" / "skillshare" / "config.yaml"
+        config.parent.mkdir(parents=True)
+        config.write_text("source: /path\n")
+
+        base = tmp_path / ".config" / "skillshare"
+        # Old flat dirs exist
+        for name in ("rules", "commands", "agents"):
+            (base / name).mkdir(parents=True)
+            (base / name / "old-file.md").write_text("old")
+        # New nested dirs also exist (skillshare's own migration already ran)
+        for name in ("rules", "commands", "agents"):
+            (base / "extras" / name).mkdir(parents=True)
+            (base / "extras" / name / "new-file.md").write_text("new")
+
+        with patch("installer.steps.dependencies.Path.home", return_value=tmp_path):
+            _configure_skillshare_extras()
+
+        # New files should still be there (not overwritten)
+        assert (base / "extras" / "rules" / "new-file.md").read_text() == "new"
+
+    def test_migration_runs_even_when_extras_in_config(self, tmp_path: Path) -> None:
+        """Migration runs BEFORE the 'extras:' guard — runs even if extras already in config."""
+        from installer.steps.dependencies import _configure_skillshare_extras
+
+        config = tmp_path / ".config" / "skillshare" / "config.yaml"
+        config.parent.mkdir(parents=True)
+        # Config already has extras: section (user's prior install)
+        config.write_text("source: /path\nextras:\n    - name: rules\n")
+
+        base = tmp_path / ".config" / "skillshare"
+        # Old flat dir exists
+        old_rules = base / "rules"
+        old_rules.mkdir(parents=True)
+        (old_rules / "my-rule.md").write_text("# rule")
+
+        with patch("installer.steps.dependencies.Path.home", return_value=tmp_path):
+            _configure_skillshare_extras()
+
+        # Migration should have moved the file even though extras: was in config
+        assert (base / "extras" / "rules" / "my-rule.md").exists()
+        assert not old_rules.exists()
 
     def test_skips_if_config_missing(self, tmp_path: Path) -> None:
         """Does nothing when config.yaml doesn't exist."""

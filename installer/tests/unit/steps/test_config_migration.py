@@ -219,7 +219,7 @@ class TestMigrationPreservesExistingData:
     """Migrations preserve non-model keys in config.json."""
 
     def test_preserves_non_model_keys(self, tmp_path: Path) -> None:
-        """Keys like auto_update and extendedContext are untouched."""
+        """Keys like auto_update are untouched."""
         from installer.steps.config_migration import migrate_model_config
 
         config_path = tmp_path / "config.json"
@@ -499,3 +499,74 @@ class TestMigrationV4:
         migrated = json.loads(config_path.read_text())
         assert migrated["specWorkflow"]["askQuestionsDuringPlanning"] is False
         assert migrated["specWorkflow"]["planApproval"] is False
+
+
+class TestMigrationV5:
+    """Migration v4 → v5: Enable extended context (1M) by default."""
+
+    def test_enables_extended_context_when_false(self, tmp_path: Path) -> None:
+        """extendedContext: false gets set to true."""
+        from installer.steps.config_migration import migrate_model_config
+
+        config_path = tmp_path / "config.json"
+        config_path.write_text(json.dumps({
+            "model": "opus",
+            "extendedContext": False,
+            "_configVersion": 4,
+        }))
+
+        result = migrate_model_config(config_path)
+
+        assert result is True
+        migrated = json.loads(config_path.read_text())
+        assert migrated["extendedContext"] is True
+
+    def test_noop_when_already_true(self, tmp_path: Path) -> None:
+        """extendedContext: true stays true."""
+        from installer.steps.config_migration import migrate_model_config
+
+        config_path = tmp_path / "config.json"
+        config_path.write_text(json.dumps({
+            "model": "opus",
+            "extendedContext": True,
+            "_configVersion": 4,
+        }))
+
+        result = migrate_model_config(config_path)
+
+        assert result is True
+        migrated = json.loads(config_path.read_text())
+        assert migrated["extendedContext"] is True
+
+    def test_sets_true_when_absent(self, tmp_path: Path) -> None:
+        """Missing extendedContext key gets set to true."""
+        from installer.steps.config_migration import migrate_model_config
+
+        config_path = tmp_path / "config.json"
+        config_path.write_text(json.dumps({
+            "model": "opus",
+            "_configVersion": 4,
+        }))
+
+        result = migrate_model_config(config_path)
+
+        assert result is True
+        migrated = json.loads(config_path.read_text())
+        assert migrated["extendedContext"] is True
+
+    def test_v5_unit_returns_false_when_already_true(self) -> None:
+        """Unit function returns False when no change needed."""
+        from installer.steps.config_migration import _migration_v5
+
+        raw: dict = {"extendedContext": True}
+        assert _migration_v5(raw) is False
+
+    def test_v5_unit_sets_true_when_false(self) -> None:
+        """Unit function sets extendedContext to true."""
+        from installer.steps.config_migration import _migration_v5
+
+        raw: dict = {"extendedContext": False}
+        result = _migration_v5(raw)
+
+        assert result is True
+        assert raw["extendedContext"] is True

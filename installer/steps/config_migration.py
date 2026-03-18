@@ -11,7 +11,7 @@ import os
 from pathlib import Path
 from typing import Any
 
-CURRENT_CONFIG_VERSION = 4
+CURRENT_CONFIG_VERSION = 5
 
 # Old agent names removed in v7.1 (merged into plan-reviewer + spec-reviewer)
 _STALE_AGENT_KEYS = frozenset(
@@ -62,6 +62,9 @@ def migrate_model_config(config_path: Path | None = None) -> bool:
 
     if version < 4:
         modified = _migration_v4(raw) or modified
+
+    if version < 5:
+        modified = _migration_v5(raw) or modified
 
     raw["_configVersion"] = CURRENT_CONFIG_VERSION
     modified = True
@@ -197,6 +200,19 @@ def _migration_v4(raw: dict[str, Any]) -> bool:
         modified = True
 
     return modified
+
+
+def _migration_v5(raw: dict[str, Any]) -> bool:
+    """v4 → v5: Enable extended context (1M) by default.
+
+    1M context is now GA for Opus 4.6 and Sonnet 4.6. Set extendedContext
+    to true for all users. Users who don't have 1M access can disable it
+    via Console Settings.
+    """
+    if raw.get("extendedContext") is True:
+        return False
+    raw["extendedContext"] = True
+    return True
 
 
 def _write_atomic(path: Path, data: dict[str, Any]) -> None:
