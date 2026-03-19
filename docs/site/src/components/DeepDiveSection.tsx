@@ -120,11 +120,11 @@ const rulesCategories = [
   },
   {
     icon: GitBranch,
-    category: "Customize & Share",
+    category: "Extensions",
     rules: [
-      "Create rules, commands, skills & agents — all shareable",
-      "Share all 4 asset types across machines, teams, and orgs",
-      "Works with 50+ AI tools via Skillshare — one source of truth",
+      "Skills, rules, commands, agents, MCP servers, hooks, and settings",
+      "Project, global, plugin, and remote scopes with diff view",
+      "Team sharing via git — push, pull, and compare extensions",
     ],
   },
   {
@@ -216,7 +216,7 @@ const DeepDiveSection = () => {
                 Hooks Pipeline
               </h3>
               <p className="text-sm text-muted-foreground">
-                15 hooks across 6 lifecycle events — fire automatically at every
+                15 hooks across 7 lifecycle events — fire automatically at every
                 stage
               </p>
             </div>
