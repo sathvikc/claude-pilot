@@ -2,6 +2,12 @@
 
 All notable changes to Pilot Shell will be documented in this file.
 
+## [7.7.6] - 2026-03-25
+
+### Bug Fixes
+
+- Replace broken auto-mode probe with retry-on-failure
+
 ## [7.7.5] - 2026-03-25
 
 ### Bug Fixes
