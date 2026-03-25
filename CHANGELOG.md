@@ -2,6 +2,12 @@
 
 All notable changes to Pilot Shell will be documented in this file.
 
+## [7.7.4] - 2026-03-25
+
+### Bug Fixes
+
+- Enable auto mode for team/enterprise/api users
+
 ## [7.7.3] - 2026-03-25
 
 ### Bug Fixes
