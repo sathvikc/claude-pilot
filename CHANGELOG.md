@@ -2,6 +2,12 @@
 
 All notable changes to Pilot Shell will be documented in this file.
 
+## [7.8.0] - 2026-03-27
+
+### Features
+
+- Plan annotations, code review mode, E2E test scenarios in spec workflow 
+
 ## [7.7.6] - 2026-03-25
 
 ### Bug Fixes
