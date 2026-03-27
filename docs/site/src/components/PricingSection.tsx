@@ -49,7 +49,7 @@ const PricingSection = () => {
           </h2>
           <p className="text-muted-foreground text-lg sm:text-xl max-w-3xl mx-auto">
             Get instant access to best practices from daily production usage — a shortcut to state-of-the-art Claude Code development.
-            Every plan starts with a <span className="text-foreground font-medium">free 7-day trial</span> — full features, no credit card required, starts automatically on install.
+            A <span className="text-foreground font-medium">free 7-day trial</span> starts automatically on install — full features, no subscription required.
           </p>
         </div>
 

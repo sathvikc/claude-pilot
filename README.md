@@ -389,7 +389,7 @@ Pilot Shell is source-available under a commercial license. See the [LICENSE](LI
 | **Team**       | Multi | Solo + extension sharing, seat management, priority support, team onboarding                                    |
 | **Enterprise** | 100+  | Team + full source code access (launcher, console, all components), fork and modify rights, dedicated support   |
 
-All plans start with a free 7-day trial — full features, no credit card required. All plans work across multiple personal machines — one subscription, all your devices.
+A **free 7-day trial** starts automatically on install — full features, no license required. All plans work across multiple personal machines — one subscription, all your devices.
 
 [gh-issues]: https://github.com/maxritter/pilot-shell/issues
 
