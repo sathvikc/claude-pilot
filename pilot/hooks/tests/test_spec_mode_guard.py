@@ -64,6 +64,7 @@ class TestNonBypassWarning:
         ctx = result["hookSpecificOutput"]["additionalContext"]
         assert "default" in ctx
         assert "bypassPermissions" in ctx
+        assert "proceed" in ctx.lower()
 
     def test_warns_in_accept_edits_mode(self):
         code, output = _run_with_input("/spec fix bug", "acceptEdits")
@@ -71,6 +72,7 @@ class TestNonBypassWarning:
         result = json.loads(output)
         ctx = result["hookSpecificOutput"]["additionalContext"]
         assert "acceptEdits" in ctx
+        assert "proceed" in ctx.lower()
 
     def test_warns_in_dont_ask_mode(self):
         code, output = _run_with_input("/spec fix bug", "dontAsk")
@@ -78,6 +80,16 @@ class TestNonBypassWarning:
         result = json.loads(output)
         ctx = result["hookSpecificOutput"]["additionalContext"]
         assert "dontAsk" in ctx
+        assert "proceed" in ctx.lower()
+
+    def test_warning_does_not_block(self):
+        """Non-bypass modes must NOT instruct the LLM to stop."""
+        for mode in ("default", "acceptEdits", "dontAsk"):
+            code, output = _run_with_input("/spec fix bug", mode)
+            assert code == 0
+            ctx = json.loads(output)["hookSpecificOutput"]["additionalContext"]
+            assert "Do NOT" not in ctx
+            assert "STOP" not in ctx
 
 
 class TestNonSpecPrompts:

@@ -84,6 +84,29 @@ For the SSH/Termius approach, you need network connectivity to your computer. In
 | **Quick check** | Glance at a running session from your phone without going back to your desk |
 | **Multi-device** | Heavy coding from terminal, lighter interactions from browser, quick approvals from phone |
 
+## Channels — Telegram, Discord & iMessage
+
+[Channels](https://code.claude.com/docs/en/channels) push messages from external platforms directly into your running Pilot session. Claude reads the message, acts on it with your full local environment, and replies back through the same platform.
+
+```bash
+# Start Pilot with a channel enabled
+pilot --channels plugin:telegram@claude-plugins-official
+pilot --channels plugin:discord@claude-plugins-official
+pilot --channels plugin:imessage@claude-plugins-official
+```
+
+Channels require [Bun](https://bun.sh/) and a one-time bot setup (Telegram/Discord) or macOS (iMessage). Each channel maintains a sender allowlist — only paired users can push messages.
+
+| Channel | Setup | Pairing |
+| ------- | ----- | ------- |
+| **Telegram** | [Create a bot](https://github.com/anthropics/claude-plugins-official/tree/main/external_plugins/telegram), pass token during install | Send any message to the bot → approve pairing code in terminal |
+| **Discord** | [Create a bot](https://github.com/anthropics/claude-plugins-official/tree/main/external_plugins/discord), pass token during install | Send any message to the bot → approve pairing code in terminal |
+| **iMessage** | [macOS only](https://github.com/anthropics/claude-plugins-official/tree/main/external_plugins/imessage), no token needed | Texting yourself works automatically |
+
+**Channels vs Remote Control:** Remote Control gives you a window into your session from the Claude App or browser. Channels let external platforms push events *into* your session — they're complementary. Use both together: channels for incoming messages, Remote Control for monitoring and steering.
+
+**Team/Enterprise:** Channels are off by default. Admins enable them via [claude.ai Admin settings](https://claude.ai/admin-settings/claude-code). See the full [Channels documentation](https://code.claude.com/docs/en/channels) and [Channels reference](https://code.claude.com/docs/en/channels-reference) for building custom channels.
+
 ## Troubleshooting
 
 If Remote Control doesn't connect or shows authentication errors, run `/logout` followed by `/login` inside Claude Code. This re-authenticates your session and resolves most connection issues.

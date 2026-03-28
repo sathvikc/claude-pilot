@@ -10,6 +10,23 @@ Command reference for the `pilot` binary at `~/.pilot/bin/pilot`.
 
 Run `pilot` or `ccp` with no arguments to start Claude with Pilot enhancements. Most commands support `--json` for structured output. Multiple sessions can run in parallel on the same project.
 
+## Claude CLI Flag Passthrough
+
+Pilot forwards any unrecognized flags directly to the Claude CLI. This means all current and future Claude Code flags work out of the box — no Pilot update required.
+
+```bash
+# Use any Claude CLI flag directly
+pilot --channels plugin:telegram@claude-plugins-official
+pilot --model opus --verbose
+pilot --resume
+pilot --continue
+
+# 'run' is an explicit alias — same behavior
+pilot run --channels plugin:telegram@claude-plugins-official
+```
+
+Pilot only intercepts its own subcommands (`activate`, `status`, `worktree`, etc.) and flags (`--version`, `--skip-update-check`). Everything else passes through to `claude`.
+
 ## Headless Mode
 
 Run Pilot non-interactively with `-p` (or `--print`). Wraps `claude -p` with license validation and the Pilot plugin — use it in CI/CD pipelines, scripts, or automated workflows.
@@ -24,8 +41,8 @@ pilot -p "Summarize this project" --output-format json
 # Auto-approve specific tools
 pilot -p "Run tests and fix failures" --allowedTools "Bash,Read,Edit"
 
-# Streaming output
-pilot -p "Explain recursion" --output-format stream-json --verbose
+# With channels
+pilot --channels plugin:telegram@claude-plugins-official -p "Check messages"
 
 # Continue a previous conversation
 pilot -p "Now focus on the database queries" --continue
@@ -34,15 +51,16 @@ pilot -p "Now focus on the database queries" --continue
 pilot -p "Summarize this file" --bare --allowedTools "Read"
 ```
 
-All [Claude Code CLI flags](https://code.claude.com/docs/en/cli-reference) work with `-p`, including `--output-format`, `--allowedTools`, `--continue`, `--resume`, `--append-system-prompt`, `--json-schema`, and `--bare`. Pilot-specific flags like `--skip-update-check` are stripped automatically.
+All [Claude Code CLI flags](https://code.claude.com/docs/en/cli-reference) work with `-p`, including `--output-format`, `--allowedTools`, `--continue`, `--resume`, `--channels`, `--append-system-prompt`, `--json-schema`, and `--bare`. Pilot-specific flags like `--skip-update-check` are stripped automatically.
 
 ## Session & Context
 
 | Command | Description |
 |---------|-------------|
 | `pilot` | Start Claude with Pilot enhancements, auto-update, and license check |
+| `pilot [claude-flags...]` | Start Claude with any Claude CLI flags passed through |
 | `pilot -p "prompt" [flags...]` | Headless mode — run non-interactively with Pilot plugin (CI/CD, scripts) |
-| `pilot run [args...]` | Same as interactive, with optional flags (`--skip-update-check`) |
+| `pilot run [flags...]` | Explicit alias for starting Claude (all flags passed through) |
 | `ccp` | Alias for pilot |
 | `pilot check-context --json` | Get current context usage percentage |
 | `pilot register-plan <path> <status>` | Associate a plan file with the current session |

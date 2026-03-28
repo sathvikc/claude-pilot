@@ -51,10 +51,10 @@ def run_spec_mode_guard() -> int:
                     "hookSpecificOutput": {
                         "hookEventName": "UserPromptSubmit",
                         "additionalContext": (
-                            f"WARNING: Current permission mode is '{permission_mode}'. "
-                            "The /spec workflow requires 'bypassPermissions' mode for autonomous execution. "
-                            "Tell the user to press Shift+Tab to cycle to 'Bypass Permissions' mode before proceeding. "
-                            "Do NOT invoke the /spec skill until the user confirms they have switched."
+                            f"NOTE: Current permission mode is '{permission_mode}'. "
+                            "For uninterrupted /spec execution, 'bypassPermissions' mode is recommended "
+                            "(Shift+Tab to cycle). In the current mode the workflow may pause for "
+                            "permission prompts. Briefly warn the user, then proceed with the workflow."
                         ),
                     }
                 }

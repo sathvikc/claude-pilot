@@ -118,6 +118,8 @@ This rule is about git commands, not file operations. Editing files is always al
 
 **⛔ Never selectively unstage.** Commit ALL staged changes as-is.
 
+**⛔ Always `git push -u` on new branches.** When pushing a newly created branch for the first time, use `git push -u origin <branch>` (or `--set-upstream`) so the local branch tracks the correct remote. Without `-u`, the upstream stays on the old branch (e.g. `origin/master`), breaking subsequent pushes from IDEs and CLI.
+
 **Read commands — always allowed:** `git status`, `diff`, `log`, `show`, `branch`
 
 **Exceptions:** Explicit user override ("checkout branch X") and worktree during `/spec` (`Worktree: Yes`).

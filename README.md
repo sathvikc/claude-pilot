@@ -218,14 +218,24 @@ Investigation-first workflow for targeted fixes. Finds the root cause before tou
 
 Just chat — no plan, no approval gate. Quality hooks and TDD enforcement still apply. Best for small tasks and exploration. For anything that needs a plan, use `/spec` — not Claude Code's built-in plan mode.
 
+### Claude CLI Flag Passthrough
+
+All Claude Code CLI flags work directly with `pilot` — current and future. Pilot forwards any flag it doesn't recognize to the Claude CLI automatically.
+
+```bash
+pilot --channels plugin:telegram@claude-plugins-official
+pilot --model opus --verbose
+pilot --resume
+```
+
 ### Headless Mode
 
-Run Pilot non-interactively with `-p` for CI/CD pipelines, scripts, and automated workflows. All Claude Code CLI flags work — `--output-format`, `--allowedTools`, `--continue`, `--bare`, etc.
+Run Pilot non-interactively with `-p` for CI/CD pipelines, scripts, and automated workflows. All Claude Code CLI flags work — `--output-format`, `--allowedTools`, `--channels`, `--continue`, `--bare`, etc.
 
 ```bash
 pilot -p "Run tests and fix failures" --allowedTools "Bash,Read,Edit"
 pilot -p "Summarize this project" --output-format json
-pilot -p "Review this PR for security issues" --bare --allowedTools "Read"
+pilot --channels plugin:telegram@official -p "Check messages"
 ```
 
 ### /setup-rules — Generate Modular Rules
