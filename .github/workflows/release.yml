@@ -175,18 +175,21 @@ jobs:
       - name: Verify logger.ts after git-crypt unlock
         working-directory: console
         run: |
-          echo "=== file type ==="
-          file src/utils/logger.ts
-          echo "=== line count ==="
-          wc -l src/utils/logger.ts
-          echo "=== formatTool grep ==="
-          grep -n "formatTool" src/utils/logger.ts || echo "MISSING: formatTool not in logger.ts!"
-          echo "=== first 5 lines ==="
-          head -5 src/utils/logger.ts
-          echo "=== lines 160-165 ==="
-          sed -n '160,165p' src/utils/logger.ts
-          echo "=== bun resolve check ==="
-          bun -e "import { logger } from './src/utils/logger.js'; console.log('formatTool type:', typeof logger.formatTool); console.log('methods:', Object.getOwnPropertyNames(Object.getPrototypeOf(logger)).join(', '))"
+          echo "=== test file first 5 lines ==="
+          head -5 tests/utils/logger-format-tool.test.ts
+          echo "=== test file line count ==="
+          wc -l tests/utils/logger-format-tool.test.ts
+          echo "=== test file md5 ==="
+          md5sum tests/utils/logger-format-tool.test.ts || true
+          echo "=== inline bun test ==="
+          bun -e "
+            import { logger } from './src/utils/logger.js';
+            const has = typeof logger.formatTool === 'function';
+            console.log('formatTool exists:', has);
+            if (has) console.log('result:', logger.formatTool('Bash', '{\"command\": \"ls\"}'));
+          "
+          echo "=== single test file run ==="
+          bun test tests/utils/logger-format-tool.test.ts 2>&1 | head -20 || true
 
       - name: Run console tests
         working-directory: console
