@@ -274,47 +274,47 @@ class TestInstallRtk:
         assert result is False
 
 
-class TestInstallCodebaseMemoryMcp:
-    """Tests for install_codebase_memory_mcp() — code knowledge graph MCP server."""
+class TestInstallCodegraph:
+    """Tests for install_codegraph() — CodeGraph code knowledge graph."""
 
-    def test_install_codebase_memory_mcp_exists(self):
-        """install_codebase_memory_mcp function exists and is callable."""
-        from installer.steps.dependencies import install_codebase_memory_mcp
+    def test_install_codegraph_exists(self):
+        """install_codegraph function exists and is callable."""
+        from installer.steps.dependencies import install_codegraph
 
-        assert callable(install_codebase_memory_mcp)
+        assert callable(install_codegraph)
 
-    @patch("installer.steps.dependencies.command_exists", return_value=True)
-    def test_install_codebase_memory_mcp_skips_if_already_installed(self, _mock_cmd):
-        """install_codebase_memory_mcp skips installation when already in PATH."""
-        from installer.steps.dependencies import install_codebase_memory_mcp
+    @patch("installer.steps.dependencies._is_codegraph_installed", return_value=True)
+    def test_install_codegraph_skips_if_already_installed(self, _mock_check):
+        """install_codegraph skips installation when already installed."""
+        from installer.steps.dependencies import install_codegraph
 
         with patch("installer.steps.dependencies._run_bash_with_retry") as mock_bash:
-            result = install_codebase_memory_mcp()
+            result = install_codegraph()
 
         assert result is True
         mock_bash.assert_not_called()
 
-    @patch("installer.steps.dependencies.command_exists", return_value=False)
-    def test_install_codebase_memory_mcp_runs_curl_when_not_installed(self, _mock_cmd):
-        """install_codebase_memory_mcp runs curl installer when not in PATH."""
-        from installer.steps.dependencies import install_codebase_memory_mcp
+    @patch("installer.steps.dependencies._is_codegraph_installed", return_value=False)
+    def test_install_codegraph_runs_npm_when_not_installed(self, _mock_check):
+        """install_codegraph runs npm install when not installed."""
+        from installer.steps.dependencies import install_codegraph
 
         with patch("installer.steps.dependencies._run_bash_with_retry", return_value=True) as mock_bash:
-            result = install_codebase_memory_mcp()
+            result = install_codegraph()
 
         assert result is True
         mock_bash.assert_called_once()
         call_args = str(mock_bash.call_args)
-        assert "DeusData/codebase-memory-mcp" in call_args
-        assert "setup.sh" in call_args
+        assert "@colbymchenry/codegraph" in call_args
+        assert "--force" in call_args
 
-    @patch("installer.steps.dependencies.command_exists", return_value=False)
-    def test_install_codebase_memory_mcp_returns_false_when_curl_fails(self, _mock_cmd):
-        """install_codebase_memory_mcp returns False when curl installer fails."""
-        from installer.steps.dependencies import install_codebase_memory_mcp
+    @patch("installer.steps.dependencies._is_codegraph_installed", return_value=False)
+    def test_install_codegraph_returns_false_when_npm_fails(self, _mock_check):
+        """install_codegraph returns False when npm install fails."""
+        from installer.steps.dependencies import install_codegraph
 
         with patch("installer.steps.dependencies._run_bash_with_retry", return_value=False):
-            result = install_codebase_memory_mcp()
+            result = install_codegraph()
 
         assert result is False
 

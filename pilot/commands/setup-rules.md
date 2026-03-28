@@ -313,7 +313,7 @@ probe extract tests/conftest.py:1-30
 2. **Glob** for file structure — `**/*.test.*`, `**/routes/**`, `**/config/**`, `**/middleware/**`
 3. **Read** 5-10 representative files in key directories
 4. For each gap from Phase 1: run a targeted search (Probe if available, otherwise Grep) to find current patterns
-5. **Use codebase-memory-mcp** (`search_graph`, `get_architecture`, `query_graph`) for broader structural exploration when simpler searches aren't sufficient
+5. **Use CodeGraph** (`codegraph_search`, `codegraph_context`, `codegraph_callers`) for broader structural exploration when simpler searches aren't sufficient
 
 **Monorepo:** Repeat Steps 4.1-4.3 for each sub-project identified in Phase 1. Each sub-project gets its own exploration context.
 

@@ -168,13 +168,27 @@ def install_rtk() -> bool:
     )
 
 
-def install_codebase_memory_mcp() -> bool:
-    """Install codebase-memory-mcp for code knowledge graph and structural analysis."""
-    if command_exists("codebase-memory-mcp"):
+def _is_codegraph_installed() -> bool:
+    """Check if codegraph is already installed globally via npm."""
+    try:
+        result = subprocess.run(
+            ["npm", "list", "-g", "@colbymchenry/codegraph", "--depth=0"],
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+        return result.returncode == 0 and "@colbymchenry/codegraph" in result.stdout
+    except Exception:
+        return False
+
+
+def install_codegraph() -> bool:
+    """Install CodeGraph for code knowledge graph and structural analysis."""
+    if _is_codegraph_installed():
         return True
 
     return _run_bash_with_retry(
-        "curl -fsSL https://raw.githubusercontent.com/DeusData/codebase-memory-mcp/main/scripts/setup.sh | bash",
+        npm_global_cmd("npm install -g @colbymchenry/codegraph --force"),
         timeout=120,
     )
 
@@ -583,8 +597,8 @@ class DependenciesStep(BaseStep):
         if _install_with_spinner(ui, "RTK (token optimizer)", install_rtk):
             installed.append("rtk")
 
-        if _install_with_spinner(ui, "codebase-memory-mcp (code intelligence)", install_codebase_memory_mcp):
-            installed.append("codebase_memory_mcp")
+        if _install_with_spinner(ui, "CodeGraph (code intelligence)", install_codegraph):
+            installed.append("codegraph")
 
         if _install_with_spinner(ui, "MCP server packages", _precache_npx_mcp_servers, ui):
             installed.append("mcp_npx_cache")

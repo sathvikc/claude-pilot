@@ -91,7 +91,7 @@ class TestBlockedAgentTypes:
         code, output = _run_with_input("Agent", {"subagent_type": "Explore", "prompt": "find files"})
         assert code == 2
         assert "Probe CLI" in output
-        assert "codebase-memory-mcp" in output
+        assert "CodeGraph" in output
 
     def test_blocks_plan_agent(self):
         code, output = _run_with_input("Agent", {"subagent_type": "Plan", "prompt": "plan impl"})
@@ -290,7 +290,7 @@ class TestSubprocessIntegration:
         exit_code, stdout, _ = _run_subprocess("Agent", {"subagent_type": "Explore"})
         assert exit_code == 2
         assert "Probe CLI" in stdout
-        assert "codebase-memory-mcp" in stdout
+        assert "CodeGraph" in stdout
 
     def test_plan_agent_blocked(self):
         exit_code, stdout, _ = _run_subprocess("Agent", {"subagent_type": "Plan"})

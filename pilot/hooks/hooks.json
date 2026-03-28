@@ -19,6 +19,17 @@
         ]
       },
       {
+        "matcher": "startup",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "codegraph init -i && codegraph sync",
+            "async": true,
+            "timeout": 120
+          }
+        ]
+      },
+      {
         "matcher": "clear",
         "hooks": [
           {
@@ -81,6 +92,16 @@
     ],
     "PostToolUse": [
       {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "codegraph mark-dirty",
+            "async": true
+          }
+        ]
+      },
+      {
         "matcher": "Write|Edit|MultiEdit",
         "hooks": [
           {
@@ -122,6 +143,10 @@
             "command": "bun \"${CLAUDE_PLUGIN_ROOT}/scripts/worker-service.cjs\" hook claude-code summarize",
             "async": true,
             "timeout": 15
+          },
+          {
+            "type": "command",
+            "command": "codegraph sync-if-dirty"
           }
         ]
       }

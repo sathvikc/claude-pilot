@@ -66,41 +66,42 @@ fetch_url(url="https://docs.example.com/api")
 fetch_urls(urls=["https://a.com", "https://b.com"])
 ```
 
-## codebase-memory-mcp
+## CodeGraph
 
 **Code knowledge graph and structural analysis**
 
-Builds a persistent graph of your codebase — functions, classes, call chains, and dependencies. Complements Probe CLI: Probe finds code by intent ("how does auth work?"), codebase-memory finds by structure ("who calls this function?", "what's the blast radius of this change?").
+Builds a semantic knowledge graph of your codebase — functions, classes, call chains, and dependencies. Complements Probe CLI: Probe finds code by intent ("how does auth work?"), CodeGraph finds by structure ("who calls this function?", "what's affected by changing this?").
 
 ```
-search_graph(label="Function", name_pattern=".*Handler.*")
-trace_call_path(function_name="processOrder", direction="both", depth=2)
-detect_changes(scope="all")
-query_graph(query="MATCH (c:Class)-[:DEFINES_METHOD]->(m) RETURN c.name, m.name")
+codegraph_search(query="Handler", kind="function")
+codegraph_callers(symbol="processOrder")
+codegraph_callees(symbol="processOrder")
+codegraph_impact(symbol="processOrder", depth=2)
+codegraph_context(task="refactor authentication flow")
 ```
 
 **Key capabilities:**
 
 | Tool | Use case |
 |------|----------|
-| `search_graph` | Find functions/classes by name pattern with degree filtering (dead code, high fan-out) |
-| `trace_call_path` | Who calls X? What does X call? Full call chain with risk classification |
-| `detect_changes` | Map git diff to affected symbols and blast radius |
-| `query_graph` | Cypher-like graph queries for structural relationships |
-| `get_architecture` | Codebase overview — languages, packages, hotspots, entry points |
-| `get_code_snippet` | Source code with caller/callee metadata |
+| `codegraph_search` | Find symbols by name — functions, classes, types |
+| `codegraph_callers` | Who calls X? Complete caller list with file locations |
+| `codegraph_callees` | What does X call? All downstream dependencies |
+| `codegraph_impact` | Blast radius — transitive callers and callees affected by a change |
+| `codegraph_context` | Task-driven context retrieval — entry points, related symbols, and code |
+| `codegraph_node` | Get details and source code for a specific symbol |
 
-**When to use Probe vs codebase-memory-mcp:**
+**When to use Probe vs CodeGraph:**
 
 | Question | Best tool |
 |----------|-----------|
 | "How does authentication work?" | **Probe** — natural language, intent-based search |
-| "Who calls this function?" | **codebase-memory** — `trace_call_path` with exact call chain |
-| "What's the blast radius of my changes?" | **codebase-memory** — `detect_changes` maps diffs to affected symbols |
-| "Find functions matching a pattern" | **codebase-memory** — `search_graph` with regex, label, and degree filters |
-| "Find unused/dead code" | **codebase-memory** — `search_graph` with `max_degree=0` |
-| "Extract a specific function's source" | **Both** — Probe `extract` for line/symbol, codebase-memory for caller/callee context |
+| "Who calls this function?" | **CodeGraph** — `codegraph_callers` with exact caller list |
+| "What's the blast radius of my changes?" | **CodeGraph** — `codegraph_impact` shows transitive affected symbols |
+| "Find functions matching a name" | **CodeGraph** — `codegraph_search` with kind filter |
+| "Get context for a task" | **CodeGraph** — `codegraph_context` returns entry points and related code |
+| "Extract a specific function's source" | **Both** — Probe `extract` for line/symbol, CodeGraph `codegraph_node` for symbol details |
 
 :::info Tool selection
-Rules specify the preferred order — Probe CLI first for intent-based codebase questions, codebase-memory-mcp for structural queries (call tracing, impact analysis, dead code), context7 for library API lookups, grep-mcp for production code examples, web-search for current information. The `tool_redirect.py` hook blocks the built-in WebSearch/WebFetch and the Explore agent, redirecting to these alternatives.
+Rules specify the preferred order — Probe CLI first for intent-based codebase questions, CodeGraph for structural queries (call tracing, impact analysis), context7 for library API lookups, grep-mcp for production code examples, web-search for current information. The `tool_redirect.py` hook blocks the built-in WebSearch/WebFetch and the Explore agent, redirecting to these alternatives.
 :::

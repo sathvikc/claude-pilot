@@ -43,7 +43,7 @@ When called after verification: read plan, check `Iterations` field, report "Sta
 2. **Summarize understanding** — demonstrate comprehension
 3. **Check current state:** `git status --short`, `git diff --name-only`, plan progress (`[x]` vs `[ ]`)
 
-**Research tools during implementation:** Context7 (library docs), Probe CLI `probe search` (find patterns), `probe extract` (extract code blocks), codebase-memory-mcp (call tracing, impact analysis), grep-mcp (production examples).
+**Research tools during implementation:** Context7 (library docs), Probe CLI `probe search` (find patterns), `probe extract` (extract code blocks), CodeGraph (`codegraph_callers`/`codegraph_impact` for call tracing and impact analysis), grep-mcp (production examples).
 
 ---
 

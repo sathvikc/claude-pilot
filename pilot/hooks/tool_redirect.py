@@ -41,20 +41,20 @@ BLOCKS: dict[str, dict[str, str]] = {
 }
 
 RESEARCH_BLOCK = (
-    "Research agent blocked: use Probe CLI, Grep/Glob, and codebase-memory-mcp directly",
+    "Research agent blocked: use Probe CLI, Grep/Glob, and CodeGraph directly",
     "Research sub-agents are blocked. Use direct tools instead:\n"
     "-> Probe: probe search \"query\" ./ --max-results 5 --max-tokens 2000\n"
     "-> Grep/Glob: for exact pattern matching\n"
-    "-> Graph: ToolSearch(query=\"+codebase-memory-mcp search\") then search_graph/trace_call_path",
+    "-> Graph: codegraph_search/codegraph_callers/codegraph_callees/codegraph_impact",
 )
 
 BLOCKED_AGENT_REASONS: dict[str, tuple[str, str]] = {
     "Explore": (
-        "Explore agent blocked: use Probe CLI + codebase-memory-mcp",
+        "Explore agent blocked: use Probe CLI + CodeGraph",
         "The Explore agent is blocked. Use Probe CLI for intent-based search and "
-        "codebase-memory-mcp (via ToolSearch) for structural analysis instead.\n"
+        "CodeGraph for structural analysis instead.\n"
         "-> Probe: probe search \"query\" ./ --max-results 5 --max-tokens 2000\n"
-        "-> Graph: ToolSearch(query=\"+codebase-memory-mcp search\") then search_graph/trace_call_path/query_graph",
+        "-> Graph: codegraph_search/codegraph_callers/codegraph_callees/codegraph_impact/codegraph_context",
     ),
     "Plan": (
         "Plan agent blocked: use /spec for structured planning",

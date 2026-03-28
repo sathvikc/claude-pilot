@@ -37,7 +37,7 @@ const insideItems: InsideItem[] = [
     title: "Quality Hooks & Testing",
     description: "Deterministic checks on every edit",
     summary:
-      "15 hooks across 7 lifecycle events. Auto-lint, format, and type-check every file edit. TDD enforcer warns when implementation is written without a failing test.",
+      "18 hooks across 7 lifecycle events. Auto-lint, format, and type-check every file edit. TDD enforcer warns when implementation is written without a failing test.",
   },
   {
     icon: Plug2,

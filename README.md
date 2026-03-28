@@ -66,7 +66,7 @@ Installs globally on macOS, Linux, and Windows (WSL2). All tools and rules go to
 1. **Prerequisites** — Checks/installs Homebrew, Node.js, Python 3.12+, uv, git, jq
 2. **Claude files** — Sets up `~/.claude/` plugin — rules, commands, hooks, MCP servers
 3. **Config files** — Creates `.nvmrc` and project config
-4. **Dependencies** — Installs Probe, RTK, codebase-memory-mcp, agent-browser, language servers
+4. **Dependencies** — Installs Probe, RTK, CodeGraph, agent-browser, language servers
 5. **Shell integration** — Auto-configures bash, fish, and zsh with `pilot` alias
 6. **VS Code extensions** — Installs recommended extensions for your stack
 7. **Finalize** — Success message with next steps
@@ -256,7 +256,7 @@ pilot
 1. **Read existing rules** — inventory all `.claude/rules/` files, detect structure and path-scoping
 2. **Migrate unscoped assets** — prefix with project slug for better sharing
 3. **Quality audit** — check rules against best practices (size, specificity, stale references, conflicts)
-4. **Explore codebase** — semantic search with Probe CLI, structural analysis with codebase-memory-mcp
+4. **Explore codebase** — semantic search with Probe CLI, structural analysis with CodeGraph
 5. **Compare patterns** — discovered vs documented conventions
 6. **Sync project rule** — update `{slug}-project.md` with current tech stack, structure, commands
 7. **Sync MCP docs** — smoke-test user MCP servers, document working tools
@@ -420,7 +420,7 @@ I'd love to help figure out if Pilot Shell is the right fit for your team and ge
 <details>
 <summary><b>Does Pilot Shell send my code or data to external services?</b></summary>
 
-**No code, files, prompts, project data, or personal information ever leaves your machine through Pilot Shell.** All development tools — code search (Probe), code intelligence (codebase-memory-mcp), persistent memory (Pilot Shell Console), session state, and quality hooks — run entirely locally.
+**No code, files, prompts, project data, or personal information ever leaves your machine through Pilot Shell.** All development tools — code search (Probe), code intelligence (CodeGraph), persistent memory (Pilot Shell Console), session state, and quality hooks — run entirely locally.
 
 Pilot Shell makes external calls **only for licensing**. Here is the complete list:
 

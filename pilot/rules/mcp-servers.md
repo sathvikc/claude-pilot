@@ -135,47 +135,47 @@ Options: `waitUntil` (load/domcontentloaded/networkidle), `returnHtml`, `waitFor
 
 ---
 
-### codebase-memory-mcp — Code Knowledge Graph
+### CodeGraph — Code Knowledge Graph
 
-**Purpose:** Structural code analysis, call tracing, dead code detection, and impact analysis via a persistent code graph.
+**Purpose:** Semantic code knowledge graph for symbol search, call tracing, impact analysis, and code context retrieval.
 
-**Complements Probe CLI:** Probe finds code by intent ("how does auth work?"). codebase-memory finds by structure ("who calls this?", "what's dead?", "what's the blast radius?").
+**Complements Probe CLI:** Probe finds code by intent ("how does auth work?"). CodeGraph finds by structure ("who calls this?", "what's affected by changing this?").
 
 **Key tools:**
 
-| Tool               | Purpose                                                         |
-| ------------------ | --------------------------------------------------------------- |
-| `index_repository` | Parse repo into graph (once — auto-sync keeps it fresh)         |
-| `search_graph`     | Find functions/classes by name pattern, label, degree           |
-| `trace_call_path`  | BFS call chain — who calls X, what does X call                  |
-| `detect_changes`   | Map git diff to affected symbols + blast radius                 |
-| `get_code_snippet` | Source code + caller/callee metadata                            |
-| `query_graph`      | Cypher-like graph queries                                       |
-| `get_architecture` | Codebase overview (languages, packages, hotspots, entry points) |
-| `search_code`      | Grep-like text search within indexed files                      |
+| Tool                | Purpose                                                    |
+| ------------------- | ---------------------------------------------------------- |
+| `codegraph_search`  | Find symbols by name (functions, classes, types)           |
+| `codegraph_context` | Get relevant code context for a task description           |
+| `codegraph_callers` | Find all functions/methods that call a specific symbol     |
+| `codegraph_callees` | Find all functions/methods that a symbol calls             |
+| `codegraph_impact`  | Analyze blast radius of changing a symbol                  |
+| `codegraph_node`    | Get details and source code for a specific symbol          |
+| `codegraph_files`   | Get project file structure from the index                  |
 
-**Workflow:** Check `index_status` → `index_repository` if needed → `search_graph` / `trace_call_path` / `query_graph`
+**Workflow:** `codegraph_search` to find symbol → `codegraph_callers`/`codegraph_callees` to trace flow → `codegraph_impact` before changes
 
 ```
-ToolSearch(query="+codebase-memory-mcp search")
-
-mcp__plugin_pilot_codebase-memory-mcp__search_graph(label="Function", name_pattern=".*Handler.*")
-mcp__plugin_pilot_codebase-memory-mcp__trace_call_path(function_name="ProcessOrder", direction="both", depth=2)
-mcp__plugin_pilot_codebase-memory-mcp__detect_changes(scope="all")
-mcp__plugin_pilot_codebase-memory-mcp__get_code_snippet(qualified_name="MyClass", auto_resolve=true, include_neighbors=true)
+codegraph_search(query="Handler", kind="function")
+codegraph_callers(symbol="processOrder")
+codegraph_callees(symbol="processOrder")
+codegraph_impact(symbol="processOrder", depth=2)
+codegraph_context(task="refactor authentication flow")
+codegraph_node(symbol="MyClass", includeCode=true)
 ```
 
 **Primary use cases (Probe can't do these):**
 
-- **`trace_call_path`** — complete caller/callee graph with risk classification. The highest-value tool. Use before modifying any function during `/spec`.
-- **`detect_changes`** — maps git diff to affected symbols + blast radius. Use during planning.
-- Dead code detection (`search_graph` with `max_degree=0, exclude_entry_points=true`) — good starting point, but expect false positives from dynamic dispatch and CLI handlers.
+- **`codegraph_callers`/`codegraph_callees`** — complete caller/callee graph. Use before modifying any function during `/spec`.
+- **`codegraph_impact`** — transitive blast radius analysis. Use during planning to scope impact.
+- **`codegraph_context`** — task-driven context retrieval with entry points, related symbols, and code.
 
-**Lower-value features (use selectively):**
+**Quick lookup preferences:**
 
-- `get_architecture` — hotspots/clusters polluted by minified JS bundles in mixed codebases. Useful if your project is pure Python/Go/TS source.
-- `query_graph` (Cypher) — powerful for cross-service HTTP edges and interface implementations.
-- `FILE_CHANGES_WITH` coupling — mostly shows obvious src↔test pairs. More useful in large, interconnected codebases.
+- Use `codegraph_search` instead of Grep for finding symbols
+- Use `codegraph_callers`/`codegraph_callees` to trace code flow
+- Use `codegraph_impact` before making changes to see what's affected
+- Use `codegraph_files` instead of Glob for project file structure
 
 **When Probe is better:**
 
@@ -183,23 +183,21 @@ mcp__plugin_pilot_codebase-memory-mcp__get_code_snippet(qualified_name="MyClass"
 - Natural language queries
 - AST-aware code extraction by line/symbol
 
-Full reference in skills: `codebase-memory-reference`, `codebase-memory-tracing`, `codebase-memory-exploring`, `codebase-memory-quality`.
-
 ---
 
 ### Tool Selection Quick Reference
 
-| Need                           | Server/Tool                    | Reference                                  |
-| ------------------------------ | ------------------------------ | ------------------------------------------ |
-| **Codebase search**            | **Probe CLI** (`probe search`) | `cli-tools.md`                             |
-| Extract code block             | Probe CLI (`probe extract`)    | `cli-tools.md`                             |
-| AST pattern matching           | Probe CLI (`probe query`)      | `cli-tools.md`                             |
-| Call tracing / impact analysis | codebase-memory-mcp            | `trace_call_path`, `detect_changes`        |
-| Dead code / quality analysis   | codebase-memory-mcp            | `search_graph` with degree filters         |
-| Structural graph queries       | codebase-memory-mcp            | `query_graph` (Cypher)                     |
+| Need                           | Server/Tool                    | Reference                                   |
+| ------------------------------ | ------------------------------ | ------------------------------------------- |
+| **Codebase search**            | **Probe CLI** (`probe search`) | `cli-tools.md`                              |
+| Extract code block             | Probe CLI (`probe extract`)    | `cli-tools.md`                              |
+| AST pattern matching           | Probe CLI (`probe query`)      | `cli-tools.md`                              |
+| Call tracing / impact analysis | CodeGraph                      | `codegraph_callers`, `codegraph_impact`     |
+| Symbol search                  | CodeGraph                      | `codegraph_search`                          |
+| Task context                   | CodeGraph                      | `codegraph_context`                         |
 | Past work / decisions          | mem-search                     | `search` → `timeline` → `get_observations` |
 | Library/framework docs         | context7                       | `resolve-library-id` → `query-docs`        |
-| Web search                     | web-search                     | `search`                                   |
-| GitHub README                  | web-search                     | `fetchGithubReadme`                        |
-| Production code examples       | grep-mcp                       | `searchGitHub`                             |
-| Full web page content          | web-fetch                      | `fetch_url` / `fetch_urls`                 |
+| Web search                     | web-search                     | `search`                                    |
+| GitHub README                  | web-search                     | `fetchGithubReadme`                         |
+| Production code examples       | grep-mcp                       | `searchGitHub`                              |
+| Full web page content          | web-fetch                      | `fetch_url` / `fetch_urls`                  |

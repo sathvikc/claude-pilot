@@ -7,7 +7,7 @@ const stack = [
   { name: "ruff", detail: "Linter" },
   { name: "Probe", detail: "Code Search" },
   { name: "RTK", detail: "Token Optimizer" },
-  { name: "codebase-memory", detail: "Code Graph" },
+  { name: "CodeGraph", detail: "Code Graph" },
   { name: "MCP", detail: "Protocol" },
   { name: "Context7", detail: "Library Docs" },
   { name: "Playwright", detail: "E2E Testing" },

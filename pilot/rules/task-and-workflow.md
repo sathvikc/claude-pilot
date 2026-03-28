@@ -89,10 +89,10 @@ Use EXACT parameter names — abbreviated names cause `InputValidationError`:
 
 ### Agent Tool — Prefer Direct Tools
 
-**Explore, Plan, and research agents are blocked by hook.** Any Agent whose description starts with "Research" (first word) is hard-blocked — use Probe CLI, Grep/Glob, and codebase-memory-mcp directly instead. All other agents pass through silently.
+**Explore, Plan, and research agents are blocked by hook.** Any Agent whose description starts with "Research" (first word) is hard-blocked — use Probe CLI, Grep/Glob, and CodeGraph directly instead. All other agents pass through silently.
 
 **Search:** Probe CLI (`probe search`) → Grep/Glob (exact patterns). See `cli-tools.md` for Probe reference.
-**Structure:** codebase-memory-mcp `trace_call_path` (call graphs, impact) → `detect_changes` (blast radius). See `development-practices.md`.
+**Structure:** CodeGraph `codegraph_callers`/`codegraph_callees` (call graphs), `codegraph_impact` (blast radius). See `development-practices.md`.
 
 ### ⛔ Web Search/Fetch
 

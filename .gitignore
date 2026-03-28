@@ -230,6 +230,7 @@ apm.yml
 .playwright-*/
 .apm
 .agents
+.codegraph
 .vercel
 .mcp.json
 demo
