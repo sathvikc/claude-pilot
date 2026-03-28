@@ -1,6 +1,6 @@
 {
   "name": "pilot-shell-plugin",
-  "version": "7.8.0",
+  "version": "7.8.1",
   "private": true,
   "description": "Runtime dependencies for pilot-memory bundled hooks",
   "type": "module",

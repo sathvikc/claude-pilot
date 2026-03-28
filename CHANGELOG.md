@@ -2,6 +2,24 @@
 
 All notable changes to Pilot Shell will be documented in this file.
 
+## [7.8.1] - 2026-03-28
+
+### Bug Fixes
+
+- Replace mock.module with spyOn for logger in timeline-formatting tests
+- Enhanced CI debug for logger test — check test file content and single-file run
+- Add debug step to release.yml (runs on main, not dev)
+- Add debug step to diagnose CI logger.formatTool failure
+- Pin Bun version to 1.3.9 in CI workflows
+- Skip quality hooks when project has no linter config
+- Replace codebase-memory-mcp with CodeGraph across project
+- Add Claude CLI flag passthrough and relax /spec permission mode enforcement
+
+### Miscellaneous
+
+- Improved Website Content
+- Updated Pricing Section and Readme
+
 ## [7.8.0] - 2026-03-27
 
 ### Features
