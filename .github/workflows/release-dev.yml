@@ -117,27 +117,11 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3 # v2
         with:
-          bun-version: "1.3.9"
+          bun-version: latest
 
       - name: Install dependencies
         working-directory: console
         run: bun install
-
-      - name: Verify logger.ts content
-        working-directory: console
-        run: |
-          echo "=== logger.ts line count ==="
-          wc -l src/utils/logger.ts
-          echo "=== formatTool present? ==="
-          grep -n "formatTool" src/utils/logger.ts || echo "MISSING: formatTool not found!"
-          echo "=== file type ==="
-          file src/utils/logger.ts
-          echo "=== first 5 lines ==="
-          head -5 src/utils/logger.ts
-          echo "=== export line ==="
-          grep "export const logger" src/utils/logger.ts || echo "MISSING: no logger export!"
-          echo "=== git-crypt status ==="
-          git-crypt status -- console/src/utils/logger.ts || true
 
       - name: Run console tests
         working-directory: console
@@ -170,7 +154,7 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3 # v2
         with:
-          bun-version: "1.3.9"
+          bun-version: latest
 
       - name: Install dependencies
         working-directory: console
