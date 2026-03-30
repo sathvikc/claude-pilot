@@ -52,6 +52,41 @@ The agent reads your code review annotations directly from the Console before ma
 
 Annotations persist across page reloads, so you can review asynchronously while the agent runs verification in the background.
 
+### Spec Sharing
+
+Share specifications with teammates for collaborative review — no cloud service required. Everything is end-to-end encrypted and works entirely locally.
+
+**Sharing a spec:**
+
+1. Open a spec in the Specifications tab
+2. Click **Share with Teammate** in the metadata row
+3. A share URL is generated — the spec content and your annotations are compressed, encrypted (AES-256-GCM), and encoded in the URL. The encryption key lives only in the URL fragment (never sent to any server)
+4. Copy the URL and send it to your colleague via Slack, email, or any channel
+5. The **Receive Feedback** dialog opens automatically so you're ready to import their response
+
+**Reviewing shared specs:**
+
+1. Your colleague opens the URL in their Pilot Console (`localhost:41777`)
+2. They see the full spec with your annotations displayed as read-only highlights
+3. They can add their own feedback — either by selecting text or clicking the **+** button on any block
+4. Click **Send Feedback** to generate an encrypted feedback URL and copy it to clipboard
+
+**Importing feedback:**
+
+1. Click **Receive Feedback** on the original spec
+2. Paste the feedback URL — a preview shows the incoming annotations
+3. Import adds annotations with `pending` status to your annotation panel
+4. **Accept** or **Reject** each annotation individually, or use **Accept All** / **Reject All**
+5. The view auto-switches to Annotate mode so you see the imported feedback immediately
+
+**Deduplication:** Importing the same feedback twice is safe — annotations matching existing ones (same text and selection) are automatically skipped.
+
+**Security:** All shared data is AES-256-GCM encrypted. The decryption key is placed in the URL fragment (`#...?key=<aesKey>`), which per the HTTP spec is never sent to any server. For specs larger than ~32KB compressed, an embedded paste service stores only opaque ciphertext locally in `~/.pilot/share/` with automatic 3-day expiry.
+
+:::tip Both annotation methods work everywhere
+The **+** button on each block and text selection both work on the normal review page and the shared spec feedback page. Use whichever is more convenient — the **+** button is more reliable for quick block-level comments.
+:::
+
 ## Smart Notifications via SSE
 
 The Console sends real-time alerts via Server-Sent Events when Claude needs your input or a significant phase completes. You don't need to watch the terminal constantly — the Console notifies you.

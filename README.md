@@ -121,7 +121,7 @@ A local web dashboard with different views and real-time notifications when Clau
 | View              | What it shows                                                                                                                                |
 | ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Dashboard**     | Workspace status, active sessions, spec progress, git info, recent activity                                                                  |
-| **Specification** | All spec plans with task progress, phase tracking, and iteration history. **Annotate mode** lets you mark up plans visually before approving — select text, write a note, and the agent reads your annotations at the next review checkpoint |
+| **Specification** | All spec plans with task progress, phase tracking, and iteration history. **Annotate mode** lets you mark up plans visually before approving — select text or click **+** on any block to write a note. **Share with Teammate** sends an E2E encrypted link; **Receive Feedback** imports their annotations with accept/reject controls |
 | **Extensions**    | All extensions — local, plugin, and remote — with team sharing via git, diff view, push/pull, and color-coded categories                     |
 | **Changes**       | Git diff viewer with staged/unstaged files, branch info, and worktree context. **Review mode** adds inline annotations on diff lines — the agent reads them directly before marking a spec as verified |
 | **Memories**      | Browsable observations — decisions, discoveries, bugfixes — with type filters and search                                                     |
@@ -132,7 +132,9 @@ A local web dashboard with different views and real-time notifications when Clau
 
 </details>
 
-**Visual Plan Annotation:** When a spec plan is pending approval, the Specifications tab defaults to Annotate mode. Select any text and write a note — annotations save automatically. The agent reads them at the next checkpoint, revises the plan accordingly, and asks for approval again.
+**Visual Plan Annotation:** When a spec plan is pending approval, the Specifications tab defaults to Annotate mode. Select any text or click **+** on any block to write a note — annotations save automatically. The agent reads them at the next checkpoint, revises the plan accordingly, and asks for approval again.
+
+**Spec Sharing:** Click **Share with Teammate** to generate an E2E encrypted link (AES-256-GCM, key in URL fragment — never sent to any server). Your colleague opens it in their Console, sees your annotations, adds their own feedback, and sends it back. Click **Receive Feedback** to import their annotations with per-item accept/reject controls. Everything works locally — no cloud service required.
 
 **Code Review:** After a spec completes all automated checks, the agent prompts you to review the changes in the Changes tab. Enable Review mode, click **+** on any diff line to add an inline annotation — they save automatically. The agent reads every annotation and addresses them before marking the spec as verified.
 

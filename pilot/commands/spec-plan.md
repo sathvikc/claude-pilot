@@ -91,12 +91,21 @@ When adding tasks to an existing plan: load it, parse structure, verify compatib
 
 3. **Generate filename:** `docs/plans/YYYY-MM-DD-<feature-slug>.md` — slug from first 3-4 words (lowercase, hyphens). If worktree active, use worktree path as base directory.
 
-4. **Write initial header:**
+4. **Fetch author email** (best-effort, do not fail if unavailable):
+
+   ```bash
+   ~/.pilot/bin/pilot status --json 2>/dev/null | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('email',''))" 2>/dev/null
+   ```
+
+   If the command returns a non-empty email, include `Author: <email>` in the header. If empty or fails, omit the Author line entirely.
+
+5. **Write initial header:**
 
    ```markdown
    # [Feature Name] Implementation Plan
 
    Created: [Date]
+   Author: [email if available]
    Status: PENDING
    Approved: No
    Iterations: 0
@@ -114,7 +123,7 @@ When adding tasks to an existing plan: load it, parse structure, verify compatib
    _Exploring codebase and gathering requirements..._
    ```
 
-5. **Register plan:** `~/.pilot/bin/pilot register-plan "<plan_path>" "PENDING" 2>/dev/null || true`
+6. **Register plan:** `~/.pilot/bin/pilot register-plan "<plan_path>" "PENDING" 2>/dev/null || true`
 
 **Do this FIRST** — before any exploration or questions. Status bar shows progress immediately.
 

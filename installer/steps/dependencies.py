@@ -23,13 +23,43 @@ from installer.steps.base import BaseStep
 MAX_RETRIES = 3
 RETRY_DELAY = 2
 
+# Holds stderr from the most recent _run_bash_with_retry failure.
+# Set on failure, never cleared on success — allows install functions
+# that call _run_bash_with_retry multiple times to preserve the error
+# from a failing sub-step even if a later sub-step succeeds.
+_last_retry_stderr: str = ""
+
+# When True, _run_bash_with_retry will fall back from sudo -n (non-interactive)
+# to sudo (interactive) with stream=True when a sudo permission error is detected.
+# Set in DependenciesStep.run() — only enabled for interactive installs where
+# the user can enter their password. Disabled in non-interactive mode (auto-updater)
+# to prevent hangs.
+_allow_sudo_fallback: bool = False
+
+
+def _clear_last_error() -> None:
+    global _last_retry_stderr
+    _last_retry_stderr = ""
+
+
+def _get_last_error() -> str:
+    return _last_retry_stderr
+
 
 def _run_bash_with_retry(command: str, cwd: Path | None = None, timeout: int = 120, stream: bool = False) -> bool:
     """Run a bash command with retry logic for transient failures.
 
     When stream=True, stdout/stderr are inherited (visible to the user)
     instead of captured. Use for long-running commands where progress matters.
+
+    On failure, the last stderr output is stored in _last_retry_stderr
+    for diagnostic display by the caller.
+
+    When _allow_sudo_fallback is True and a sudo -n command fails with a
+    permission error, automatically retries with interactive sudo and
+    stream=True so the user can authenticate.
     """
+    global _last_retry_stderr
     for attempt in range(MAX_RETRIES):
         try:
             if stream:
@@ -48,11 +78,22 @@ def _run_bash_with_retry(command: str, cwd: Path | None = None, timeout: int = 1
                     timeout=timeout,
                 )
             return True
-        except subprocess.CalledProcessError:
+        except subprocess.CalledProcessError as e:
+            if not stream and e.stderr:
+                stderr = e.stderr if isinstance(e.stderr, str) else e.stderr.decode(errors="replace")
+                _last_retry_stderr = stderr
+                # sudo -n failed because credentials aren't cached or tty_tickets
+                # prevents the subprocess from finding them. Fall back to interactive
+                # sudo with visible output so the user can authenticate.
+                if _allow_sudo_fallback and "sudo:" in stderr and "sudo -n" in command:
+                    command = command.replace("sudo -n ", "sudo ", 1)
+                    stream = True
+                    continue  # Retry immediately with interactive sudo
             if attempt < MAX_RETRIES - 1:
                 time.sleep(RETRY_DELAY)
             continue
         except subprocess.TimeoutExpired:
+            _last_retry_stderr = f"Command timed out after {timeout}s"
             if attempt < MAX_RETRIES - 1:
                 time.sleep(RETRY_DELAY)
             continue
@@ -515,13 +556,20 @@ def install_agent_browser() -> bool:
 
 def _install_with_spinner(ui: Any, name: str, install_fn: Any, *args: Any) -> bool:
     """Run an installation function with a spinner."""
+    _clear_last_error()
     if ui:
         with ui.spinner(f"Installing {name}..."):
             result = install_fn(*args) if args else install_fn()
         if result:
             ui.success(f"{name} installed")
         else:
-            ui.warning(f"Could not install {name} - please install manually")
+            error = _get_last_error()
+            if error:
+                last_line = error.strip().splitlines()[-1].strip()
+                ui.warning(f"Could not install {name} - please install manually")
+                ui.info(f"  Error: {last_line}")
+            else:
+                ui.warning(f"Could not install {name} - please install manually")
         return result
     else:
         return install_fn(*args) if args else install_fn()
@@ -695,10 +743,12 @@ class DependenciesStep(BaseStep):
 
     def run(self, ctx: InstallContext) -> None:
         """Install all required dependencies."""
+        global _allow_sudo_fallback
         ui = ctx.ui
         installed: list[str] = []
 
         if needs_sudo() and not ctx.non_interactive:
+            _allow_sudo_fallback = True
             if ui:
                 ui.status("Some packages require elevated privileges — requesting sudo access...")
             if not ensure_sudo_credentials():

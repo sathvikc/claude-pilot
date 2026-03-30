@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -1152,3 +1153,113 @@ class TestInstallPbtTools:
         result = install_pbt_tools()
 
         assert result is False
+
+
+class TestRunBashWithRetrySudoFallback:
+    """Test sudo -n to sudo fallback in _run_bash_with_retry."""
+
+    @patch("installer.steps.dependencies.subprocess.run")
+    def test_sudo_fallback_replaces_sudo_n_with_sudo_on_permission_error(self, mock_run):
+        """When sudo -n fails with permission error and fallback enabled, retries with sudo."""
+        import installer.steps.dependencies as deps
+        from installer.steps.dependencies import _run_bash_with_retry
+
+        deps._allow_sudo_fallback = True
+        try:
+            # First call: sudo -n fails with permission error
+            # Second call: sudo (interactive) succeeds
+            mock_run.side_effect = [
+                subprocess.CalledProcessError(1, "cmd", stderr=b"sudo: a password is required"),
+                None,  # success
+            ]
+            result = _run_bash_with_retry("sudo -n npm install -g probe")
+            assert result is True
+            # Second call should use sudo without -n
+            second_call_cmd = mock_run.call_args_list[1][0][0]
+            assert "sudo -n" not in " ".join(second_call_cmd)
+            assert "sudo npm" in " ".join(second_call_cmd)
+        finally:
+            deps._allow_sudo_fallback = False
+
+    @patch("installer.steps.dependencies.subprocess.run")
+    def test_no_sudo_fallback_when_disabled(self, mock_run):
+        """When sudo fallback is disabled, sudo -n failure does not retry with sudo."""
+        import installer.steps.dependencies as deps
+        from installer.steps.dependencies import _run_bash_with_retry
+
+        deps._allow_sudo_fallback = False
+        mock_run.side_effect = subprocess.CalledProcessError(
+            1, "cmd", stderr=b"sudo: a password is required"
+        )
+        result = _run_bash_with_retry("sudo -n npm install -g probe")
+        assert result is False
+        # All 3 retries should keep sudo -n
+        for call in mock_run.call_args_list:
+            assert "sudo -n" in " ".join(call[0][0])
+
+    @patch("installer.steps.dependencies.subprocess.run")
+    def test_no_sudo_fallback_for_non_sudo_errors(self, mock_run):
+        """Regular errors (not sudo-related) don't trigger sudo fallback."""
+        import installer.steps.dependencies as deps
+        from installer.steps.dependencies import _run_bash_with_retry
+
+        deps._allow_sudo_fallback = True
+        try:
+            mock_run.side_effect = subprocess.CalledProcessError(
+                1, "cmd", stderr=b"npm ERR! code ENOENT"
+            )
+            result = _run_bash_with_retry("sudo -n npm install -g probe")
+            assert result is False
+            # All retries should keep sudo -n (no fallback for non-sudo errors)
+            for call in mock_run.call_args_list:
+                assert "sudo -n" in " ".join(call[0][0])
+        finally:
+            deps._allow_sudo_fallback = False
+
+
+class TestErrorCapture:
+    """Test error detail capture and display in _install_with_spinner."""
+
+    @patch("installer.steps.dependencies.subprocess.run")
+    def test_last_error_captured_on_failure(self, mock_run):
+        """_run_bash_with_retry captures stderr from failed commands."""
+        import installer.steps.dependencies as deps
+        from installer.steps.dependencies import _run_bash_with_retry
+
+        deps._last_retry_stderr = ""
+        mock_run.side_effect = subprocess.CalledProcessError(
+            1, "cmd", stderr=b"npm ERR! code EACCES\nnpm ERR! permission denied"
+        )
+        _run_bash_with_retry("npm install -g foo")
+        assert "permission denied" in deps._last_retry_stderr
+
+    def test_install_with_spinner_shows_error_detail(self):
+        """_install_with_spinner shows last error line when install fails."""
+        import installer.steps.dependencies as deps
+        from installer.steps.dependencies import _install_with_spinner
+
+        ui = MagicMock()
+        deps._last_retry_stderr = ""
+
+        def failing_install():
+            deps._last_retry_stderr = "npm ERR! code EACCES\nnpm ERR! permission denied /usr/lib"
+            return False
+
+        _install_with_spinner(ui, "TestPkg", failing_install)
+        ui.warning.assert_called_once()
+        assert "TestPkg" in ui.warning.call_args[0][0]
+        ui.info.assert_called_once()
+        assert "permission denied" in ui.info.call_args[0][0]
+
+    def test_install_with_spinner_no_error_detail_when_stderr_empty(self):
+        """_install_with_spinner shows generic message when no stderr captured."""
+        import installer.steps.dependencies as deps
+        from installer.steps.dependencies import _install_with_spinner
+
+        ui = MagicMock()
+        deps._last_retry_stderr = ""
+
+        _install_with_spinner(ui, "TestPkg", lambda: False)
+        ui.warning.assert_called_once()
+        assert "TestPkg" in ui.warning.call_args[0][0]
+        ui.info.assert_not_called()

@@ -87,12 +87,14 @@ Use EXACT parameter names — abbreviated names cause `InputValidationError`:
 | `Edit` | `old_string`, `new_string` | `old`, `new`, `search`, `replace` |
 | `Grep` | `pattern` | `query`, `search`, `regex` |
 
-### Agent Tool — Prefer Direct Tools
+### ⛔ Agent Tool — NEVER Use Explore, Plan, or Research Agents
 
-**Explore, Plan, and research agents are blocked by hook.** Any Agent whose description starts with "Research" (first word) is hard-blocked — use Probe CLI, Grep/Glob, and CodeGraph directly instead. All other agents pass through silently.
+**NEVER call Agent with `subagent_type` "Explore" or "Plan", or with a description starting with "Research".** These are prohibited — not as a suggestion, but as a hard rule. Use direct tools instead:
 
 **Search:** Probe CLI (`probe search`) → Grep/Glob (exact patterns). See `cli-tools.md` for Probe reference.
 **Structure:** CodeGraph `codegraph_callers`/`codegraph_callees` (call graphs), `codegraph_impact` (blast radius). See `development-practices.md`.
+
+All other Agent sub-agent types (e.g., `pilot:spec-reviewer`, `pilot:plan-reviewer`, `general-purpose`) pass through.
 
 ### ⛔ Web Search/Fetch
 

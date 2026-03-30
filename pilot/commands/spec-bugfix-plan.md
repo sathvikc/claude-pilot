@@ -73,12 +73,14 @@ If you catch yourself thinking any of these, STOP. Return to Step 1.2.
 1. **Parse worktree** from arguments: `--worktree=yes|no` (default: `No`). Strip flag.
 2. **Create worktree early (if yes):** Same pattern as spec-plan Step 1.1.
 3. **Generate filename:** `docs/plans/YYYY-MM-DD-<bug-slug>.md`
-4. **Write header:**
+4. **Fetch author email** (best-effort): same as spec-plan Step 1.1 step 4. If non-empty, include `Author: <email>` in header. If empty/fails, omit.
+5. **Write header:**
 
    ```markdown
    # [Bug Description] Fix Plan
 
    Created: [Date]
+   Author: [email if available]
    Status: PENDING
    Approved: No
    Iterations: 0
@@ -96,7 +98,7 @@ If you catch yourself thinking any of these, STOP. Return to Step 1.2.
    _Tracing root cause..._
    ```
 
-5. **Register:** `~/.pilot/bin/pilot register-plan "<plan_path>" "PENDING" 2>/dev/null || true`
+6. **Register:** `~/.pilot/bin/pilot register-plan "<plan_path>" "PENDING" 2>/dev/null || true`
 
 ---
 
