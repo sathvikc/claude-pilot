@@ -21,6 +21,7 @@ RUN rm -rf /var/lib/apt/lists/* && \
         jq \
         vim \
         netcat-openbsd \
-        socat && \
+        socat \
+        chromium && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*

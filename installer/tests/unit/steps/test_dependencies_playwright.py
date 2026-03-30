@@ -68,10 +68,11 @@ class TestInstallAgentBrowser:
         mock_run.assert_called_once_with("agent-browser upgrade", timeout=120)
 
     @patch("platform.system", return_value="Darwin")
+    @patch("installer.steps.dependencies.is_linux_arm64", return_value=False)
     @patch("installer.steps.dependencies.npm_global_cmd", side_effect=lambda x: x)
     @patch("installer.steps.dependencies._run_bash_with_retry")
     @patch("installer.steps.dependencies._is_agent_browser_ready")
-    def test_installs_npm_package_and_chrome_macos(self, mock_ready, mock_run, _mock_npm, _mock_system):
+    def test_installs_npm_package_and_chrome_macos(self, mock_ready, mock_run, _mock_npm, _mock_arm, _mock_system):
         """Installs agent-browser via npm then runs install on macOS."""
         from installer.steps.dependencies import install_agent_browser
 
@@ -83,17 +84,31 @@ class TestInstallAgentBrowser:
         mock_run.assert_any_call("agent-browser install", timeout=300)
 
     @patch("platform.system", return_value="Linux")
+    @patch("installer.steps.dependencies.is_linux_arm64", return_value=False)
     @patch("installer.steps.dependencies.npm_global_cmd", side_effect=lambda x: x)
     @patch("installer.steps.dependencies._run_bash_with_retry")
     @patch("installer.steps.dependencies._is_agent_browser_ready")
-    def test_installs_with_deps_on_linux(self, mock_ready, mock_run, _mock_npm, _mock_system):
-        """Installs with --with-deps on Linux for system dependencies."""
+    def test_installs_with_deps_on_linux_x86(self, mock_ready, mock_run, _mock_npm, _mock_arm, _mock_system):
+        """Installs with --with-deps on Linux x86_64."""
         from installer.steps.dependencies import install_agent_browser
 
         mock_ready.return_value = False
         mock_run.return_value = True
         assert install_agent_browser() is True
         mock_run.assert_any_call("agent-browser install --with-deps", timeout=300)
+
+    @patch("installer.steps.dependencies.is_linux_arm64", return_value=True)
+    @patch("installer.steps.dependencies.npm_global_cmd", side_effect=lambda x: x)
+    @patch("installer.steps.dependencies._run_bash_with_retry")
+    @patch("installer.steps.dependencies._is_agent_browser_ready")
+    def test_installs_chromium_apt_on_linux_arm64(self, mock_ready, mock_run, _mock_npm, _mock_arm):
+        """Installs system chromium via apt on Linux ARM64."""
+        from installer.steps.dependencies import install_agent_browser
+
+        mock_ready.return_value = False
+        mock_run.return_value = True
+        assert install_agent_browser() is True
+        mock_run.assert_any_call("apt-get update -qq && apt-get install -y -qq chromium", timeout=180)
 
     @patch("installer.steps.dependencies._is_agent_browser_ready")
     @patch("installer.steps.dependencies._run_bash_with_retry")

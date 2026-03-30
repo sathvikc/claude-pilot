@@ -1,13 +1,13 @@
 {
-  "name": "pilot-shell",
+  "name": "${localWorkspaceFolderBasename}",
   "build": {
     "dockerfile": "Dockerfile"
   },
   "runArgs": [
     "--name",
-    "pilot-shell"
+    "${localWorkspaceFolderBasename}"
   ],
-  "workspaceFolder": "/workspaces/pilot-shell",
+  "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
   "customizations": {
     "vscode": {
       "extensions": [

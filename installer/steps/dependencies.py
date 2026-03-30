@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from installer.context import InstallContext
-from installer.platform_utils import command_exists, npm_global_cmd
+from installer.platform_utils import command_exists, is_linux_arm64, npm_global_cmd
 from installer.steps.base import BaseStep
 
 MAX_RETRIES = 3
@@ -385,16 +385,23 @@ def _is_agent_browser_ready() -> bool:
 def install_agent_browser() -> bool:
     """Install agent-browser for headless browser automation.
 
-    On Linux, installs with --with-deps for system dependencies.
+    On Linux ARM64, Chrome for Testing has no builds — install system chromium
+    via apt instead. On other Linux, use --with-deps. On macOS, plain install.
     """
-    import platform
-
     if _is_agent_browser_ready():
-        _run_bash_with_retry("agent-browser upgrade", timeout=120)  # best-effort; failure is non-fatal — existing version still works
+        _run_bash_with_retry("agent-browser upgrade", timeout=120)  # best-effort
         return True
 
     if not _run_bash_with_retry(npm_global_cmd("npm install -g agent-browser")):
         return False
+
+    if is_linux_arm64():
+        # Chrome for Testing doesn't provide ARM64 Linux builds.
+        # Install system chromium instead — agent-browser auto-detects it.
+        _run_bash_with_retry("apt-get update -qq && apt-get install -y -qq chromium", timeout=180)
+        return True
+
+    import platform
 
     install_cmd = "agent-browser install --with-deps" if platform.system() == "Linux" else "agent-browser install"
     return _run_bash_with_retry(install_cmd, timeout=300)
