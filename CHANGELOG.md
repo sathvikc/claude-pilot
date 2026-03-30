@@ -2,6 +2,12 @@
 
 All notable changes to Pilot Shell will be documented in this file.
 
+## [7.8.4] - 2026-03-30
+
+### Bug Fixes
+
+- Use AskUserQuestion at code review gate so stop guard allows exit
+
 ## [7.8.3] - 2026-03-30
 
 ### Bug Fixes
