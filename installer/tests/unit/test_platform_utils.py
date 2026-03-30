@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import patch
 
 
 class TestCommandExists:
@@ -74,3 +75,55 @@ class TestIsLinux:
 
         expected = platform.system() == "Linux"
         assert is_linux() == expected
+
+
+class TestNeedsSudo:
+    """Test needs_sudo detection."""
+
+    def test_needs_sudo_true_when_npm_needs_sudo(self):
+        from installer.platform_utils import needs_sudo
+
+        with patch("installer.platform_utils.needs_npm_sudo", return_value=True):
+            assert needs_sudo() is True
+
+    def test_needs_sudo_false_when_npm_does_not_need_sudo(self):
+        from installer.platform_utils import needs_sudo
+
+        with patch("installer.platform_utils.needs_npm_sudo", return_value=False):
+            assert needs_sudo() is False
+
+
+class TestEnsureSudoCredentials:
+    """Test sudo credential priming."""
+
+    def test_ensure_sudo_returns_true_on_success(self):
+        from installer.platform_utils import ensure_sudo_credentials
+
+        with patch("installer.platform_utils.subprocess.run") as mock_run:
+            mock_run.return_value.returncode = 0
+            assert ensure_sudo_credentials() is True
+            mock_run.assert_called_once_with(["sudo", "-v"], timeout=60)
+
+    def test_ensure_sudo_returns_false_on_failure(self):
+        from installer.platform_utils import ensure_sudo_credentials
+
+        with patch("installer.platform_utils.subprocess.run") as mock_run:
+            mock_run.return_value.returncode = 1
+            assert ensure_sudo_credentials() is False
+
+    def test_ensure_sudo_returns_false_when_sudo_missing(self):
+        from installer.platform_utils import ensure_sudo_credentials
+
+        with patch("installer.platform_utils.subprocess.run", side_effect=FileNotFoundError):
+            assert ensure_sudo_credentials() is False
+
+    def test_ensure_sudo_returns_false_on_timeout(self):
+        import subprocess
+
+        from installer.platform_utils import ensure_sudo_credentials
+
+        with patch(
+            "installer.platform_utils.subprocess.run",
+            side_effect=subprocess.TimeoutExpired(cmd="sudo -v", timeout=60),
+        ):
+            assert ensure_sudo_credentials() is False

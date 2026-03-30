@@ -4,14 +4,14 @@
     "CLAUDE_CODE_HIDE_ACCOUNT_INFO": "true",
     "CLAUDE_CODE_DISABLE_AUTO_MEMORY": "false",
     "CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS": "true",
-    "ENABLE_EXPERIMENTAL_MCP_CLI": "false",
     "ENABLE_TOOL_SEARCH": "true",
     "ENABLE_LSP_TOOL": "true",
     "DISABLE_COMPACT": "false",
+    "ENABLE_EXPERIMENTAL_MCP_CLI": "false",
     "DISABLE_AUTO_COMPACT": "false",
     "DISABLE_MICROCOMPACT": "false",
     "DISABLE_AUTOUPDATER": "false",
-    "DISABLE_INSTALLATION_CHECKS": "true"
+    "DISABLE_INSTALLATION_CHECKS": "false"
   },
   "permissions": {
     "defaultMode": "bypassPermissions"

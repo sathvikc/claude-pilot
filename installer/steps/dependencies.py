@@ -11,7 +11,13 @@ from pathlib import Path
 from typing import Any
 
 from installer.context import InstallContext
-from installer.platform_utils import command_exists, is_linux_arm64, npm_global_cmd
+from installer.platform_utils import (
+    command_exists,
+    ensure_sudo_credentials,
+    is_linux_arm64,
+    needs_sudo,
+    npm_global_cmd,
+)
 from installer.steps.base import BaseStep
 
 MAX_RETRIES = 3
@@ -691,6 +697,13 @@ class DependenciesStep(BaseStep):
         """Install all required dependencies."""
         ui = ctx.ui
         installed: list[str] = []
+
+        if needs_sudo() and not ctx.non_interactive:
+            if ui:
+                ui.status("Some packages require elevated privileges — requesting sudo access...")
+            if not ensure_sudo_credentials():
+                if ui:
+                    ui.warning("Could not obtain sudo credentials — some installations may fail")
 
         if _install_with_spinner(ui, "Claude Code", install_claude_code):
             installed.append("claude_code")

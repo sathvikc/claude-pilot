@@ -63,14 +63,40 @@ def needs_npm_sudo() -> bool:
 
 
 def npm_global_cmd(cmd: str) -> str:
-    """Wrap an npm global command with sudo -n if needed.
+    """Wrap an npm global command with sudo if needed.
 
-    Uses sudo -n (non-interactive) so it fails immediately if a password
-    is required, avoiding installer hangs.
+    Uses sudo -n (non-interactive) so it fails fast if credentials
+    aren't cached. Call ensure_sudo_credentials() first to prime them.
     """
     if needs_npm_sudo():
         return f"sudo -n {cmd}"
     return cmd
+
+
+def needs_sudo() -> bool:
+    """Check if any installer operations will require sudo.
+
+    Only returns True when npm global installs actually need sudo
+    (e.g. system-wide Node where prefix dir is not writable).
+    Most users (nvm, Homebrew) never hit this.
+    """
+    return needs_npm_sudo()
+
+
+def ensure_sudo_credentials() -> bool:
+    """Prompt the user for sudo credentials and cache them.
+
+    Runs `sudo -v` with inherited stdio so the user sees the password
+    prompt and can type their password. Once authenticated, subsequent
+    `sudo -n` commands succeed without prompting.
+
+    Returns True if sudo credentials are available, False on failure.
+    """
+    try:
+        result = subprocess.run(["sudo", "-v"], timeout=60)
+        return result.returncode == 0
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        return False
 
 
 def is_homebrew_available() -> bool:
