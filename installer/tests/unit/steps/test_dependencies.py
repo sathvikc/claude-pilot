@@ -283,9 +283,10 @@ class TestInstallCodegraph:
 
         assert callable(install_codegraph)
 
+    @patch("installer.steps.dependencies._symlink_to_pilot_bin")
     @patch("installer.steps.dependencies._is_codegraph_installed", return_value=True)
-    def test_install_codegraph_skips_if_already_installed(self, _mock_check):
-        """install_codegraph skips installation when already installed."""
+    def test_install_codegraph_skips_npm_if_already_installed(self, _mock_check, mock_symlink):
+        """install_codegraph skips npm but still creates symlink."""
         from installer.steps.dependencies import install_codegraph
 
         with patch("installer.steps.dependencies._run_bash_with_retry") as mock_bash:
@@ -293,10 +294,12 @@ class TestInstallCodegraph:
 
         assert result is True
         mock_bash.assert_not_called()
+        mock_symlink.assert_called_once_with("codegraph")
 
+    @patch("installer.steps.dependencies._symlink_to_pilot_bin")
     @patch("installer.steps.dependencies._is_codegraph_installed", return_value=False)
-    def test_install_codegraph_runs_npm_when_not_installed(self, _mock_check):
-        """install_codegraph runs npm install when not installed."""
+    def test_install_codegraph_runs_npm_when_not_installed(self, _mock_check, mock_symlink):
+        """install_codegraph runs npm install and creates symlink."""
         from installer.steps.dependencies import install_codegraph
 
         with patch("installer.steps.dependencies._run_bash_with_retry", return_value=True) as mock_bash:
@@ -307,9 +310,11 @@ class TestInstallCodegraph:
         call_args = str(mock_bash.call_args)
         assert "@colbymchenry/codegraph" in call_args
         assert "--force" in call_args
+        mock_symlink.assert_called_once_with("codegraph")
 
+    @patch("installer.steps.dependencies._symlink_to_pilot_bin")
     @patch("installer.steps.dependencies._is_codegraph_installed", return_value=False)
-    def test_install_codegraph_returns_false_when_npm_fails(self, _mock_check):
+    def test_install_codegraph_returns_false_when_npm_fails(self, _mock_check, _mock_symlink):
         """install_codegraph returns False when npm install fails."""
         from installer.steps.dependencies import install_codegraph
 
@@ -317,6 +322,68 @@ class TestInstallCodegraph:
             result = install_codegraph()
 
         assert result is False
+
+
+class TestSymlinkToPilotBin:
+    """Tests for _symlink_to_pilot_bin() — creates symlinks in ~/.pilot/bin/."""
+
+    def test_creates_symlink_when_binary_exists(self, tmp_path: Path):
+        """Creates a symlink in pilot bin dir pointing to the real binary."""
+        from installer.steps.dependencies import _symlink_to_pilot_bin
+
+        fake_bin = tmp_path / "src" / "codegraph"
+        fake_bin.parent.mkdir(parents=True)
+        fake_bin.write_text("#!/bin/sh\n")
+        fake_bin.chmod(0o755)
+
+        pilot_bin = tmp_path / "pilot_bin"
+
+        with (
+            patch("installer.steps.dependencies.shutil.which", return_value=str(fake_bin)),
+            patch("installer.steps.dependencies.Path.home", return_value=tmp_path),
+        ):
+            pilot_bin_dir = tmp_path / ".pilot" / "bin"
+            pilot_bin_dir.mkdir(parents=True, exist_ok=True)
+            _symlink_to_pilot_bin("codegraph")
+
+        link = tmp_path / ".pilot" / "bin" / "codegraph"
+        assert link.is_symlink()
+        assert link.resolve() == fake_bin.resolve()
+
+    def test_skips_when_binary_not_found(self, tmp_path: Path):
+        """Does nothing when the binary is not in PATH."""
+        from installer.steps.dependencies import _symlink_to_pilot_bin
+
+        with (
+            patch("installer.steps.dependencies.shutil.which", return_value=None),
+            patch("installer.steps.dependencies.Path.home", return_value=tmp_path),
+        ):
+            _symlink_to_pilot_bin("codegraph")
+
+        link = tmp_path / ".pilot" / "bin" / "codegraph"
+        assert not link.exists()
+
+    def test_replaces_existing_symlink(self, tmp_path: Path):
+        """Replaces an existing symlink with the new target."""
+        from installer.steps.dependencies import _symlink_to_pilot_bin
+
+        fake_bin = tmp_path / "new_codegraph"
+        fake_bin.write_text("#!/bin/sh\n")
+        fake_bin.chmod(0o755)
+
+        pilot_bin_dir = tmp_path / ".pilot" / "bin"
+        pilot_bin_dir.mkdir(parents=True)
+        old_link = pilot_bin_dir / "codegraph"
+        old_link.symlink_to("/nonexistent/old/path")
+
+        with (
+            patch("installer.steps.dependencies.shutil.which", return_value=str(fake_bin)),
+            patch("installer.steps.dependencies.Path.home", return_value=tmp_path),
+        ):
+            _symlink_to_pilot_bin("codegraph")
+
+        assert old_link.is_symlink()
+        assert old_link.resolve() == fake_bin.resolve()
 
 
 class TestInstallPluginDependencies:

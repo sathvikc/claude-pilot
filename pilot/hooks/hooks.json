@@ -23,7 +23,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "codegraph init -i && codegraph sync",
+            "command": "command -v codegraph >/dev/null 2>&1 && codegraph init -i && codegraph sync || true",
             "async": true,
             "timeout": 120
           }
@@ -96,8 +96,9 @@
         "hooks": [
           {
             "type": "command",
-            "command": "codegraph mark-dirty",
-            "async": true
+            "command": "command -v codegraph >/dev/null 2>&1 && codegraph mark-dirty || true",
+            "async": true,
+            "timeout": 10
           }
         ]
       },
@@ -146,7 +147,9 @@
           },
           {
             "type": "command",
-            "command": "codegraph sync-if-dirty"
+            "command": "command -v codegraph >/dev/null 2>&1 && codegraph sync-if-dirty || true",
+            "async": true,
+            "timeout": 30
           }
         ]
       }

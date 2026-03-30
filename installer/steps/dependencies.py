@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import time
 from pathlib import Path
@@ -132,9 +133,12 @@ def _is_probe_installed() -> bool:
 
 def install_probe() -> bool:
     """Install Probe code search tool globally via npm."""
-    if _is_probe_installed():
-        return True
-    return _run_bash_with_retry(npm_global_cmd("npm install -g @probelabs/probe"))
+    if not _is_probe_installed():
+        if not _run_bash_with_retry(npm_global_cmd("npm install -g @probelabs/probe")):
+            return False
+
+    _symlink_to_pilot_bin("probe")
+    return True
 
 
 
@@ -182,15 +186,41 @@ def _is_codegraph_installed() -> bool:
         return False
 
 
+def _symlink_to_pilot_bin(binary_name: str) -> None:
+    """Create a symlink in ~/.pilot/bin/ pointing to the npm global binary.
+
+    This ensures the binary is in PATH even when the npm global bin directory
+    (e.g. ~/.nvm/versions/node/vXX/bin/) is not in PATH during hook execution.
+    ~/.pilot/bin/ is added to PATH by the shell integration step.
+    """
+    pilot_bin = Path.home() / ".pilot" / "bin"
+    pilot_bin.mkdir(parents=True, exist_ok=True)
+    link_path = pilot_bin / binary_name
+
+    source = shutil.which(binary_name)
+    if not source:
+        return
+
+    source_path = Path(source).resolve()
+    try:
+        if link_path.is_symlink() or link_path.exists():
+            link_path.unlink()
+        link_path.symlink_to(source_path)
+    except OSError:
+        pass
+
+
 def install_codegraph() -> bool:
     """Install CodeGraph for code knowledge graph and structural analysis."""
-    if _is_codegraph_installed():
-        return True
+    if not _is_codegraph_installed():
+        if not _run_bash_with_retry(
+            npm_global_cmd("npm install -g @colbymchenry/codegraph --force"),
+            timeout=120,
+        ):
+            return False
 
-    return _run_bash_with_retry(
-        npm_global_cmd("npm install -g @colbymchenry/codegraph --force"),
-        timeout=120,
-    )
+    _symlink_to_pilot_bin("codegraph")
+    return True
 
 
 def _is_vtsls_installed() -> bool:
