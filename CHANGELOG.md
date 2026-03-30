@@ -2,6 +2,12 @@
 
 All notable changes to Pilot Shell will be documented in this file.
 
+## [7.8.3] - 2026-03-30
+
+### Bug Fixes
+
+- Prefer Claude Code Chrome over agent-browser for browser automation
+
 ## [7.8.2] - 2026-03-30
 
 ### Bug Fixes

@@ -86,7 +86,7 @@ For the best browser automation and E2E testing experience, install the [Claude 
 **Specific version** (see [releases](https://github.com/maxritter/pilot-shell/releases)):
 
 ```bash
-export VERSION=7.8.2
+export VERSION=7.8.3
 curl -fsSL https://raw.githubusercontent.com/maxritter/pilot-shell/main/install.sh | bash
 ```
 
