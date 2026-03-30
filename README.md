@@ -74,6 +74,13 @@ Installs globally on macOS, Linux, and Windows (WSL2). All tools and rules go to
 </details>
 
 <details>
+<summary><b>Chrome Extension (Recommended)</b></summary>
+
+For the best browser automation and E2E testing experience, install the [Claude Code Chrome extension](https://code.claude.com/docs/en/chrome). Pilot automatically detects it and prefers it over agent-browser. In environments where the extension can't be installed (dev containers, headless CI), Pilot falls back to agent-browser automatically.
+
+</details>
+
+<details>
 <summary><b>Installing a specific version or uninstalling</b></summary>
 
 **Specific version** (see [releases](https://github.com/maxritter/pilot-shell/releases)):

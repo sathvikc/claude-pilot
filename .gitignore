@@ -222,6 +222,7 @@ __marimo__/
 .streamlit/secrets.toml
 
 # Claude Code
+scheduled_tasks.lock
 CLAUDE.md
 AGENTS.md
 spec-annotate

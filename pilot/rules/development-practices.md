@@ -1,26 +1,20 @@
 ## Development Practices
 
-### Codebase Search — Probe CLI First
+### Codebase Exploration — Probe + CodeGraph
 
-**⛔ Always use Probe CLI (`probe search`) as the first tool for codebase search.** Finds by intent, not exact text. Instant results (<0.3s) via Bash. Only fall back to Grep/Glob when you need an exact symbol or pattern match that Probe missed.
+**⛔ Use Probe and CodeGraph as primary exploration tools. They complement each other — use both, fall back to Grep/Glob only for exact patterns.**
 
-```bash
-probe search "how is authentication handled" ./
-probe search "database connection setup" ./
-```
-
-### Structural Analysis — CodeGraph
-
-**⛔ For call tracing, impact analysis, and dependency checks, use CodeGraph — not Probe.** Probe finds code by text/intent; CodeGraph traces actual call graphs via a semantic knowledge graph.
-
-**Key tools:**
-- **`codegraph_callers`** — find all functions/methods that call a specific symbol. Use before modifying any function.
-- **`codegraph_callees`** — find all functions/methods that a symbol calls.
-- **`codegraph_impact`** — analyze blast radius of changing a symbol (transitive callers + callees).
-- **`codegraph_search`** — find symbols by name (functions, classes, types).
-- **`codegraph_context`** — get relevant code context for a task description.
-
-**Workflow:** `codegraph_search` to find the symbol → `codegraph_callers`/`codegraph_callees` to trace flow → `codegraph_impact` before making changes.
+| Need | Tool |
+|------|------|
+| **Understand a feature/concept** | Probe `probe search "how does auth work"` |
+| **Orient on a task** | CodeGraph `codegraph_context(task=<description>)` |
+| **Find symbols by name** | CodeGraph `codegraph_search` |
+| **Extract code by symbol/line** | Probe `probe extract src/auth.ts#login` |
+| **AST pattern matching** | Probe `probe query "async function $NAME($$$)"` |
+| **Project file structure** | CodeGraph `codegraph_files` |
+| **Call tracing** | CodeGraph `codegraph_callers`/`codegraph_callees` |
+| **Blast radius before changes** | CodeGraph `codegraph_impact` |
+| **Exact text/regex** | Grep/Glob (last resort) |
 
 ### Project-Specific Policies
 

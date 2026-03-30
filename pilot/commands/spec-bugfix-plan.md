@@ -118,12 +118,14 @@ If you catch yourself thinking any of these, STOP. Return to Step 1.2.
 
 ### 1.2.3: Trace the Root Cause
 
+**⛔ Use Probe and CodeGraph together.** `codegraph_context(task=<bug_description>)` to orient, `probe search` to find related patterns, `codegraph_search` to locate the specific symbol. Fall back to Grep/Glob only for exact patterns.
+
 Read as many files as needed. For each: read completely, trace execution path from user action to symptom, note specific lines where behavior diverges.
 
 **Backward tracing technique (from symptom to source):**
 
 1. Find where the error/wrong behavior appears — note file:line
-2. What called this with the wrong value/state? Trace one level up.
+2. Use `codegraph_callers` to trace what called this with the wrong value/state
 3. Keep tracing until you find the **source** — where the bad data originates
 4. **Fix at the source, not where the error appears**
 
@@ -134,7 +136,7 @@ Read as many files as needed. For each: read completely, trace execution path fr
 
 **⛔ Structural tracing (MANDATORY):** Run `codegraph_callers` and `codegraph_callees` on the function where the bug manifests AND the function at the root cause. Then run `codegraph_impact` to see the full blast radius — essential for understanding how bad data flows through the system.
 
-Tools: CodeGraph `codegraph_callers`/`codegraph_callees` (call graph — use first for tracing), `codegraph_impact` (blast radius), Probe CLI `probe search` (find by intent), `probe extract` (extract functions by symbol), Read/Grep/Glob (direct exploration).
+Tools: CodeGraph (`codegraph_context`, `codegraph_callers`/`codegraph_callees`, `codegraph_impact`, `codegraph_search`), Probe CLI (`probe search` for intent, `probe extract` for symbols), Read/Grep/Glob for exact patterns.
 
 ### 1.2.4: Pattern Analysis
 
@@ -210,7 +212,7 @@ Propose 2-3 fix approaches. For each:
 
 **Defense-in-depth:** When the bug was caused by invalid data flowing through multiple layers, plan validation at every layer the data passes through — not just the source. Entry point validation, business logic validation, environment guards where appropriate.
 
-**Verification Scenario (if UI-facing bug):** If the bug manifests in the UI or through user-visible behavior, add a single structured scenario to the plan describing the user steps that reproduce the bug and confirm the fix. Same format as feature E2E scenarios — concrete agent-browser steps with expected results. This serves as the acceptance test beyond the regression unit test.
+**Verification Scenario (if UI-facing bug):** If the bug manifests in the UI or through user-visible behavior, add a single structured scenario to the plan describing the user steps that reproduce the bug and confirm the fix. Same format as feature E2E scenarios — concrete browser automation steps with expected results (tool-agnostic: Claude Code Chrome or agent-browser). This serves as the acceptance test beyond the regression unit test.
 
 ```markdown
 ### TS-001: [Bug Trigger / Fix Confirmation]

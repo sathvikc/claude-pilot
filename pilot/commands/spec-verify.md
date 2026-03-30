@@ -142,7 +142,7 @@ Run all mechanical checks in sequence. Fix any failures before proceeding.
 4. **Coverage** — Verify ≥ 80%.
 5. **Build** — Clean build, zero errors.
 6. **File length** — Changed production files (non-test): >800 lines consider splitting, >1000 flag for review.
-7. **Plan verify commands** — For each task's `Verify:` section, run each command wrapped in `timeout 30 <cmd> || echo 'TIMEOUT'`. Defer server-dependent commands (containing `curl`, `localhost`, `http://`, `agent-browser`) to Phase B.
+7. **Plan verify commands** — For each task's `Verify:` section, run each command wrapped in `timeout 30 <cmd> || echo 'TIMEOUT'`. Defer server-dependent commands (containing `curl`, `localhost`, `http://`, browser automation) to Phase B.
 8. **Performance audit** — For each changed file on a hot path (UI render, request handler, polling loop, CLI inner loop): is expensive work (parsing, serialization, I/O, dependency loading) cached/memoized? Are heavy dependencies imported fully when lighter alternatives exist? Does repeated invocation redo work when input hasn't changed? **This is a static code review — no running program needed.** Performance issues from missing caching are structural and visible in the source.
 
 ### Step 3.3: Feature Parity Check (migration/refactoring only)
@@ -263,7 +263,12 @@ List what was **NOT** verified and why. Include in the verification report (Step
 
 **If runtime profile is not Full:** Skip.
 
-#### 3.9a: Resolve Browser Session
+#### 3.9a: Resolve Browser Tool
+
+**Detect Claude Code Chrome:** Check if `mcp__claude-in-chrome__*` tools are in your available/deferred tools list.
+
+- **If available:** Use Claude Code Chrome for all E2E steps below. Load tools via `ToolSearch(query="select:mcp__claude-in-chrome__<tool>")`. No session isolation needed.
+- **If NOT available:** Output the fallback warning (see `browser-automation.md`), then use agent-browser:
 
 ```bash
 AB_SESSION="${PILOT_SESSION_ID:-default}"
@@ -299,11 +304,10 @@ TaskCreate(subject="TS-NNN: [name]", description="[priority] | [preconditions]")
 **For each scenario:**
 
 1. `TaskUpdate → in_progress`
-2. Execute each step exactly as written using `agent-browser --session "$AB_SESSION"`:
-   - `open` / `goto` to navigate
-   - `snapshot -i` after each interaction to see updated refs
-   - `click`, `fill`, `press` per the step's action
-   - Verify the expected result by reading the snapshot output
+2. Execute each step using the resolved browser tool:
+   - **Chrome:** `navigate` to open pages, `read_page` after interactions, `computer`/`form_input` per the step's action
+   - **agent-browser (fallback):** `open`/`goto` to navigate, `snapshot -i` after interactions, `click`/`fill`/`press` per the step's action
+   - Verify the expected result by reading the page output
 3. **PASS:** All steps match expected results → `TaskUpdate → completed`, note `TS-NNN: PASS`
 4. **FAIL:** Step result doesn't match expected:
    - Analyze root cause, implement minimal fix, re-run relevant tests (stay in Phase B — no code changes that need re-review)
@@ -330,7 +334,8 @@ After all scenarios are executed, append to the plan file:
 #### 3.9e: Close Browser
 
 ```bash
-agent-browser --session "$AB_SESSION" close
+# Chrome: no explicit close needed (tab remains open)
+# agent-browser: agent-browser --session "$AB_SESSION" close
 ```
 
 ---

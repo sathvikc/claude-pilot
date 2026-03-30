@@ -1,8 +1,65 @@
-## Browser Automation with agent-browser
+## Browser Automation for E2E Testing
 
-**MANDATORY for E2E testing of any app with a UI.** API tests verify backend; agent-browser verifies what the user sees.
+**MANDATORY for E2E testing of any app with a UI.** API tests verify backend; browser automation verifies what the user sees.
 
-### Session Isolation (Parallel Workflows)
+### Tool Selection: Claude Code Chrome vs agent-browser
+
+**Claude Code Chrome (`mcp__claude-in-chrome__*`) is the preferred browser automation tool.** It provides richer visual context, better interaction reliability, and direct access to the user's browser.
+
+**Detection:** Check your available/deferred tools list for `mcp__claude-in-chrome__*` entries (e.g., `mcp__claude-in-chrome__navigate`, `mcp__claude-in-chrome__read_page`).
+
+| Chrome Available? | Action |
+|-------------------|--------|
+| **Yes** (`mcp__claude-in-chrome__*` tools visible) | Use Claude Code Chrome |
+| **No** | Output warning below, then fall back to agent-browser |
+
+**Fallback warning (output when Chrome is not available):**
+
+```
+⚠️ Claude Code Chrome is not enabled. For better browser automation,
+install the Claude Code Chrome extension from the Chrome Web Store.
+Falling back to agent-browser.
+```
+
+---
+
+### Claude Code Chrome (Preferred)
+
+Load tools via `ToolSearch(query="select:mcp__claude-in-chrome__<tool_name>")` before first use.
+
+**Core workflow:**
+
+1. `tabs_context_mcp()` — Get current browser state (always call first)
+2. `tabs_create_mcp(url=...)` — Open new tab with URL
+3. `read_page()` — Read page content and interactive elements
+4. `form_input(...)` / `computer(...)` — Interact with elements
+5. `read_page()` — Re-read to verify result
+
+**Key tool mapping:**
+
+| Need | Chrome Tool |
+|------|------------|
+| Navigate | `navigate` or `tabs_create_mcp` |
+| Read page / find elements | `read_page` |
+| Click / type / scroll | `computer` |
+| Fill forms | `form_input` |
+| Find element by text | `find` |
+| Get full page text | `get_page_text` |
+| Execute JavaScript | `javascript_tool` |
+| Read console output | `read_console_messages` |
+| Record interaction GIF | `gif_creator` |
+
+**No session isolation needed** — Chrome tools operate on the user's actual browser instance. Each tool call targets a specific tab.
+
+**Important:** Avoid triggering JavaScript alerts/confirms/prompts — these block the extension. Use `javascript_tool` with `console.log` for debugging instead.
+
+---
+
+### agent-browser (Fallback)
+
+**Only use when Claude Code Chrome is not available.** All instructions below apply to the agent-browser fallback.
+
+#### Session Isolation (Parallel Workflows)
 
 **MANDATORY when running inside `/spec` or any parallel workflow.** Without session isolation, parallel agents share the default browser instance and overwrite each other's state (wrong pages, failed snapshots, broken interactions).
 
@@ -23,7 +80,7 @@ agent-browser --session "$AB_SESSION" close       # Always close when done
 
 **NEVER use bare `agent-browser` commands (without `--session`) during `/spec` workflows.** This causes cross-session interference that is extremely difficult to debug.
 
-### Core Workflow
+#### Core Workflow
 
 ```bash
 AB_SESSION="${PILOT_SESSION_ID:-default}"
@@ -35,7 +92,7 @@ agent-browser --session "$AB_SESSION" snapshot -i       # 4. Re-snapshot to veri
 agent-browser --session "$AB_SESSION" close             # 5. Clean up
 ```
 
-### Command Reference
+#### Command Reference
 
 **Navigation:** `open <url>`, `goto <url>`, `close`, `close --all`
 
@@ -70,7 +127,7 @@ agent-browser --session "$AB_SESSION" close             # 5. Clean up
 
 **Browser config:** `--headed`, `--color-scheme dark`, `--auto-connect` (attach to user's Chrome)
 
-### Parallel Sessions
+#### Parallel Sessions
 
 ```bash
 agent-browser --session site1 open https://site-a.com
@@ -81,7 +138,7 @@ agent-browser close --all
 
 **In `/spec` workflows**, the session name is always `$PILOT_SESSION_ID` — never invent custom names. This ensures each parallel spec run is fully isolated.
 
-### Ref Lifecycle
+#### Ref Lifecycle
 
 Refs (`@e1`, `@e2`, etc.) are invalidated when the page changes. Always re-snapshot after clicking links/buttons that navigate, form submissions, or dynamic content loading.
 

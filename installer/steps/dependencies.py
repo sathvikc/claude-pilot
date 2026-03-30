@@ -18,17 +18,29 @@ MAX_RETRIES = 3
 RETRY_DELAY = 2
 
 
-def _run_bash_with_retry(command: str, cwd: Path | None = None, timeout: int = 120) -> bool:
-    """Run a bash command with retry logic for transient failures."""
+def _run_bash_with_retry(command: str, cwd: Path | None = None, timeout: int = 120, stream: bool = False) -> bool:
+    """Run a bash command with retry logic for transient failures.
+
+    When stream=True, stdout/stderr are inherited (visible to the user)
+    instead of captured. Use for long-running commands where progress matters.
+    """
     for attempt in range(MAX_RETRIES):
         try:
-            subprocess.run(
-                ["bash", "-c", command],
-                check=True,
-                capture_output=True,
-                cwd=cwd,
-                timeout=timeout,
-            )
+            if stream:
+                subprocess.run(
+                    ["bash", "-c", command],
+                    check=True,
+                    cwd=cwd,
+                    timeout=timeout,
+                )
+            else:
+                subprocess.run(
+                    ["bash", "-c", command],
+                    check=True,
+                    capture_output=True,
+                    cwd=cwd,
+                    timeout=timeout,
+                )
             return True
         except subprocess.CalledProcessError:
             if attempt < MAX_RETRIES - 1:
@@ -118,7 +130,13 @@ def install_python_tools() -> bool:
 
 
 def _is_probe_installed() -> bool:
-    """Check if probe is already installed globally via npm."""
+    """Check if probe is already installed globally via npm.
+
+    Fast path: check if the binary exists in PATH first (instant).
+    Slow path: fall back to npm list -g only if binary not found.
+    """
+    if command_exists("probe"):
+        return True
     try:
         result = subprocess.run(
             ["npm", "list", "-g", "@probelabs/probe", "--depth=0"],
@@ -141,29 +159,14 @@ def install_probe() -> bool:
     return True
 
 
-
-
-def _is_brew_managed(package: str) -> bool:
-    """Check if a package is managed by Homebrew."""
-    try:
-        result = subprocess.run(
-            ["brew", "list", package],
-            capture_output=True,
-            check=False,
-            timeout=10,
-        )
-        return result.returncode == 0
-    except (subprocess.SubprocessError, OSError, FileNotFoundError):
-        return False
-
-
 def install_rtk() -> bool:
     """Install or upgrade RTK (Rust Token Killer) CLI.
 
     If rtk is managed by Homebrew, skip — brew upgrade in prerequisites handles it.
-    Otherwise, run the curl install script (handles both install and upgrade).
+    If already installed (binary exists), skip — avoids slow curl on every run.
+    Otherwise, run the curl install script.
     """
-    if _is_brew_managed("rtk"):
+    if command_exists("rtk"):
         return True
 
     return _run_bash_with_retry(
@@ -173,7 +176,12 @@ def install_rtk() -> bool:
 
 
 def _is_codegraph_installed() -> bool:
-    """Check if codegraph is already installed globally via npm."""
+    """Check if codegraph is already installed globally via npm.
+
+    Fast path: check if the binary exists in PATH first (instant).
+    """
+    if command_exists("codegraph"):
+        return True
     try:
         result = subprocess.run(
             ["npm", "list", "-g", "@colbymchenry/codegraph", "--depth=0"],
@@ -210,6 +218,64 @@ def _symlink_to_pilot_bin(binary_name: str) -> None:
         pass
 
 
+def _get_codegraph_pkg_dir() -> Path | None:
+    """Get the codegraph package directory from npm global root."""
+    try:
+        result = subprocess.run(
+            ["npm", "root", "-g"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if result.returncode == 0:
+            pkg_dir = Path(result.stdout.strip()) / "@colbymchenry" / "codegraph"
+            if pkg_dir.exists():
+                return pkg_dir
+    except Exception:
+        pass
+    return None
+
+
+def _is_better_sqlite3_compatible() -> bool:
+    """Check if better-sqlite3 native module loads under the current Node."""
+    pkg_dir = _get_codegraph_pkg_dir()
+    if not pkg_dir:
+        return False
+
+    try:
+        result = subprocess.run(
+            ["node", "-e", "require('better-sqlite3')"],
+            capture_output=True,
+            cwd=pkg_dir,
+            timeout=10,
+        )
+        return result.returncode == 0
+    except Exception:
+        return False
+
+
+def _rebuild_better_sqlite3() -> bool:
+    """Rebuild better-sqlite3 native module against the current Node.js version.
+
+    When codegraph is installed with one Node version (e.g. homebrew's) but
+    runs under a different one (e.g. nvm's), the native addon ABI mismatches.
+    Rebuilding ensures the compiled module matches the active Node.
+    Skips if the module already loads correctly.
+    """
+    if _is_better_sqlite3_compatible():
+        return True
+
+    pkg_dir = _get_codegraph_pkg_dir()
+    if not pkg_dir:
+        return False
+
+    return _run_bash_with_retry(
+        npm_global_cmd("npm rebuild better-sqlite3"),
+        cwd=pkg_dir,
+        timeout=120,
+    )
+
+
 def install_codegraph() -> bool:
     """Install CodeGraph for code knowledge graph and structural analysis."""
     if not _is_codegraph_installed():
@@ -218,27 +284,93 @@ def install_codegraph() -> bool:
             timeout=120,
         ):
             return False
+    else:
+        _rebuild_better_sqlite3()
 
     _symlink_to_pilot_bin("codegraph")
     return True
 
 
-def _is_vtsls_installed() -> bool:
-    """Check if vtsls is already installed globally."""
-    try:
-        result = subprocess.run(
-            ["npm", "list", "-g", "@vtsls/language-server"],
-            capture_output=True,
-            text=True,
-        )
-        return result.returncode == 0 and "@vtsls/language-server" in result.stdout
-    except Exception:
+def _is_codegraph_indexed(project_dir: Path) -> bool:
+    """Check if codegraph has already been indexed.
+
+    Uses the database file size as a reliable indicator: a freshly-init'd
+    but unindexed db is ~150KB, while an indexed project is typically >1MB.
+    This avoids shelling out to `codegraph status` which can fail due to
+    WASM backend issues or db locking from a running MCP server.
+    """
+    db_path = project_dir / ".codegraph" / "codegraph.db"
+    if not db_path.exists():
         return False
+    try:
+        return db_path.stat().st_size > 1_000_000
+    except OSError:
+        return False
+
+
+def _enable_codegraph_embeddings(project_dir: Path) -> None:
+    """Enable embeddings in .codegraph/config.json."""
+    config_path = project_dir / ".codegraph" / "config.json"
+    for _ in range(10):
+        if config_path.exists():
+            break
+        time.sleep(0.5)
+
+    if not config_path.exists():
+        return
+
+    try:
+        config = json.loads(config_path.read_text())
+        if config.get("enableEmbeddings") is True:
+            return
+        config["enableEmbeddings"] = True
+        config_path.write_text(json.dumps(config, indent=2) + "\n")
+    except (json.JSONDecodeError, OSError):
+        pass
+
+
+def initialize_codegraph(project_dir: Path) -> bool:
+    """Initialize CodeGraph in a project: init, enable embeddings, index, sync.
+
+    Streams output so users see indexing progress.
+    Skips indexing if already up to date.
+    """
+    if not command_exists("codegraph"):
+        return False
+
+    codegraph_dir = project_dir / ".codegraph"
+
+    if not codegraph_dir.exists():
+        if not _run_bash_with_retry("codegraph init", cwd=project_dir, timeout=60):
+            return False
+
+    _enable_codegraph_embeddings(project_dir)
+
+    if not _is_codegraph_indexed(project_dir):
+        if not _run_bash_with_retry("codegraph index", cwd=project_dir, timeout=600, stream=True):
+            return False
+
+    _run_bash_with_retry("codegraph sync", cwd=project_dir, timeout=300)
+    return True
+
+
+def codegraph_needs_work(project_dir: Path) -> bool:
+    """Check if codegraph initialization or indexing is needed.
+
+    Returns False (no work) when .codegraph/ exists and index is up to date.
+    Used by the installer to decide whether to show progress messages.
+    """
+    if not command_exists("codegraph"):
+        return False
+    codegraph_dir = project_dir / ".codegraph"
+    if not codegraph_dir.exists():
+        return True
+    return not _is_codegraph_indexed(project_dir)
 
 
 def install_typescript_lsp() -> bool:
     """Install TypeScript language server and compiler globally."""
-    if _is_vtsls_installed():
+    if command_exists("vtsls"):
         return True
     return _run_bash_with_retry(npm_global_cmd("npm install -g @vtsls/language-server typescript"))
 
@@ -299,51 +431,11 @@ def install_golangci_lint() -> bool:
     return _run_bash_with_retry(install_cmd, timeout=120)
 
 
-def _is_ccusage_installed() -> bool:
-    """Check if ccusage is installed globally."""
-    try:
-        result = subprocess.run(
-            ["npm", "list", "-g", "ccusage"],
-            capture_output=True,
-            text=True,
-        )
-        return result.returncode == 0 and "ccusage" in result.stdout
-    except Exception:
-        return False
-
-
 def install_ccusage() -> bool:
     """Install ccusage globally for usage tracking."""
-    if _is_ccusage_installed():
+    if command_exists("ccusage"):
         return True
     return _run_bash_with_retry(npm_global_cmd("npm install -g ccusage@latest"))
-
-
-def _is_hypothesis_installed() -> bool:
-    """Check if hypothesis is installed via uv tool."""
-    try:
-        result = subprocess.run(
-            ["uv", "tool", "list"],
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-        return result.returncode == 0 and "hypothesis" in result.stdout
-    except Exception:
-        return False
-
-
-def _is_fast_check_installed() -> bool:
-    """Check if fast-check is installed globally via npm."""
-    try:
-        result = subprocess.run(
-            ["npm", "list", "-g", "fast-check", "--depth=0"],
-            capture_output=True,
-            text=True,
-        )
-        return result.returncode == 0 and "fast-check" in result.stdout
-    except Exception:
-        return False
 
 
 def install_pbt_tools() -> bool:
@@ -354,13 +446,24 @@ def install_pbt_tools() -> bool:
     """
     ok = True
 
-    if not _is_hypothesis_installed():
+    if not command_exists("hypothesis"):
         if not _run_bash_with_retry("uv tool install hypothesis"):
             ok = False
 
-    if not _is_fast_check_installed():
-        if not _run_bash_with_retry(npm_global_cmd("npm install -g fast-check")):
-            ok = False
+    if not command_exists("fast-check"):
+        try:
+            result = subprocess.run(
+                ["npm", "list", "-g", "fast-check", "--depth=0"],
+                capture_output=True,
+                text=True,
+                timeout=15,
+            )
+            if result.returncode != 0 or "fast-check" not in result.stdout:
+                if not _run_bash_with_retry(npm_global_cmd("npm install -g fast-check")):
+                    ok = False
+        except Exception:
+            if not _run_bash_with_retry(npm_global_cmd("npm install -g fast-check")):
+                ok = False
 
     return ok
 
@@ -389,15 +492,12 @@ def install_agent_browser() -> bool:
     via apt instead. On other Linux, use --with-deps. On macOS, plain install.
     """
     if _is_agent_browser_ready():
-        _run_bash_with_retry("agent-browser upgrade", timeout=120)  # best-effort
         return True
 
     if not _run_bash_with_retry(npm_global_cmd("npm install -g agent-browser")):
         return False
 
     if is_linux_arm64():
-        # Chrome for Testing doesn't provide ARM64 Linux builds.
-        # Install system chromium instead — agent-browser auto-detects it.
         _run_bash_with_retry("apt-get update -qq && apt-get install -y -qq chromium", timeout=180)
         return True
 
@@ -636,6 +736,16 @@ class DependenciesStep(BaseStep):
 
         if _install_with_spinner(ui, "CodeGraph (code intelligence)", install_codegraph):
             installed.append("codegraph")
+
+        needs_work = codegraph_needs_work(ctx.project_dir)
+        if needs_work and ui:
+            ui.status("Initializing CodeGraph (indexing may take a few minutes)...")
+        if initialize_codegraph(ctx.project_dir):
+            if needs_work and ui:
+                ui.success("CodeGraph project initialized")
+            installed.append("codegraph_init")
+        elif ui:
+            ui.warning("Could not initialize CodeGraph - please run 'codegraph init -i' manually")
 
         if _install_with_spinner(ui, "MCP server packages", _precache_npx_mcp_servers, ui):
             installed.append("mcp_npx_cache")

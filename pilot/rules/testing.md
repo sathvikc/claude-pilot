@@ -75,7 +75,7 @@ Mock at module level (where imported, not where defined). Test > 1s = likely unm
 
 ### E2E: Frontend/UI (MANDATORY for web apps)
 
-Use `agent-browser` with session isolation (`--session "${PILOT_SESSION_ID:-default}"`) for all E2E verification. See `agent-browser.md`.
+Use browser automation for all E2E verification. **Claude Code Chrome is preferred** — fall back to agent-browser only when Chrome is not available. See `browser-automation.md` for detection and workflow details.
 
 ### ⛔ Mock Audit on Dependency Changes
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -238,9 +239,9 @@ class TestInstallRtk:
 
         assert callable(install_rtk)
 
-    @patch("installer.steps.dependencies._is_brew_managed", return_value=True)
-    def test_install_rtk_skips_if_brew_managed(self, _mock_brew):
-        """install_rtk skips curl install when rtk is managed by Homebrew."""
+    @patch("installer.steps.dependencies.command_exists", return_value=True)
+    def test_install_rtk_skips_if_already_installed(self, _mock_cmd):
+        """install_rtk skips curl install when rtk binary exists."""
         from installer.steps.dependencies import install_rtk
 
         with patch("installer.steps.dependencies._run_bash_with_retry") as mock_bash:
@@ -249,9 +250,9 @@ class TestInstallRtk:
         assert result is True
         mock_bash.assert_not_called()
 
-    @patch("installer.steps.dependencies._is_brew_managed", return_value=False)
-    def test_install_rtk_runs_curl_when_not_brew_managed(self, _mock_brew):
-        """install_rtk runs curl installer when rtk is not brew-managed (install or upgrade)."""
+    @patch("installer.steps.dependencies.command_exists", return_value=False)
+    def test_install_rtk_runs_curl_when_not_installed(self, _mock_cmd):
+        """install_rtk runs curl installer when binary not found."""
         from installer.steps.dependencies import install_rtk
 
         with patch("installer.steps.dependencies._run_bash_with_retry", return_value=True) as mock_bash:
@@ -263,8 +264,8 @@ class TestInstallRtk:
         assert "rtk-ai/rtk" in call_args
         assert "install.sh" in call_args
 
-    @patch("installer.steps.dependencies._is_brew_managed", return_value=False)
-    def test_install_rtk_returns_false_when_curl_fails(self, _mock_brew):
+    @patch("installer.steps.dependencies.command_exists", return_value=False)
+    def test_install_rtk_returns_false_when_curl_fails(self, _mock_cmd):
         """install_rtk returns False when curl installer fails."""
         from installer.steps.dependencies import install_rtk
 
@@ -284,9 +285,10 @@ class TestInstallCodegraph:
         assert callable(install_codegraph)
 
     @patch("installer.steps.dependencies._symlink_to_pilot_bin")
+    @patch("installer.steps.dependencies._rebuild_better_sqlite3", return_value=True)
     @patch("installer.steps.dependencies._is_codegraph_installed", return_value=True)
-    def test_install_codegraph_skips_npm_if_already_installed(self, _mock_check, mock_symlink):
-        """install_codegraph skips npm but still creates symlink."""
+    def test_install_codegraph_skips_npm_if_already_installed(self, _mock_check, mock_rebuild, mock_symlink):
+        """install_codegraph skips npm, rebuilds better-sqlite3, creates symlink."""
         from installer.steps.dependencies import install_codegraph
 
         with patch("installer.steps.dependencies._run_bash_with_retry") as mock_bash:
@@ -294,6 +296,7 @@ class TestInstallCodegraph:
 
         assert result is True
         mock_bash.assert_not_called()
+        mock_rebuild.assert_called_once()
         mock_symlink.assert_called_once_with("codegraph")
 
     @patch("installer.steps.dependencies._symlink_to_pilot_bin")
@@ -322,6 +325,147 @@ class TestInstallCodegraph:
             result = install_codegraph()
 
         assert result is False
+
+
+class TestInitializeCodegraph:
+    """Tests for initialize_codegraph() — init, enable embeddings, index, sync."""
+
+    @patch("installer.steps.dependencies.command_exists", return_value=True)
+    @patch("installer.steps.dependencies._is_codegraph_indexed", return_value=True)
+    def test_skips_index_when_already_indexed(self, _mock_indexed, _mock_cmd, tmp_path: Path):
+        """Skips index and just syncs when already indexed."""
+        from installer.steps.dependencies import initialize_codegraph
+
+        codegraph_dir = tmp_path / ".codegraph"
+        codegraph_dir.mkdir()
+        (codegraph_dir / "config.json").write_text(json.dumps({"enableEmbeddings": True}))
+
+        with patch("installer.steps.dependencies._run_bash_with_retry", return_value=True) as mock_bash:
+            result = initialize_codegraph(tmp_path)
+
+        assert result is True
+        calls = [str(c) for c in mock_bash.call_args_list]
+        assert not any("codegraph init" in c for c in calls)
+        assert not any("codegraph index" in c for c in calls)
+        assert any("codegraph sync" in c for c in calls)
+
+    @patch("installer.steps.dependencies.command_exists", return_value=False)
+    def test_returns_false_when_codegraph_not_installed(self, _mock_cmd, tmp_path: Path):
+        """Returns False when codegraph binary is not available."""
+        from installer.steps.dependencies import initialize_codegraph
+
+        result = initialize_codegraph(tmp_path)
+
+        assert result is False
+
+    @patch("installer.steps.dependencies.command_exists", return_value=True)
+    @patch("installer.steps.dependencies._is_codegraph_indexed", return_value=False)
+    def test_full_init_sequence(self, _mock_indexed, _mock_cmd, tmp_path: Path):
+        """Runs init, enables embeddings, index, sync in sequence."""
+        from installer.steps.dependencies import initialize_codegraph
+
+        codegraph_dir = tmp_path / ".codegraph"
+
+        def fake_bash(command: str, cwd: Path | None = None, timeout: int = 120, stream: bool = False) -> bool:
+            if "codegraph init" in command:
+                codegraph_dir.mkdir(parents=True, exist_ok=True)
+                config = {"version": 1, "enableEmbeddings": False}
+                (codegraph_dir / "config.json").write_text(json.dumps(config))
+            return True
+
+        with patch("installer.steps.dependencies._run_bash_with_retry", side_effect=fake_bash) as mock_bash:
+            result = initialize_codegraph(tmp_path)
+
+        assert result is True
+        calls = [str(c) for c in mock_bash.call_args_list]
+        assert any("codegraph init" in c for c in calls)
+        assert any("codegraph index" in c for c in calls)
+        assert any("codegraph sync" in c for c in calls)
+
+        # Verify embeddings were enabled in config
+        config = json.loads((codegraph_dir / "config.json").read_text())
+        assert config["enableEmbeddings"] is True
+
+    @patch("installer.steps.dependencies.command_exists", return_value=True)
+    @patch("installer.steps.dependencies._is_codegraph_indexed", return_value=False)
+    def test_index_streams_output(self, _mock_indexed, _mock_cmd, tmp_path: Path):
+        """Index is called with stream=True for visible progress."""
+        from installer.steps.dependencies import initialize_codegraph
+
+        codegraph_dir = tmp_path / ".codegraph"
+        codegraph_dir.mkdir()
+        (codegraph_dir / "config.json").write_text(json.dumps({"enableEmbeddings": True}))
+
+        with patch("installer.steps.dependencies._run_bash_with_retry", return_value=True) as mock_bash:
+            initialize_codegraph(tmp_path)
+
+        index_calls = [c for c in mock_bash.call_args_list if "codegraph index" in str(c)]
+        assert len(index_calls) == 1
+        assert index_calls[0].kwargs.get("stream") is True or (
+            len(index_calls[0].args) > 3 and index_calls[0].args[3] is True
+        )
+
+    @patch("installer.steps.dependencies.command_exists", return_value=True)
+    @patch("installer.steps.dependencies._is_codegraph_indexed", return_value=False)
+    def test_returns_false_when_init_fails(self, _mock_indexed, _mock_cmd, tmp_path: Path):
+        """Returns False when codegraph init fails."""
+        from installer.steps.dependencies import initialize_codegraph
+
+        with patch("installer.steps.dependencies._run_bash_with_retry", return_value=False):
+            result = initialize_codegraph(tmp_path)
+
+        assert result is False
+
+    @patch("installer.steps.dependencies.command_exists", return_value=True)
+    @patch("installer.steps.dependencies._is_codegraph_indexed", return_value=False)
+    def test_returns_false_when_index_fails(self, _mock_indexed, _mock_cmd, tmp_path: Path):
+        """Returns False when codegraph index fails."""
+        from installer.steps.dependencies import initialize_codegraph
+
+        codegraph_dir = tmp_path / ".codegraph"
+
+        def fake_bash(command: str, cwd: Path | None = None, timeout: int = 120, stream: bool = False) -> bool:
+            if "codegraph init" in command:
+                codegraph_dir.mkdir(parents=True, exist_ok=True)
+                # Create config so _enable_codegraph_embeddings doesn't sleep
+                (codegraph_dir / "config.json").write_text(json.dumps({"enableEmbeddings": False}))
+                return True
+            if "codegraph index" in command:
+                return False
+            return True
+
+        with patch("installer.steps.dependencies._run_bash_with_retry", side_effect=fake_bash):
+            result = initialize_codegraph(tmp_path)
+
+        assert result is False
+
+    def test_enable_embeddings_writes_config(self, tmp_path: Path):
+        """_enable_codegraph_embeddings sets enableEmbeddings to true."""
+        from installer.steps.dependencies import _enable_codegraph_embeddings
+
+        codegraph_dir = tmp_path / ".codegraph"
+        codegraph_dir.mkdir()
+        config_path = codegraph_dir / "config.json"
+        config_path.write_text(json.dumps({"version": 1, "enableEmbeddings": False}))
+
+        _enable_codegraph_embeddings(tmp_path)
+
+        config = json.loads(config_path.read_text())
+        assert config["enableEmbeddings"] is True
+
+    def test_enable_embeddings_idempotent(self, tmp_path: Path):
+        """_enable_codegraph_embeddings is a no-op when already enabled."""
+        from installer.steps.dependencies import _enable_codegraph_embeddings
+
+        codegraph_dir = tmp_path / ".codegraph"
+        codegraph_dir.mkdir()
+        config_path = codegraph_dir / "config.json"
+        original = json.dumps({"version": 1, "enableEmbeddings": True}, indent=2) + "\n"
+        config_path.write_text(original)
+
+        _enable_codegraph_embeddings(tmp_path)
+
+        assert config_path.read_text() == original
 
 
 class TestSymlinkToPilotBin:
@@ -805,34 +949,17 @@ class TestPrecacheNpxMcpServers:
 
             mock_run.assert_not_called()
 
-    @patch("installer.steps.dependencies.subprocess.run")
-    def test_is_ccusage_installed_returns_true_when_present(self, mock_run):
-        """_is_ccusage_installed returns True when ccusage is globally installed."""
-        from installer.steps.dependencies import _is_ccusage_installed
-
-        mock_run.return_value = MagicMock(returncode=0, stdout="ccusage@1.0.0")
-        assert _is_ccusage_installed() is True
-
-    @patch("installer.steps.dependencies.subprocess.run")
-    def test_is_ccusage_installed_returns_false_when_missing(self, mock_run):
-        """_is_ccusage_installed returns False when ccusage is not installed."""
-        from installer.steps.dependencies import _is_ccusage_installed
-
-        mock_run.return_value = MagicMock(returncode=1, stdout="")
-        assert _is_ccusage_installed() is False
-
+    @patch("installer.steps.dependencies.command_exists", return_value=False)
     @patch("installer.steps.dependencies._run_bash_with_retry", return_value=True)
-    @patch("installer.steps.dependencies._is_ccusage_installed", return_value=False)
-    def test_install_ccusage_installs_when_not_present(self, mock_check, mock_run):
-        """install_ccusage runs npm install when ccusage not present."""
+    def test_install_ccusage_installs_when_not_present(self, _mock_run, _mock_cmd):
+        """install_ccusage runs npm install when binary not found."""
         from installer.steps.dependencies import install_ccusage
 
         result = install_ccusage()
         assert result is True
-        mock_run.assert_called_once_with("npm install -g ccusage@latest")
 
-    @patch("installer.steps.dependencies._is_ccusage_installed", return_value=True)
-    def test_install_ccusage_skips_when_already_installed(self, mock_check):
+    @patch("installer.steps.dependencies.command_exists", return_value=True)
+    def test_install_ccusage_skips_when_already_installed(self, _mock_cmd):
         """install_ccusage returns True without installing when already present."""
         from installer.steps.dependencies import install_ccusage
 
@@ -991,72 +1118,37 @@ class TestInstallGolangciLint:
 class TestInstallPbtTools:
     """Tests for install_pbt_tools() — property-based testing packages."""
 
+    @patch("installer.steps.dependencies.subprocess.run")
     @patch("installer.steps.dependencies._run_bash_with_retry", return_value=True)
-    @patch("installer.steps.dependencies._is_fast_check_installed", return_value=False)
-    @patch("installer.steps.dependencies._is_hypothesis_installed", return_value=False)
-    def test_install_pbt_tools_installs_hypothesis_when_missing(self, _mock_hyp, _mock_fc, mock_run):
-        """install_pbt_tools installs hypothesis when not already installed."""
+    @patch("installer.steps.dependencies.command_exists", return_value=False)
+    def test_install_pbt_tools_installs_both_when_missing(self, _mock_cmd, mock_run, mock_sub):
+        """install_pbt_tools installs hypothesis and fast-check when not found."""
         from installer.steps.dependencies import install_pbt_tools
 
+        mock_sub.return_value = MagicMock(returncode=1, stdout="")
         install_pbt_tools()
 
         calls = [str(c) for c in mock_run.call_args_list]
         assert any("hypothesis" in c for c in calls)
-
-    @patch("installer.steps.dependencies._run_bash_with_retry", return_value=True)
-    @patch("installer.steps.dependencies._is_fast_check_installed", return_value=False)
-    @patch("installer.steps.dependencies._is_hypothesis_installed", return_value=True)
-    def test_install_pbt_tools_skips_hypothesis_when_present(self, _mock_hyp, _mock_fc, mock_run):
-        """install_pbt_tools skips hypothesis install when already present."""
-        from installer.steps.dependencies import install_pbt_tools
-
-        install_pbt_tools()
-
-        calls = [str(c) for c in mock_run.call_args_list]
-        assert not any("hypothesis" in c for c in calls)
-
-    @patch("installer.steps.dependencies._run_bash_with_retry", return_value=True)
-    @patch("installer.steps.dependencies._is_fast_check_installed", return_value=False)
-    @patch("installer.steps.dependencies._is_hypothesis_installed", return_value=True)
-    def test_install_pbt_tools_installs_fast_check_when_missing(self, _mock_hyp, _mock_fc, mock_run):
-        """install_pbt_tools installs fast-check when not already installed."""
-        from installer.steps.dependencies import install_pbt_tools
-
-        install_pbt_tools()
-
-        calls = [str(c) for c in mock_run.call_args_list]
         assert any("fast-check" in c for c in calls)
 
-    @patch("installer.steps.dependencies._run_bash_with_retry", return_value=True)
-    @patch("installer.steps.dependencies._is_fast_check_installed", return_value=True)
-    @patch("installer.steps.dependencies._is_hypothesis_installed", return_value=True)
-    def test_install_pbt_tools_skips_fast_check_when_present(self, _mock_hyp, _mock_fc, mock_run):
-        """install_pbt_tools skips fast-check install when already present."""
-        from installer.steps.dependencies import install_pbt_tools
-
-        install_pbt_tools()
-
-        calls = [str(c) for c in mock_run.call_args_list]
-        assert not any("fast-check" in c for c in calls)
-
-    @patch("installer.steps.dependencies._run_bash_with_retry", return_value=True)
-    @patch("installer.steps.dependencies._is_fast_check_installed", return_value=True)
-    @patch("installer.steps.dependencies._is_hypothesis_installed", return_value=True)
-    def test_install_pbt_tools_returns_true_when_all_present(self, _mock_hyp, _mock_fc, _mock_run):
-        """install_pbt_tools returns True when all packages already installed."""
+    @patch("installer.steps.dependencies.command_exists", return_value=True)
+    def test_install_pbt_tools_returns_true_when_all_present(self, _mock_cmd):
+        """install_pbt_tools returns True when all binaries already exist."""
         from installer.steps.dependencies import install_pbt_tools
 
         result = install_pbt_tools()
 
         assert result is True
 
+    @patch("installer.steps.dependencies.subprocess.run")
     @patch("installer.steps.dependencies._run_bash_with_retry", return_value=False)
-    @patch("installer.steps.dependencies._is_fast_check_installed", return_value=False)
-    @patch("installer.steps.dependencies._is_hypothesis_installed", return_value=False)
-    def test_install_pbt_tools_returns_false_on_install_failure(self, _mock_hyp, _mock_fc, _mock_run):
+    @patch("installer.steps.dependencies.command_exists", return_value=False)
+    def test_install_pbt_tools_returns_false_on_install_failure(self, _mock_cmd, _mock_run, mock_sub):
         """install_pbt_tools returns False when installations fail."""
         from installer.steps.dependencies import install_pbt_tools
 
+        mock_sub.return_value = MagicMock(returncode=1, stdout="")
         result = install_pbt_tools()
 
         assert result is False

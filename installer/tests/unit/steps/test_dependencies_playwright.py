@@ -58,14 +58,13 @@ class TestInstallAgentBrowser:
 
     @patch("installer.steps.dependencies._run_bash_with_retry")
     @patch("installer.steps.dependencies._is_agent_browser_ready")
-    def test_upgrades_when_already_ready(self, mock_ready, mock_run):
-        """Upgrades existing installation when agent-browser is already ready."""
+    def test_skips_when_already_ready(self, mock_ready, mock_run):
+        """Skips install when agent-browser is already ready."""
         from installer.steps.dependencies import install_agent_browser
 
         mock_ready.return_value = True
-        mock_run.return_value = True
         assert install_agent_browser() is True
-        mock_run.assert_called_once_with("agent-browser upgrade", timeout=120)
+        mock_run.assert_not_called()
 
     @patch("platform.system", return_value="Darwin")
     @patch("installer.steps.dependencies.is_linux_arm64", return_value=False)

@@ -818,7 +818,7 @@ class TestBrewUpgrade:
         """_upgrade_homebrew_package returns False when brew upgrade fails."""
         from installer.steps.prerequisites import _upgrade_homebrew_package
 
-        with patch("subprocess.run") as mock_run:
+        with patch("subprocess.run") as mock_run, patch("installer.steps.prerequisites.time.sleep"):
             mock_run.return_value = MagicMock(returncode=1)
             result = _upgrade_homebrew_package("rtk")
 

@@ -65,18 +65,24 @@ Check whether the plan has a `## Verification Scenario` section (only present fo
 
 **If Verification Scenario exists:**
 
+**Resolve browser tool:** Check if `mcp__claude-in-chrome__*` tools are available. If yes, use Chrome. If not, output fallback warning (see `browser-automation.md`) and use agent-browser with session isolation:
+
 ```bash
+# agent-browser fallback only:
 AB_SESSION="${PILOT_SESSION_ID:-default}"
 ```
 
-1. Execute each step from the scenario using `agent-browser --session "$AB_SESSION"`
-2. Verify the expected result for each step (snapshot after each interaction)
-3. **PASS:** Scenario confirms fix works — close browser, proceed to Final
+1. Execute each step from the scenario using the resolved browser tool
+   - **Chrome:** `navigate`, `read_page`, `computer`/`form_input`
+   - **agent-browser (fallback):** `agent-browser --session "$AB_SESSION"` commands
+2. Verify the expected result for each step (read page after each interaction)
+3. **PASS:** Scenario confirms fix works — close browser (agent-browser only), proceed to Final
 4. **FAIL (attempt 1):** Analyze root cause, implement fix, re-run tests, re-execute scenario
 5. **FAIL (attempt 2):** Implement second fix, re-run tests, re-execute scenario
 6. **FAIL after 2 attempts:** The bug is not fully fixed — set `Status: PENDING`, increment `Iterations`, invoke `Skill(skill='spec-implement', args='<plan-path>')`. Do not proceed to VERIFIED.
 
 ```bash
+# agent-browser fallback only:
 agent-browser --session "$AB_SESSION" close
 ```
 

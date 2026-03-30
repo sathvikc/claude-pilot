@@ -147,18 +147,23 @@ When adding tasks to an existing plan: load it, parse structure, verify compatib
 
 **Explore systematically, one area at a time (sequentially, not parallel).**
 
-| Tool                            | When                                                    |
+**⛔ Use Probe and CodeGraph as primary tools — they complement each other. Fall back to Grep/Glob only for exact patterns.**
+
+| Need                            | Tool                                                    |
 | ------------------------------- | ------------------------------------------------------- |
-| **Context7**                    | Library/framework docs                                  |
-| **Probe CLI** (`probe search`)  | Semantic code search by intent (via Bash)               |
-| **Probe CLI** (`probe extract`) | Extract specific functions/classes by symbol or line    |
-| **CodeGraph**                   | Call tracing (`codegraph_callers`/`codegraph_callees`), impact analysis (`codegraph_impact`), symbol search (`codegraph_search`) |
-| **grep-mcp**                    | Real-world GitHub examples                              |
-| **Read/Grep/Glob**              | Direct file exploration                                 |
+| **Orient on the task**          | CodeGraph `codegraph_context(task=<description>)`       |
+| **Understand a feature/concept**| Probe `probe search "how does X work"`                  |
+| **Find symbols by name**        | CodeGraph `codegraph_search`                            |
+| **Extract code by symbol/line** | Probe `probe extract file.ts#symbol`                    |
+| **Project file structure**      | CodeGraph `codegraph_files`                             |
+| **Call tracing**                | CodeGraph `codegraph_callers`/`codegraph_callees`       |
+| **Library/framework docs**      | Context7                                                |
+| **Real-world GitHub examples**  | grep-mcp                                                |
+| **Exact text/regex**            | Grep/Glob (last resort)                                 |
 
 **Areas (in order):** Architecture → Similar Features → Dependencies → Tests
 
-**⛔ Dependency analysis (MANDATORY for 3+ file changes):** For every function you plan to modify, run `trace_call_path(function_name, direction="both", depth=2)` to map callers and callees. Also run `detect_changes(scope="all")` if there are existing uncommitted changes. Probe search is NOT sufficient — it finds text mentions, not actual call relationships.
+**⛔ Dependency analysis (MANDATORY for 3+ file changes):** For every function you plan to modify, run `codegraph_callers` and `codegraph_callees` to map the call graph. Then run `codegraph_impact` to assess blast radius. Probe search is NOT sufficient — it finds text mentions, not actual call relationships.
 
 For each area: document hypotheses, note full file paths, track unanswered questions. After exploration: read identified files to verify hypotheses, build complete mental model, identify integration points, note reusable patterns.
 
@@ -261,7 +266,7 @@ For features with UI or user-facing workflows, create structured E2E scenarios d
 
 | Step | Action | Expected Result |
 |------|--------|-----------------|
-| 1 | [Navigate / click / fill — concrete agent-browser action] | [What user sees] |
+| 1 | [Navigate / click / fill — concrete browser automation action] | [What user sees] |
 | 2 | [Next action] | [Expected UI response] |
 ```
 
@@ -269,7 +274,7 @@ For features with UI or user-facing workflows, create structured E2E scenarios d
 - 3–8 scenarios typical — focus on user-visible workflows, not unit-level behavior
 - **Critical** = must pass before deployment; **High** = essential UX; **Medium** = edge cases / error states
 - Every task that changes UI or user-visible behavior must be covered by at least one scenario
-- Steps must be executable via `agent-browser` (concrete: navigate, click, fill, snapshot — no "observe manually")
+- Steps must be executable via browser automation — Claude Code Chrome or agent-browser (concrete: navigate, click, fill, read page — no "observe manually")
 - Test what users see, not internal implementation — same observable inputs and outputs
 
 When scenarios are written, update Goal Verification truths to reference them (e.g., "TS-001 passes end-to-end").

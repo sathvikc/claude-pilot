@@ -6,16 +6,16 @@
 
 Unit tests with mocks prove nothing about real-world behavior. After tests pass:
 
-- CLI command → **run it** | API endpoint → **call it** | Frontend UI → **open with `agent-browser --session "${PILOT_SESSION_ID:-default}"`** (session isolation — see `agent-browser.md`)
+- CLI command → **run it** | API endpoint → **call it** | Frontend UI → **use browser automation** (see `browser-automation.md` for tool selection: Claude Code Chrome preferred, agent-browser as fallback)
 - Any runnable program → **run it**
 
 **When:** After tests pass, after refactoring, after changing imports/deps/config, before marking any task complete.
 
 **Skip only for:** documentation-only, test-only, pure internal refactoring (no entry points), config-only changes.
 
-### ⛔ Frontend Changes Require agent-browser Verification
+### ⛔ Frontend Changes Require Browser Verification
 
-**Unit tests and typechecks are NOT sufficient.** After tests pass, verify with `agent-browser` (with session isolation) that the change works in the running app: build → open → snapshot -i → interact → close.
+**Unit tests and typechecks are NOT sufficient.** After tests pass, verify with browser automation that the change works in the running app. Use Claude Code Chrome if available, otherwise fall back to agent-browser (see `browser-automation.md` for detection and workflow).
 
 **Common pitfalls:** stale cached bundles, bundle not deployed to served location, CSS layout issues invisible to tests, elements in DOM but not visible/interactive.
 
@@ -39,7 +39,7 @@ Unit tests with mocks prove nothing about real-world behavior. After tests pass:
 | "Tests pass" | Fresh run: 0 failures | Previous run, "should pass" |
 | "Build succeeds" | Build exit 0 | "Linter passed" |
 | "Bug fixed" | Reproducing test passes | "Code changed" |
-| "UI works" | agent-browser snapshot -i | "API returns 200" |
+| "UI works" | Browser verification (Chrome `read_page` or agent-browser `snapshot -i`) | "API returns 200" |
 | "No perf regression" | Hot paths cache/memoize, no heavy full imports, no redundant work on repeat | "Tests pass" |
 
 ### ⛔ Fix ALL Errors — No Exceptions, No Asking
