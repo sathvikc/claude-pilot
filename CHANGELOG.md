@@ -2,6 +2,12 @@
 
 All notable changes to Pilot Shell will be documented in this file.
 
+## [7.8.5] - 2026-03-30
+
+### Bug Fixes
+
+- Added sudo prompt for npm if needed
+
 ## [7.8.4] - 2026-03-30
 
 ### Bug Fixes
