@@ -2,6 +2,17 @@
 
 All notable changes to Pilot Shell will be documented in this file.
 
+## [7.10.1] - 2026-03-31
+
+### Bug Fixes
+
+- Shorten share URLs ~25% by streamlining encoding pipeline
+
+### Miscellaneous
+
+- Optimize website image performance
+- Fix self-referencing SHARE_BASE_URL constant on /shared page
+
 ## [7.10.0] - 2026-03-31
 
 ### Bug Fixes
