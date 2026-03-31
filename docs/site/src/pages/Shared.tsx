@@ -16,7 +16,7 @@ import {
 } from "@/lib/sharing";
 import type { SharePayload } from "@/lib/sharing";
 
-const SHARE_BASE_URL = SHARE_BASE_URL;
+const SHARE_BASE_URL = "https://pilot-shell.com/shared";
 
 /** Check that the browser supports the APIs we need */
 function checkBrowserSupport(): string | null {
