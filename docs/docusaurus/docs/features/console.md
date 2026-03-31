@@ -54,13 +54,13 @@ Annotations persist across page reloads, so you can review asynchronously while 
 
 ### Spec Sharing
 
-Share specifications with teammates for collaborative review — no cloud service required. Everything is end-to-end encrypted and works entirely locally.
+Share specifications with teammates for collaborative review — no cloud service required. Everything works entirely locally with compressed URLs.
 
 **Sharing a spec:**
 
 1. Open a spec in the Specifications tab
 2. Click **Share with Teammate** in the metadata row
-3. A share URL is generated — the spec content and your annotations are compressed, encrypted (AES-256-GCM), and encoded in the URL. The encryption key lives only in the URL fragment (never sent to any server)
+3. A share URL is generated — the spec content and your annotations are compressed and encoded in the URL fragment (never sent to any server)
 4. Copy the URL and send it to your colleague via Slack, email, or any channel
 5. The **Receive Feedback** dialog opens automatically so you're ready to import their response
 
@@ -69,7 +69,7 @@ Share specifications with teammates for collaborative review — no cloud servic
 1. Your colleague opens the URL in their Pilot Console (`localhost:41777`)
 2. They see the full spec with your annotations displayed as read-only highlights
 3. They can add their own feedback — either by selecting text or clicking the **+** button on any block
-4. Click **Send Feedback** to generate an encrypted feedback URL and copy it to clipboard
+4. Click **Send Feedback** to generate a feedback URL and copy it to clipboard
 
 **Importing feedback:**
 
@@ -81,7 +81,7 @@ Share specifications with teammates for collaborative review — no cloud servic
 
 **Deduplication:** Importing the same feedback twice is safe — annotations matching existing ones (same text and selection) are automatically skipped.
 
-**Security:** All shared data is AES-256-GCM encrypted. The decryption key is placed in the URL fragment (`#...?key=<aesKey>`), which per the HTTP spec is never sent to any server. For specs larger than ~32KB compressed, an embedded paste service stores only opaque ciphertext locally in `~/.pilot/share/` with automatic 3-day expiry.
+**Privacy:** All shared data lives in the URL fragment, which per the HTTP spec is never sent to any server — no data reaches pilot-shell.com or any third party. For specs larger than ~32KB compressed, an embedded paste service stores the compressed data locally in `~/.pilot/share/` with automatic 3-day expiry.
 
 :::tip Both annotation methods work everywhere
 The **+** button on each block and text selection both work on the normal review page and the shared spec feedback page. Use whichever is more convenient — the **+** button is more reliable for quick block-level comments.

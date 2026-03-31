@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
-import { Link2, Lock, Shield, ArrowRight, AlertCircle, RefreshCw, MessageSquarePlus } from "lucide-react";
+import { Link2, Shield, ArrowRight, AlertCircle, RefreshCw, MessageSquarePlus } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import Footer from "@/components/Footer";
 import SEO from "@/components/SEO";
@@ -11,7 +11,7 @@ import { BlockRenderer, AnnotationToolbar, FeedbackSidebar } from "@/components/
 import { parseMarkdownToBlocks, useAnnotation, createAnnotation } from "@/lib/annotation";
 import {
   parseHashFragment,
-  decryptHashPayload,
+  decompressHashPayload,
   generateWebFeedbackUrl,
 } from "@/lib/sharing";
 import type { SharePayload } from "@/lib/sharing";
@@ -31,8 +31,8 @@ function checkBrowserSupport(): string | null {
   return null;
 }
 
-/** Extract data + key from a pasted URL string (any supported format) */
-function extractFromPastedUrl(input: string): { data: string; key: string } | null {
+/** Extract compressed data from a pasted URL string (any supported format) */
+function extractFromPastedUrl(input: string): { data: string } | null {
   const trimmed = input.trim();
   if (!trimmed) return null;
   return parseHashFragment(trimmed);
@@ -68,16 +68,12 @@ export default function Shared() {
     clearPendingSelection,
   } = useAnnotation(containerRef);
 
-  const loadFromHashData = useCallback(async (data: string, key: string) => {
+  const loadFromHashData = useCallback(async (data: string) => {
     setPageState({ status: "loading" });
     try {
-      if (!key) {
-        setPageState({ status: "error", message: "Missing encryption key — the URL may be incomplete. Make sure you copied the full URL including the ?key= part." });
-        return;
-      }
-      const result = await decryptHashPayload(data, key);
+      const result = await decompressHashPayload(data);
       if (!result) {
-        setPageState({ status: "error", message: "Failed to decrypt — the URL may be corrupted or truncated." });
+        setPageState({ status: "error", message: "Failed to decompress — the URL may be corrupted or truncated." });
         return;
       }
       if (result.type === "feedback") {
@@ -97,17 +93,17 @@ export default function Shared() {
     if (!hash || hash === "#") return;
     const parsed = parseHashFragment(hash);
     if (parsed?.data) {
-      loadFromHashData(parsed.data, parsed.key);
+      loadFromHashData(parsed.data);
     }
   }, [loadFromHashData]);
 
   const handlePasteLoad = async () => {
     const extracted = extractFromPastedUrl(pasteInput);
     if (!extracted) {
-      toast({ title: "Could not parse URL", description: "Paste the full share URL including the part after #.", variant: "destructive" });
+      toast({ title: "Could not parse URL", description: "Paste the full share URL including the part after #", variant: "destructive" });
       return;
     }
-    await loadFromHashData(extracted.data, extracted.key);
+    await loadFromHashData(extracted.data);
   };
 
   const handleAnnotationSubmit = useCallback(
@@ -173,7 +169,7 @@ export default function Shared() {
     <>
       <SEO
         title="Shared Specification — Pilot Shell"
-        description="View and annotate a securely shared spec from Pilot Shell. Everything is end-to-end encrypted in your browser — no data reaches our servers."
+        description="View and annotate a shared spec from Pilot Shell. Everything happens in your browser — no data reaches our servers."
         canonicalUrl={SHARE_BASE_URL}
       />
       <NavBar />
@@ -197,7 +193,7 @@ export default function Shared() {
               </div>
               <h1 className="text-2xl font-semibold">View Shared Specification</h1>
               <p className="text-sm text-muted-foreground max-w-md mx-auto">
-                Paste a share URL from Pilot Shell to view and annotate the spec, then send feedback back.
+                Paste a share URL from Pilot Shell to view and annotate the spec, then send your feedback back.
               </p>
             </div>
 
@@ -224,11 +220,11 @@ export default function Shared() {
 
                 {/* Privacy note */}
                 <div className="flex items-start gap-2.5 p-3 rounded-lg bg-muted/50 border border-border/50">
-                  <Lock className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
+                  <Shield className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
                   <div className="space-y-1">
-                    <p className="text-xs font-medium">End-to-end encrypted</p>
+                    <p className="text-xs font-medium">No data sent to servers</p>
                     <p className="text-xs text-muted-foreground">
-                      No data is sent to our servers. The spec is decrypted entirely in your browser — the encryption key lives only in the URL fragment, which is never transmitted over the network.
+                      The spec is embedded in the URL fragment, which is never transmitted over the network. Everything is decompressed entirely in your browser.
                     </p>
                   </div>
                 </div>
@@ -258,7 +254,7 @@ export default function Shared() {
           <div className="flex items-center justify-center min-h-[50vh]">
             <div className="text-center space-y-3">
               <div className="h-8 w-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto" />
-              <p className="text-sm text-muted-foreground">Decrypting shared specification…</p>
+              <p className="text-sm text-muted-foreground">Loading shared specification…</p>
             </div>
           </div>
         )}
@@ -317,10 +313,7 @@ export default function Shared() {
                           )}
                           {sharedAt && <span>{sharedAt}</span>}
                           <span className="flex items-center gap-1 text-green-600 dark:text-green-400">
-                            <Lock size={10} />
-                            AES-256-GCM encrypted
-                          </span>
-                          <span className="text-[10px] text-muted-foreground/60">
+                            <Shield size={10} />
                             No data sent to servers
                           </span>
                         </div>

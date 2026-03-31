@@ -1,17 +1,17 @@
 /**
- * High-level URL generation and parsing for secure spec sharing.
+ * High-level URL generation and parsing for spec sharing.
  *
- * Website URL format: https://pilot-shell.com/shared#<ciphertext>?key=<aesKey>
+ * Website URL format: https://pilot-shell.com/shared#<compressed-data>
  * Console URL formats (for paste-input parsing):
- *   - https://localhost:PORT/#/shared/<data>?key=<key>
- *   - https://localhost:PORT/#/feedback/<data>?key=<key>
+ *   - https://localhost:PORT/#/shared/<data>
+ *   - https://localhost:PORT/#/feedback/<data>
  *
  * All data lives in the hash fragment, which the HTTP spec guarantees
- * is never sent to the server.
+ * is never sent to the server. No encryption — data is compressed only
+ * for shorter URLs (~25% shorter than the previous encrypted format).
  */
 
 import { compress, decompress } from "./compress";
-import { encrypt, decrypt } from "./crypto";
 import type { SharePayload, FeedbackPayload } from "./types";
 
 /** ~32KB limit — safe for all major browsers */
@@ -19,24 +19,22 @@ const MAX_INLINE_BYTES = 32_768;
 
 export interface WebShareUrlResult {
   url: string;
-  key: string;
 }
 
-/** Compress, encrypt, and build a URL. Returns null if too large or on error. */
-async function buildEncryptedUrl(
+/** Compress and build a URL. Returns null if too large or on error. */
+async function buildCompressedUrl(
   payload: unknown,
   baseUrl: string,
 ): Promise<WebShareUrlResult | null> {
   try {
     const compressed = await compress(JSON.stringify(payload));
-    const { ciphertext, key } = await encrypt(compressed);
 
-    if (ciphertext.length > MAX_INLINE_BYTES) {
+    if (compressed.length > MAX_INLINE_BYTES) {
       return null;
     }
 
-    const url = `${baseUrl}#${ciphertext}?key=${key}`;
-    return { url, key };
+    const url = `${baseUrl}#${compressed}`;
+    return { url };
   } catch {
     return null;
   }
@@ -47,7 +45,7 @@ export function generateWebShareUrl(
   payload: SharePayload,
   baseUrl: string,
 ): Promise<WebShareUrlResult | null> {
-  return buildEncryptedUrl(payload, baseUrl);
+  return buildCompressedUrl(payload, baseUrl);
 }
 
 /** Generate a web feedback URL. Returns null if payload would exceed inline URL limits. */
@@ -55,71 +53,68 @@ export function generateWebFeedbackUrl(
   payload: FeedbackPayload,
   baseUrl: string,
 ): Promise<WebShareUrlResult | null> {
-  return buildEncryptedUrl(payload, baseUrl);
+  return buildCompressedUrl(payload, baseUrl);
 }
 
 /**
- * Parse hash fragment + key from any supported URL format:
- *   - Website: pilot-shell.com/shared#<data>?key=<key>
- *   - Console shared: localhost/#/shared/<data>?key=<key>
- *   - Console feedback: localhost/#/feedback/<data>?key=<key>
- *   - Raw hash: #<data>?key=<key>
+ * Parse hash fragment from any supported URL format:
+ *   - Website: pilot-shell.com/shared#<data>
+ *   - Console shared: localhost/#/shared/<data>
+ *   - Console feedback: localhost/#/feedback/<data>
+ *   - Raw hash: #<data>
  *
  * Returns null if no data could be extracted.
  */
-export function parseHashFragment(input: string): { data: string; key: string } | null {
+export function parseHashFragment(input: string): { data: string } | null {
   const hashIdx = input.indexOf("#");
   if (hashIdx === -1) return null;
 
   const fragment = input.slice(hashIdx + 1);
+  // Strip any legacy ?key= params
   const qIdx = fragment.indexOf("?");
   const path = qIdx === -1 ? fragment : fragment.slice(0, qIdx);
-  const queryStr = qIdx === -1 ? "" : fragment.slice(qIdx + 1);
-  const key = new URLSearchParams(queryStr).get("key") ?? "";
 
   // Strip known Console path prefixes
   let data = path;
   if (data.startsWith("/shared/")) data = data.slice("/shared/".length);
   else if (data.startsWith("/feedback/")) data = data.slice("/feedback/".length);
 
-  if (!data || !key) return null;
-  return { data, key };
+  if (!data) return null;
+  return { data };
 }
 
 /**
- * Decrypt and decompress a share payload.
+ * Decompress a share payload.
  * Returns null on any failure.
  */
-export async function decryptSharePayload(
+export async function decompressSharePayload(
   data: string,
-  key: string,
 ): Promise<SharePayload | null> {
+  if (!data) return null;
   try {
-    const compressed = await decrypt(data, key);
-    return JSON.parse(await decompress(compressed)) as SharePayload;
+    return JSON.parse(await decompress(data)) as SharePayload;
   } catch {
     return null;
   }
 }
 
 /**
- * Decrypt and decompress a feedback payload.
+ * Decompress a feedback payload.
  * Returns null on any failure.
  */
-export async function decryptFeedbackPayload(
+export async function decompressFeedbackPayload(
   data: string,
-  key: string,
 ): Promise<FeedbackPayload | null> {
+  if (!data) return null;
   try {
-    const compressed = await decrypt(data, key);
-    return JSON.parse(await decompress(compressed)) as FeedbackPayload;
+    return JSON.parse(await decompress(data)) as FeedbackPayload;
   } catch {
     return null;
   }
 }
 
 /**
- * Detect whether a decrypted payload is a SharePayload (has specContent)
+ * Detect whether a payload is a SharePayload (has specContent)
  * vs a FeedbackPayload (has only annotations + author).
  */
 export function isSharePayload(payload: unknown): payload is SharePayload {
@@ -132,15 +127,14 @@ export function isSharePayload(payload: unknown): payload is SharePayload {
 }
 
 /**
- * Decrypt any payload from a hash fragment, auto-detecting type.
+ * Decompress any payload from a hash fragment, auto-detecting type.
  */
-export async function decryptHashPayload(
+export async function decompressHashPayload(
   data: string,
-  key: string,
 ): Promise<{ type: "share"; payload: SharePayload } | { type: "feedback"; payload: FeedbackPayload } | null> {
+  if (!data) return null;
   try {
-    const compressed = await decrypt(data, key);
-    const parsed = JSON.parse(await decompress(compressed));
+    const parsed = JSON.parse(await decompress(data));
     if (isSharePayload(parsed)) {
       return { type: "share", payload: parsed as SharePayload };
     }
