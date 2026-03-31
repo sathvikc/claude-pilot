@@ -5,55 +5,64 @@ import ImageModal from "@/components/ImageModal";
 const consoleSlides = [
   {
     label: "Dashboard",
-    src: "/console/dashboard.png",
+    src: "/console/dashboard.webp",
+    fallback: "/console/dashboard.png",
     alt: "Console Dashboard — grouped stats, workspace status, and spec progress",
     desc: "Grouped stats for memory, specifications, and extensions. Workspace cards for usage, git, specs, and worker.",
   },
   {
     label: "Specifications",
-    src: "/console/specifications.png",
+    src: "/console/specifications.webp",
+    fallback: "/console/specifications.png",
     alt: "Specification view — plan annotation, task progress, and phase tracking",
     desc: "All spec plans with task progress, phase tracking, and iteration history. Annotate mode lets you mark up plans visually — select any text and write a note. Annotations save automatically and the agent reads them at the next review checkpoint.",
   },
   {
     label: "Extensions",
-    src: "/console/extensions.png",
+    src: "/console/extensions.webp",
+    fallback: "/console/extensions.png",
     alt: "Extensions view — local, plugin, and remote extensions with team sharing",
     desc: "Browse, edit, and share extensions. Team sharing via git with push, pull, and diff. APM-compatible format for cross-tool sharing. Plugin extensions auto-discovered.",
   },
   {
     label: "Changes",
-    src: "/console/changes.png",
+    src: "/console/changes.webp",
+    fallback: "/console/changes.png",
     alt: "Changes view — git diff, staged files, code review annotations",
     desc: "Git changes, staged files, and diff viewer with branch and worktree context. Review mode adds inline annotations on any diff line — they save automatically and the agent reads them before marking a spec verified.",
   },
   {
     label: "Memories",
-    src: "/console/memories.png",
+    src: "/console/memories.webp",
+    fallback: "/console/memories.png",
     alt: "Memories view — captured decisions and patterns with semantic search",
     desc: "Decisions, discoveries, and patterns captured automatically. Semantic search across all memories.",
   },
   {
     label: "Sessions",
-    src: "/console/sessions.png",
+    src: "/console/sessions.webp",
+    fallback: "/console/sessions.png",
     alt: "Sessions view — active sessions with observation and prompt counts",
     desc: "Active and past sessions with observation counts, duration, and expandable timelines.",
   },
   {
     label: "Usage",
-    src: "/console/usage.png",
+    src: "/console/usage.webp",
+    fallback: "/console/usage.png",
     alt: "Usage view — daily costs, token charts, and model routing",
     desc: "Daily token costs, model routing breakdown, and usage trends over time.",
   },
   {
     label: "Settings",
-    src: "/console/settings.png",
+    src: "/console/settings.webp",
+    fallback: "/console/settings.png",
     alt: "Settings view — model selection per command, spec workflow toggles",
     desc: "Choose models per command and sub-agent. Spec workflow toggles and reviewer configuration.",
   },
   {
     label: "Help",
-    src: "/console/help.png",
+    src: "/console/help.webp",
+    fallback: "/console/help.png",
     alt: "Help view — embedded documentation and quick-start guides",
     desc: "Embedded documentation from pilot-shell.com — full technical reference without leaving the Console.",
   },
@@ -88,6 +97,7 @@ const ConsoleSection = () => {
             <div className="rounded-xl overflow-hidden border border-border/50">
               <ImageModal
                 src={slide.src}
+                fallback={slide.fallback}
                 alt={slide.alt}
                 className="w-full rounded-xl"
               />
@@ -117,11 +127,15 @@ const ConsoleSection = () => {
                         : "border-transparent opacity-60 hover:opacity-100 hover:border-border"
                     }`}
                 >
-                  <img
-                    src={s.src}
-                    alt={s.label}
-                    className="w-full rounded-md"
-                  />
+                  <picture>
+                    <source srcSet={s.src} type="image/webp" />
+                    <img
+                      src={s.fallback}
+                      alt={s.label}
+                      className="w-full rounded-md"
+                      loading="lazy"
+                    />
+                  </picture>
                   <div
                     className={`absolute inset-x-0 bottom-0 py-0.5 text-[8px] sm:text-[10px] font-medium text-center
                     ${

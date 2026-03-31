@@ -4,6 +4,7 @@ import { Github, Menu, X, ScrollText, Sun, Moon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { navigateToSection } from "@/utils/navigateToSection";
 import { useTheme } from "@/hooks/useTheme";
+import boxWebp from "@/assets/box.webp";
 import boxPng from "@/assets/box.png";
 
 const navLinks = [
@@ -34,11 +35,16 @@ const NavBar = () => {
       <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4 sm:py-5 flex justify-between items-center">
         {/* Logo */}
         <Link to="/" className="flex items-center gap-2 sm:gap-3">
-          <img
-            src={boxPng}
-            alt="Pilot Shell"
-            className="h-8 sm:h-10 w-auto rounded-md border border-primary/20"
-          />
+          <picture>
+            <source srcSet={boxWebp} type="image/webp" />
+            <img
+              src={boxPng}
+              alt="Pilot Shell"
+              className="h-8 sm:h-10 w-auto rounded-md border border-primary/20"
+              width={128}
+              height={128}
+            />
+          </picture>
         </Link>
 
         {/* Desktop Navigation */}

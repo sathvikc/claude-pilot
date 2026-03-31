@@ -3,29 +3,52 @@ import { Dialog, DialogContent } from "@/components/ui/dialog";
 
 interface ImageModalProps {
   src: string;
+  fallback?: string;
   alt: string;
   className?: string;
 }
 
-const ImageModal = ({ src, alt, className = "" }: ImageModalProps) => {
+const ImageModal = ({ src, fallback, alt, className = "" }: ImageModalProps) => {
   const [isOpen, setIsOpen] = useState(false);
 
-  return (
-    <>
+  const renderImage = (imgClassName: string, onClick: () => void) => {
+    if (fallback) {
+      return (
+        <picture>
+          <source srcSet={src} type="image/webp" />
+          <img
+            src={fallback}
+            alt={alt}
+            className={imgClassName}
+            onClick={onClick}
+            loading="lazy"
+          />
+        </picture>
+      );
+    }
+    return (
       <img
         src={src}
         alt={alt}
-        className={`cursor-pointer hover:opacity-90 transition-opacity ${className}`}
-        onClick={() => setIsOpen(true)}
+        className={imgClassName}
+        onClick={onClick}
+        loading="lazy"
       />
+    );
+  };
+
+  return (
+    <>
+      {renderImage(
+        `cursor-pointer hover:opacity-90 transition-opacity ${className}`,
+        () => setIsOpen(true),
+      )}
       <Dialog open={isOpen} onOpenChange={setIsOpen}>
         <DialogContent className="max-w-[95vw] max-h-[95vh] p-0 border-0 bg-transparent">
-          <img
-            src={src}
-            alt={alt}
-            className="w-full h-full object-contain rounded-lg"
-            onClick={() => setIsOpen(false)}
-          />
+          {renderImage(
+            "w-full h-full object-contain rounded-lg",
+            () => setIsOpen(false),
+          )}
         </DialogContent>
       </Dialog>
     </>

@@ -1,3 +1,4 @@
+import logoWebp from "@/assets/logo.webp";
 import logoPng from "@/assets/logo.png";
 
 interface LogoProps {
@@ -10,15 +11,22 @@ const Logo = ({ variant = "hero" }: LogoProps) => {
     : "w-full max-w-[160px] xs:max-w-[180px] sm:max-w-[240px]";
 
   const paddingClass = variant === "hero" ? "p-2 xs:p-4 sm:p-6" : "p-4";
+  const isEager = variant === "hero";
 
   return (
     <div className={`inline-block ${paddingClass}`}>
-      <img
-        src={logoPng}
-        alt="Pilot Shell - Claude Code is powerful. Pilot Shell makes it reliable."
-        className={`${sizeClass} h-auto animate-glow`}
-        loading={variant === "hero" ? "eager" : "lazy"}
-      />
+      <picture>
+        <source srcSet={logoWebp} type="image/webp" />
+        <img
+          src={logoPng}
+          alt="Pilot Shell - Claude Code is powerful. Pilot Shell makes it reliable."
+          className={`${sizeClass} h-auto animate-glow`}
+          loading={isEager ? "eager" : "lazy"}
+          fetchPriority={isEager ? "high" : undefined}
+          width={1200}
+          height={676}
+        />
+      </picture>
     </div>
   );
 };
