@@ -2,6 +2,13 @@
 
 All notable changes to Pilot Shell will be documented in this file.
 
+## [7.10.2] - 2026-04-01
+
+### Bug Fixes
+
+- Filter Pilot skills from extensions listing and fix CI test failures
+- Migrate commands to skills format
+
 ## [7.10.1] - 2026-03-31
 
 ### Bug Fixes
