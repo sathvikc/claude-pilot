@@ -79,6 +79,7 @@ confirm_uninstall() {
 	entries=$(get_manifest_entries)
 	if [ -n "$entries" ]; then
 		echo "$entries" | grep -q '^commands/' && echo "    • Remove Pilot-managed commands from ~/.claude/commands/"
+		echo "$entries" | grep -q '^skills/' && echo "    • Remove Pilot-managed skills from ~/.claude/skills/"
 		echo "$entries" | grep -q '^rules/' && echo "    • Remove Pilot-managed rules from ~/.claude/rules/"
 	fi
 
@@ -206,11 +207,11 @@ remove_manifest_files() {
 	done <<<"$entries"
 
 	if [ "$removed_count" -gt 0 ]; then
-		echo "    [OK] Removed $removed_count Pilot-managed commands and rules"
-		removed_items+=("$removed_count commands/rules from ~/.claude/")
+		echo "    [OK] Removed $removed_count Pilot-managed skills and rules"
+		removed_items+=("$removed_count skills/rules from ~/.claude/")
 	fi
 
-	for subdir in "commands" "rules"; do
+	for subdir in "commands" "skills" "rules"; do
 		local dir="$CLAUDE_DIR/$subdir"
 		if [ -d "$dir" ] && [ -z "$(ls -A "$dir" 2>/dev/null)" ]; then
 			rmdir "$dir" 2>/dev/null || true
