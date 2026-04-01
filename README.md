@@ -38,7 +38,7 @@ curl -fsSL https://raw.githubusercontent.com/maxritter/pilot-shell/main/install.
 
 **So I built Pilot Shell**. Instead of adding process on top, it bakes quality into every interaction. Linting, formatting, and type checking run as enforced hooks on every edit. TDD is mandatory, not suggested. Context is preserved across sessions. Every rule exists because I hit a real problem: a bug that slipped through, a regression that shouldn't have happened, a session where Claude cut corners.
 
-**This isn't a vibe coding tool**. It's true agentic engineering with many months of effort put into it, but without the added complexity. You install it once, run `pilot` in any project, then `/setup-rules` to generate your project rules. Automate your common workflows by invoking the `/create-skill` command. Start a `/spec` task and let it run — when it's done, the work is tested, verified and ready to ship.
+**This isn't a vibe coding tool**, it's true agentic engineering with many months of effort put into it. You install it once, run `pilot` in any project, then `/setup-rules` to generate your project rules. Automate your common workflows by invoking the `/create-skill` command. Use `/prd` to brainstorm and turn vague ideas into clear requirements, then start a `/spec` task and let it run — when it's done, the work is tested, verified and ready to ship.
 
 ---
 
@@ -162,7 +162,7 @@ Pilot 8.2.1 (Solo) · CC 2.1.79 (Max) · sessions 2 · memories 12
 
 **Line 2 — Mode:**
 
-- **Quick Mode:** `Quick Mode · /spec for feature implementation and complex bugfixes`
+- **Quick Mode:** `Quick Mode`
 - **Spec Mode:** Plan name, type (`feature`/`bugfix`), phase (`plan`/`implement`/`verify`), progress bar, task count, and iteration count
 
 **Line 3 — Version & Session Info:**
@@ -172,6 +172,18 @@ Pilot 8.2.1 (Solo) · CC 2.1.79 (Max) · sessions 2 · memories 12
 Pilot tier: Solo, Team, or Trial with time remaining. Claude subscription (Pro/Max/Team/Enterprise) detected via `claude auth status` and cached for 24 hours.
 
 </details>
+
+### /prd — Generate Product Requirements Documents
+
+**Use `/prd` before `/spec` when requirements are unclear.** It's a strategic thought partner that turns vague ideas into concrete Product Requirements Documents (PRDs) through one-on-one conversation — with optional research, challenging assumptions, exploring trade-offs, and defining scope before you commit to building.
+
+```bash
+pilot
+> /prd "Add real-time notifications for team updates"
+> /prd "We need better onboarding — users drop off after signup"
+```
+
+Choose a research tier at the start: **Quick** (skip), **Standard** (web search for competitors, prior art, best practices), or **Deep** (parallel research agents for comprehensive findings). The conversation produces a PRD with problem statement, core user flows, scope boundaries, and technical context — then offers to hand off directly to `/spec` for implementation. PRDs are saved to `docs/prd/` and visible in the Console's **Requirements** tab.
 
 ### /spec — Spec-Driven Development
 
@@ -186,9 +198,9 @@ pilot
 ```
 
 ```
-Plan  →  Approve  →  Implement (TDD)  →  Verify  →  Done
-                                            ↑         ↓
-                                            └── Loop──┘
+Discuss  →  Plan  →  Approve  →  Implement (TDD)  →  Verify  →  Done
+                                                        ↑         ↓
+                                                        └── Loop──┘
 ```
 
 <img src="docs/img/specifications.png" alt="Pilot Shell Console — Specifications" width="700">

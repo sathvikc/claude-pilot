@@ -20,6 +20,7 @@ const sidebars: SidebarsConfig = {
       items: [
         "workflows/setup-rules",
         "workflows/create-skill",
+        "workflows/prd",
         "workflows/spec",
         "workflows/quick-mode",
       ],

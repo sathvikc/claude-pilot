@@ -6,6 +6,7 @@ import {
   Zap,
   MessageSquare,
   Brain,
+  Lightbulb,
 } from "lucide-react";
 import { useInView } from "@/hooks/use-in-view";
 
@@ -37,16 +38,40 @@ const WorkflowSteps = () => {
             Usage
           </h2>
           <p className="text-muted-foreground text-lg sm:text-xl max-w-3xl mx-auto">
-            Two modes — use <code className="text-primary">/spec</code> instead
-            of Claude Code's plan mode
+            Three modes for every stage of development
           </p>
         </div>
 
-        {/* Two Modes - Side by Side */}
+        {/* Three Modes */}
         <div
           ref={modesRef}
-          className={`grid md:grid-cols-2 gap-6 mb-12 ${modesInView ? "animate-fade-in-up" : "opacity-0"}`}
+          className={`grid md:grid-cols-3 gap-6 mb-12 ${modesInView ? "animate-fade-in-up" : "opacity-0"}`}
         >
+          {/* Requirements Mode */}
+          <div className="group relative rounded-lg p-6 border border-border/50 bg-card hover:border-primary/30 transition-all duration-300">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-11 h-11 bg-primary/10 rounded-xl flex items-center justify-center">
+                <Lightbulb className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">
+                  Requirements
+                  <code className="text-xs text-primary bg-primary/10 px-2 py-0.5 rounded">
+                    /prd
+                  </code>
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                  Define what to build
+                </p>
+              </div>
+            </div>
+            <p className="text-muted-foreground text-sm leading-relaxed">
+              Strategic conversation with optional research. Challenges
+              assumptions, explores trade-offs, and produces a PRD — then
+              hands off to /spec.
+            </p>
+          </div>
+
           {/* Spec-Driven Mode */}
           <div className="group relative rounded-lg p-6 border border-primary/50 bg-card hover:bg-card transition-all duration-300">
             <div className="flex items-center gap-3 mb-4">
@@ -55,14 +80,13 @@ const WorkflowSteps = () => {
               </div>
               <div>
                 <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">
-                  Spec-Driven Mode
+                  Specifications
                   <code className="text-xs text-primary bg-primary/10 px-2 py-0.5 rounded">
                     /spec
                   </code>
                 </h3>
                 <p className="text-sm text-muted-foreground">
-                  Replaces plan mode — for features, bug fixes, and complex
-                  changes
+                  Plan, build, and verify
                 </p>
               </div>
             </div>
@@ -74,7 +98,7 @@ const WorkflowSteps = () => {
           </div>
 
           {/* Quick Mode */}
-          <div className="group relative rounded-lg p-6 border border-border/50 bg-card hover:border-primary/30 hover:bg-card transition-all duration-300">
+          <div className="group relative rounded-lg p-6 border border-border/50 bg-card hover:border-primary/30 transition-all duration-300">
             <div className="flex items-center gap-3 mb-4">
               <div className="w-11 h-11 bg-primary/10 rounded-xl flex items-center justify-center">
                 <Zap className="h-5 w-5 text-primary" />
@@ -84,7 +108,7 @@ const WorkflowSteps = () => {
                   Quick Mode
                 </h3>
                 <p className="text-sm text-muted-foreground">
-                  For small tasks and quick questions
+                  Small tasks and questions
                 </p>
               </div>
             </div>
@@ -173,7 +197,17 @@ const WorkflowSteps = () => {
           <h3 className="text-lg font-semibold text-foreground mb-5 text-center">
             All Commands
           </h3>
-          <div className="grid sm:grid-cols-3 gap-4">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="rounded-xl p-4 border border-border/40 bg-background/30">
+              <div className="flex items-center gap-2 mb-2">
+                <Lightbulb className="h-4 w-4 text-primary" />
+                <code className="text-sm font-medium text-primary">/prd</code>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Generate PRDs with optional research — strategic conversation,
+                scope boundaries, then hand off to /spec.
+              </p>
+            </div>
             <div className="rounded-xl p-4 border border-border/40 bg-background/30">
               <div className="flex items-center gap-2 mb-2">
                 <FileText className="h-4 w-4 text-primary" />

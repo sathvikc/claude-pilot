@@ -32,6 +32,8 @@ model: sonnet
 | Feature Verification | `spec-verify` | Sonnet |
 | Bugfix Verification | `spec-bugfix-verify` | Sonnet |
 
+> **Note:** Implementation and verification default to **Sonnet** for most tiers (Pro, Team, Enterprise, API) where Sonnet 1M is included. **Max plan** users default to **Opus** since Sonnet 1M is not available on Max. Users can override via Console Settings.
+
 ---
 
 ## 0.0 Permission Mode Pre-Flight Check

@@ -104,9 +104,10 @@ class FinalizeStep(BaseStep):
         steps.append(("Codex Plugin (Optional)", "Adversarial review — install as additional Claude plugin"))
         steps.append(("Launch Pilot Shell", "Run 'pilot' in your project folder instead of 'claude'"))
         steps.append(("Pilot Shell Console", "Open the UI in your browser at: http://localhost:41777"))
-        steps.append(("/spec", "Plan, implement & verify features and bug fixes (replaces CC plan mode)"))
         steps.append(("/setup-rules", "Create modular and concise rules for your project codebase"))
         steps.append(("/create-skill", "Create well-structured reusable skills for your workflows"))
+        steps.append(("/prd", "Generate product requirements with optional research before /spec"))
+        steps.append(("/spec", "Plan, implement & verify features and bug fixes (replaces CC plan mode)"))
 
         ui.next_steps(steps)
 

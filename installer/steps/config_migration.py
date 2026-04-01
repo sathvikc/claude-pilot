@@ -11,7 +11,7 @@ import os
 from pathlib import Path
 from typing import Any
 
-CURRENT_CONFIG_VERSION = 8
+CURRENT_CONFIG_VERSION = 9
 
 _STALE_AGENT_KEYS = frozenset(
     {
@@ -73,6 +73,9 @@ def migrate_model_config(config_path: Path | None = None) -> bool:
 
     if version < 8:
         modified = _migration_v8(raw) or modified
+
+    if version < 9:
+        modified = _migration_v9(raw) or modified
 
     if raw.get("_configVersion") != CURRENT_CONFIG_VERSION:
         raw["_configVersion"] = CURRENT_CONFIG_VERSION
@@ -356,6 +359,42 @@ def _migration_v8(raw: dict[str, Any]) -> bool:
     if raw.get("extendedContext") is not True:
         raw["extendedContext"] = True
         modified = True
+
+    return modified
+
+
+def _migration_v9(raw: dict[str, Any]) -> bool:
+    """v8 → v9: Set spec-implement and spec-verify to sonnet for non-Max users.
+
+    Sonnet 1M is not included in the Max plan, so Max users need Opus for
+    1M context. All other tiers (Pro, Team, Enterprise, API) get Sonnet 1M
+    included, so sonnet is the better default (cheaper).
+
+    If subscription type can't be detected, leave settings unchanged (safe
+    opus fallback). This migration runs once — after it, users control
+    their own settings via Console Settings.
+    """
+    sub_type = _get_subscription_type()
+
+    if sub_type is None:
+        return False
+
+    if sub_type == "max":
+        return False
+
+    modified = False
+
+    skills = raw.get("skills")
+    if not isinstance(skills, dict):
+        skills = {}
+        raw["skills"] = skills
+        modified = True
+
+    for skill_name in ("spec-implement", "spec-verify"):
+        current = skills.get(skill_name)
+        if current in ("opus", None):
+            skills[skill_name] = "sonnet"
+            modified = True
 
     return modified
 

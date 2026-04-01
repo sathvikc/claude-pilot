@@ -178,3 +178,31 @@ class TestFinalSuccessPanel:
                 step.run(ctx)
 
                 mock_next_steps.assert_called()
+
+    def test_prd_appears_before_spec_in_next_steps(self):
+        """/prd entry appears before /spec in the next steps panel."""
+        from installer.context import InstallContext
+        from installer.steps.finalize import FinalizeStep
+        from installer.ui import Console
+
+        step = FinalizeStep()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            project_dir = Path(tmpdir)
+            (project_dir / ".claude").mkdir()
+
+            console = Console(non_interactive=True)
+            ctx = InstallContext(
+                project_dir=project_dir,
+                ui=console,
+            )
+
+            with patch.object(console, "next_steps") as mock_next_steps:
+                step.run(ctx)
+
+                steps = mock_next_steps.call_args[0][0]
+                labels = [s[0] for s in steps]
+                assert "/prd" in labels
+                assert "/spec" in labels
+                prd_idx = labels.index("/prd")
+                spec_idx = labels.index("/spec")
+                assert prd_idx < spec_idx

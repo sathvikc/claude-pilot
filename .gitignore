@@ -255,6 +255,7 @@ docs/plans/.annotations/
 docs/license
 docs/video
 docs/slides
+docs/prd
 .install-version
 bun.lock
 

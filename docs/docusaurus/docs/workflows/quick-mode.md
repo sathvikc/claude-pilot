@@ -1,5 +1,5 @@
 ---
-sidebar_position: 4
+sidebar_position: 5
 title: Quick Mode
 description: Direct execution — no plan file, no approval gate
 ---

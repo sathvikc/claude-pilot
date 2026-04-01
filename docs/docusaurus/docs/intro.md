@@ -24,6 +24,9 @@ cd your-project && pilot
 # Create a reusable skill
 > /create-skill
 
+# Generate a PRD with optional research
+> /prd "Add real-time notifications for team updates"
+
 # Plan and build a feature
 > /spec "Add user authentication with OAuth"
 ```
@@ -33,7 +36,7 @@ cd your-project && pilot
 | Category | Highlights |
 |----------|-----------|
 | **[Getting Started](/docs/getting-started/prerequisites)** | Prerequisites, one-command installation |
-| **[Workflows](/docs/workflows/setup-rules)** | `/setup-rules`, `/spec`, Quick Mode, `/create-skill` |
+| **[Workflows](/docs/workflows/setup-rules)** | `/setup-rules`, `/create-skill`, `/prd`, `/spec`, Quick Mode |
 | **[Features](/docs/features/console)** | Pilot Console, statusline, model routing, rules, context optimization, remote control, hooks, extensions, Pilot CLI, MCP servers, language servers, open-source tools |
 
 ## Key Commands
@@ -42,6 +45,7 @@ cd your-project && pilot
 |---------|---------|
 | `pilot` or `ccp` | Start Claude with Pilot enhancements |
 | `/setup-rules` | Generate project rules and MCP docs |
+| `/prd "idea"` | Research → PRD → hand off to `/spec` |
 | `/spec "task"` | Plan → Implement → Verify with TDD |
 | `/create-skill` | Build a reusable skill from any topic |
 

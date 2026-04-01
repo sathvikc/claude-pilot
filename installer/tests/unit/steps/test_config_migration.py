@@ -984,3 +984,206 @@ class TestMigrationV8:
 
         migrated = json.loads(config_path.read_text())
         assert migrated["skills"]["spec"] == "opus"
+
+
+class TestMigrationV9:
+    """Migration v8 → v9: Set spec-implement/spec-verify to sonnet for non-Max users."""
+
+    def test_sets_sonnet_for_pro_users(self) -> None:
+        """Pro users get spec-implement and spec-verify set to sonnet."""
+        from installer.steps.config_migration import _migration_v9
+
+        raw: dict = {
+            "skills": {"spec-implement": "opus", "spec-verify": "opus"},
+        }
+
+        with patch("installer.steps.config_migration._get_subscription_type", return_value="pro"):
+            result = _migration_v9(raw)
+
+        assert result is True
+        assert raw["skills"]["spec-implement"] == "sonnet"
+        assert raw["skills"]["spec-verify"] == "sonnet"
+
+    def test_sets_sonnet_for_team_users(self) -> None:
+        """Team users get spec-implement and spec-verify set to sonnet."""
+        from installer.steps.config_migration import _migration_v9
+
+        raw: dict = {
+            "skills": {"spec-implement": "opus", "spec-verify": "opus"},
+        }
+
+        with patch("installer.steps.config_migration._get_subscription_type", return_value="team"):
+            result = _migration_v9(raw)
+
+        assert result is True
+        assert raw["skills"]["spec-implement"] == "sonnet"
+        assert raw["skills"]["spec-verify"] == "sonnet"
+
+    def test_sets_sonnet_for_enterprise_users(self) -> None:
+        """Enterprise users get spec-implement and spec-verify set to sonnet."""
+        from installer.steps.config_migration import _migration_v9
+
+        raw: dict = {
+            "skills": {"spec-implement": "opus", "spec-verify": "opus"},
+        }
+
+        with patch("installer.steps.config_migration._get_subscription_type", return_value="enterprise"):
+            result = _migration_v9(raw)
+
+        assert result is True
+        assert raw["skills"]["spec-implement"] == "sonnet"
+        assert raw["skills"]["spec-verify"] == "sonnet"
+
+    def test_sets_sonnet_for_api_users(self) -> None:
+        """API-only users get spec-implement and spec-verify set to sonnet."""
+        from installer.steps.config_migration import _migration_v9
+
+        raw: dict = {
+            "skills": {"spec-implement": "opus", "spec-verify": "opus"},
+        }
+
+        with patch("installer.steps.config_migration._get_subscription_type", return_value="api"):
+            result = _migration_v9(raw)
+
+        assert result is True
+        assert raw["skills"]["spec-implement"] == "sonnet"
+        assert raw["skills"]["spec-verify"] == "sonnet"
+
+    def test_preserves_opus_for_max_users(self) -> None:
+        """Max users keep spec-implement and spec-verify as opus."""
+        from installer.steps.config_migration import _migration_v9
+
+        raw: dict = {
+            "skills": {"spec-implement": "opus", "spec-verify": "opus"},
+        }
+
+        with patch("installer.steps.config_migration._get_subscription_type", return_value="max"):
+            result = _migration_v9(raw)
+
+        assert result is False
+        assert raw["skills"]["spec-implement"] == "opus"
+        assert raw["skills"]["spec-verify"] == "opus"
+
+    def test_no_change_when_detection_fails(self) -> None:
+        """When subscription can't be detected, leave settings unchanged."""
+        from installer.steps.config_migration import _migration_v9
+
+        raw: dict = {
+            "skills": {"spec-implement": "opus", "spec-verify": "opus"},
+        }
+
+        with patch("installer.steps.config_migration._get_subscription_type", return_value=None):
+            result = _migration_v9(raw)
+
+        assert result is False
+        assert raw["skills"]["spec-implement"] == "opus"
+        assert raw["skills"]["spec-verify"] == "opus"
+
+    def test_creates_skills_dict_when_missing(self) -> None:
+        """Creates skills dict with sonnet values for non-Max users when skills key absent."""
+        from installer.steps.config_migration import _migration_v9
+
+        raw: dict = {"model": "opus"}
+
+        with patch("installer.steps.config_migration._get_subscription_type", return_value="pro"):
+            result = _migration_v9(raw)
+
+        assert result is True
+        assert raw["skills"]["spec-implement"] == "sonnet"
+        assert raw["skills"]["spec-verify"] == "sonnet"
+
+    def test_already_sonnet_not_modified(self) -> None:
+        """Skills already set to sonnet are not re-modified."""
+        from installer.steps.config_migration import _migration_v9
+
+        raw: dict = {
+            "skills": {"spec-implement": "sonnet", "spec-verify": "sonnet"},
+        }
+
+        with patch("installer.steps.config_migration._get_subscription_type", return_value="pro"):
+            result = _migration_v9(raw)
+
+        assert result is False
+
+    def test_handles_missing_skill_keys_in_existing_dict(self) -> None:
+        """Skill keys absent from existing skills dict are treated as opus (migrated)."""
+        from installer.steps.config_migration import _migration_v9
+
+        raw: dict = {
+            "skills": {"spec": "opus", "spec-plan": "opus"},
+        }
+
+        with patch("installer.steps.config_migration._get_subscription_type", return_value="pro"):
+            result = _migration_v9(raw)
+
+        assert result is True
+        assert raw["skills"]["spec-implement"] == "sonnet"
+        assert raw["skills"]["spec-verify"] == "sonnet"
+        # Other skills unchanged
+        assert raw["skills"]["spec"] == "opus"
+
+    def test_full_migration_for_pro_user(self, tmp_path: Path) -> None:
+        """Full migrate_model_config from v8 sets sonnet for pro user."""
+        from installer.steps.config_migration import CURRENT_CONFIG_VERSION, migrate_model_config
+
+        config_path = tmp_path / "config.json"
+        config_path.write_text(json.dumps({
+            "model": "opus",
+            "skills": {
+                "spec": "opus",
+                "spec-plan": "opus",
+                "spec-implement": "opus",
+                "spec-verify": "opus",
+            },
+            "_configVersion": 8,
+        }))
+
+        with patch("installer.steps.config_migration._get_subscription_type", return_value="pro"):
+            result = migrate_model_config(config_path)
+
+        assert result is True
+        migrated = json.loads(config_path.read_text())
+        assert migrated["skills"]["spec-implement"] == "sonnet"
+        assert migrated["skills"]["spec-verify"] == "sonnet"
+        # Other skills unchanged
+        assert migrated["skills"]["spec"] == "opus"
+        assert migrated["skills"]["spec-plan"] == "opus"
+        assert migrated["_configVersion"] == CURRENT_CONFIG_VERSION
+
+    def test_full_migration_for_max_user_preserves_opus(self, tmp_path: Path) -> None:
+        """Full migrate_model_config from v8 preserves opus for max user."""
+        from installer.steps.config_migration import CURRENT_CONFIG_VERSION, migrate_model_config
+
+        config_path = tmp_path / "config.json"
+        config_path.write_text(json.dumps({
+            "model": "opus",
+            "skills": {
+                "spec": "opus",
+                "spec-plan": "opus",
+                "spec-implement": "opus",
+                "spec-verify": "opus",
+            },
+            "_configVersion": 8,
+        }))
+
+        with patch("installer.steps.config_migration._get_subscription_type", return_value="max"):
+            result = migrate_model_config(config_path)
+
+        assert result is True  # Version bump still counts as modified
+        migrated = json.loads(config_path.read_text())
+        assert migrated["skills"]["spec-implement"] == "opus"
+        assert migrated["skills"]["spec-verify"] == "opus"
+        assert migrated["_configVersion"] == CURRENT_CONFIG_VERSION
+
+    def test_no_spec_bugfix_verify_key_added(self) -> None:
+        """Migration does not add spec-bugfix-verify key (alias handles it)."""
+        from installer.steps.config_migration import _migration_v9
+
+        raw: dict = {
+            "skills": {"spec-implement": "opus", "spec-verify": "opus"},
+        }
+
+        with patch("installer.steps.config_migration._get_subscription_type", return_value="pro"):
+            _migration_v9(raw)
+
+        assert "spec-bugfix-verify" not in raw["skills"]
