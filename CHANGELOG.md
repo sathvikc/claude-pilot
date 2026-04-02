@@ -2,6 +2,13 @@
 
 All notable changes to Pilot Shell will be documented in this file.
 
+## [7.11.2] - 2026-04-02
+
+### Bug Fixes
+
+- Pass chromium argument to playwright-cli install-browser and increase timeout
+- Symlink RTK to ~/.pilot/bin/ for PATH availability on Linux
+
 ## [7.11.1] - 2026-04-02
 
 ### Bug Fixes
