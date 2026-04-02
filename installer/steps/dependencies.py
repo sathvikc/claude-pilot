@@ -191,13 +191,18 @@ def install_rtk() -> bool:
 
     Brew handles install/upgrade in prerequisites (no sudo needed).
     Curl fallback only runs when brew didn't install it.
+    Symlinks to ~/.pilot/bin/ so RTK is on PATH during hook execution.
     """
     if command_exists("rtk"):
+        _symlink_to_pilot_bin("rtk")
         return True
-    return _run_bash_with_retry(
+    if not _run_bash_with_retry(
         "curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh | sh",
         timeout=120,
-    )
+    ):
+        return False
+    _symlink_to_pilot_bin("rtk")
+    return True
 
 
 
