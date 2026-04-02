@@ -199,10 +199,38 @@ class TestFinalSuccessPanel:
             with patch.object(console, "next_steps") as mock_next_steps:
                 step.run(ctx)
 
-                steps = mock_next_steps.call_args[0][0]
-                labels = [s[0] for s in steps]
+                sections = mock_next_steps.call_args[0][0]
+                # Flatten all items across sections
+                labels = [item[0] for _, items in sections for item in items]
                 assert "/prd" in labels
                 assert "/spec" in labels
                 prd_idx = labels.index("/prd")
                 spec_idx = labels.index("/spec")
                 assert prd_idx < spec_idx
+
+    def test_next_steps_has_two_sections(self):
+        """Next steps panel has Getting Started and Workflows sections."""
+        from installer.context import InstallContext
+        from installer.steps.finalize import FinalizeStep
+        from installer.ui import Console
+
+        step = FinalizeStep()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            project_dir = Path(tmpdir)
+            (project_dir / ".claude").mkdir()
+
+            console = Console(non_interactive=True)
+            ctx = InstallContext(
+                project_dir=project_dir,
+                ui=console,
+            )
+
+            with patch.object(console, "next_steps") as mock_next_steps:
+                step.run(ctx)
+
+                sections = mock_next_steps.call_args[0][0]
+                section_titles = [title for title, _ in sections]
+                assert section_titles == ["Getting Started", "Workflows"]
+                # Each section has 4 items
+                for _, items in sections:
+                    assert len(items) == 4

@@ -135,22 +135,6 @@ class Console:
         self._console.print("    From requirement to production-grade code. Planned, tested, verified.", style="muted")
         self._console.print()
 
-        self._console.print("  [bold white]What You're Getting[/bold white]")
-        self._console.print()
-        self._console.print(
-            "    [yellow]📋[/yellow] [bold green]Spec-Driven[/bold green]         [white]— /spec for planning, approval gate, TDD implementation[/white]"
-        )
-        self._console.print(
-            "    [yellow]✅[/yellow] [bold green]Quality Hooks[/bold green]       [white]— TDD enforcer, auto-linting, type checking, LSP integration[/white]"
-        )
-        self._console.print(
-            "    [yellow]📚[/yellow] [bold green]Rules & Skills[/bold green]      [white]— Best practices loaded automatically, fully customizable[/white]"
-        )
-        self._console.print(
-            "    [yellow]🧠[/yellow] [bold green]Persistent Memory[/bold green]   [white]— Context carries across sessions via intelligent hooks[/white]"
-        )
-        self._console.print()
-
         tier = license_info.get("tier") if license_info else None
 
         if tier in ("solo", "team"):
@@ -227,18 +211,27 @@ class Console:
             return
         self._console.print(f"  [muted]ℹ[/muted] [muted]{message}[/muted]")
 
-    def next_steps(self, steps: list[tuple[str, str]]) -> None:
-        """Print a styled next steps guide."""
+    def next_steps(self, sections: list[tuple[str, list[tuple[str, str]]]]) -> None:
+        """Print a styled next steps guide with named sections.
+
+        Args:
+            sections: List of (section_title, items) where items are (title, description) tuples.
+        """
         if self._quiet:
             return
 
         self._console.print()
         self._console.print(Rule("[bold cyan]📋 Next Steps[/bold cyan]", style="cyan"))
-        self._console.print()
 
-        for i, (title, description) in enumerate(steps, 1):
-            self._console.print(f"  [bold magenta]{i}.[/bold magenta] [bold]{title}[/bold]")
-            self._console.print(f"     [muted]{description}[/muted]")
+        step_num = 1
+        for section_title, items in sections:
+            self._console.print()
+            self._console.print(f"  [bold white]{section_title}[/bold white]")
+            self._console.print()
+            for title, description in items:
+                self._console.print(f"  [bold magenta]{step_num}.[/bold magenta] [bold]{title}[/bold]")
+                self._console.print(f"     [muted]{description}[/muted]")
+                step_num += 1
             self._console.print()
 
     @contextmanager

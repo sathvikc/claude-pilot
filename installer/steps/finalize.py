@@ -83,7 +83,7 @@ class FinalizeStep(BaseStep):
             ui.print(f"  [green]✓[/green] Update complete (v{_get_pilot_version()})")
             return
 
-        steps: list[tuple[str, str]] = []
+        getting_started: list[tuple[str, str]] = []
 
         if ctx.config.get("shell_needs_reload"):
             modified = ctx.config.get("modified_shell_configs", [])
@@ -98,18 +98,26 @@ class FinalizeStep(BaseStep):
 
             if reload_cmds:
                 cmd_str = " or ".join(reload_cmds)
-                steps.append(("🔄 Reload shell", f"{cmd_str} (or restart terminal)"))
+                getting_started.append(("🔄 Reload shell", f"{cmd_str} (or restart terminal)"))
 
-        steps.append(("Claude Chrome Extension", "Install and enable for better browser automation"))
-        steps.append(("Codex Plugin (Optional)", "Adversarial review — install as additional Claude plugin"))
-        steps.append(("Launch Pilot Shell", "Run 'pilot' in your project folder instead of 'claude'"))
-        steps.append(("Pilot Shell Console", "Open the UI in your browser at: http://localhost:41777"))
-        steps.append(("/setup-rules", "Create modular and concise rules for your project codebase"))
-        steps.append(("/create-skill", "Create well-structured reusable skills for your workflows"))
-        steps.append(("/prd", "Generate product requirements with optional research before /spec"))
-        steps.append(("/spec", "Plan, implement & verify features and bug fixes (replaces CC plan mode)"))
+        getting_started.extend([
+            ("Claude Chrome Extension", "Install and enable for better browser automation"),
+            ("Codex Plugin (Optional)", "Adversarial review — install as additional Claude plugin"),
+            ("Launch Pilot Shell", "Run 'pilot' in your project folder instead of 'claude'"),
+            ("Pilot Shell Console", "Open the UI in your browser at: http://localhost:41777"),
+        ])
 
-        ui.next_steps(steps)
+        workflows: list[tuple[str, str]] = [
+            ("/setup-rules", "Create modular and concise rules for your project codebase"),
+            ("/create-skill", "Create well-structured reusable skills for your workflows"),
+            ("/prd", "Generate product requirements with optional research before /spec"),
+            ("/spec", "Plan, implement & verify features and bug fixes (replaces CC plan mode)"),
+        ]
+
+        ui.next_steps([
+            ("Getting Started", getting_started),
+            ("Workflows", workflows),
+        ])
 
         if not ui.quiet:
             ui.rule()

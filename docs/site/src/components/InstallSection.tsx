@@ -79,23 +79,26 @@ const InstallSection = () => {
               <Rocket className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
               <div className="text-sm">
                 <p className="text-muted-foreground text-xs">
-                  Run{" "}
                   <code className="text-primary bg-primary/10 px-1.5 py-0.5 rounded">
                     pilot
                   </code>{" "}
-                  to launch{" → "}
+                  launch{" → "}
                   <code className="text-primary bg-primary/10 px-1.5 py-0.5 rounded">
                     /setup-rules
                   </code>{" "}
-                  to generate rules{" → "}
+                  rules{" → "}
+                  <code className="text-primary bg-primary/10 px-1.5 py-0.5 rounded">
+                    /prd
+                  </code>{" "}
+                  requirements{" → "}
                   <code className="text-primary bg-primary/10 px-1.5 py-0.5 rounded">
                     /spec
                   </code>{" "}
-                  to build features{" → "}
+                  features &amp; bugfixes{" → "}
                   <code className="text-primary bg-primary/10 px-1.5 py-0.5 rounded">
                     /create-skill
                   </code>{" "}
-                  to create skills
+                  skills
                 </p>
               </div>
             </div>

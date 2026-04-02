@@ -104,9 +104,6 @@ class VSCodeExtensionsStep(BaseStep):
 
         cli = _get_ide_cli()
         if not cli:
-            if ui:
-                ui.info("No IDE CLI found — extensions will install when IDE connects")
-                ui.print("  [muted]Supported: VS Code, Cursor, Windsurf[/muted]")
             return
 
         if ui:
@@ -135,11 +132,8 @@ class VSCodeExtensionsStep(BaseStep):
             else:
                 failed.append(ext)
 
-        if ui:
-            if installed_count > 0:
-                ui.success(f"Installed {installed_count} extensions")
-            if failed:
-                ui.warning(f"Failed to install: {', '.join(failed)}")
+        if ui and installed_count > 0:
+            ui.success(f"Installed {installed_count} extensions")
 
         ctx.config["installed_extensions"] = installed_count
         ctx.config["failed_extensions"] = failed

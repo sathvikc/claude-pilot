@@ -69,7 +69,7 @@ Investigation-first flow for targeted fixes. Finds the root cause before touchin
 - Full test suite + type checking + lint + build verification
 - Features: unified review sub-agent (optional, enabled by default)
 - Bugfixes: regression test + full suite — no sub-agents needed
-- For UI features: executes the plan's **E2E test scenarios** step-by-step via browser automation (Claude Code Chrome preferred, agent-browser as fallback) — tracks pass/fail per scenario, auto-fixes failures (up to 2 attempts), escalates persistent failures to known issues; results written back to the plan file
+- For UI features: executes the plan's **E2E test scenarios** step-by-step via browser automation (Claude Code Chrome → playwright-cli → agent-browser) — tracks pass/fail per scenario, auto-fixes failures (up to 2 attempts), escalates persistent failures to known issues; results written back to the plan file
 - Auto-fixes findings, loops back until all checks pass
 - After automated checks pass, prompts you to **review code changes** in the Console's Changes tab — enable Review mode, add inline annotations on any diff line (they save automatically), and the agent addresses them before marking the spec as verified
 

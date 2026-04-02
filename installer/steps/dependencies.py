@@ -173,72 +173,32 @@ def install_python_tools() -> bool:
     return True
 
 
-def _is_probe_installed() -> bool:
-    """Check if probe is already installed globally via npm.
-
-    Fast path: check if the binary exists in PATH first (instant).
-    Slow path: fall back to npm list -g only if binary not found.
-    """
-    if command_exists("probe"):
-        return True
-    try:
-        result = subprocess.run(
-            ["npm", "list", "-g", "@probelabs/probe", "--depth=0"],
-            capture_output=True,
-            text=True,
-            timeout=15,
-        )
-        return result.returncode == 0 and "@probelabs/probe" in result.stdout
-    except Exception:
-        return False
-
 
 def install_probe() -> bool:
-    """Install Probe code search tool globally via npm."""
-    if not _is_probe_installed():
-        if not _run_bash_with_retry(
-            npm_global_cmd("npm install -g @probelabs/probe"),
-            timeout=GLOBAL_NPM_INSTALL_TIMEOUT,
-        ):
-            return False
+    """Install or update Probe code search tool globally via npm."""
+    if not _run_bash_with_retry(
+        npm_global_cmd("npm install -g @probelabs/probe"),
+        timeout=GLOBAL_NPM_INSTALL_TIMEOUT,
+    ):
+        return False
 
     _symlink_to_pilot_bin("probe")
     return True
 
 
 def install_rtk() -> bool:
-    """Install or upgrade RTK (Rust Token Killer) CLI.
+    """Install or update RTK (Rust Token Killer) CLI.
 
-    If rtk is managed by Homebrew, skip — brew upgrade in prerequisites handles it.
-    If already installed (binary exists), skip — avoids slow curl on every run.
-    Otherwise, run the curl install script.
+    Brew handles install/upgrade in prerequisites (no sudo needed).
+    Curl fallback only runs when brew didn't install it.
     """
     if command_exists("rtk"):
         return True
-
     return _run_bash_with_retry(
         "curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh | sh",
         timeout=120,
     )
 
-
-def _is_codegraph_installed() -> bool:
-    """Check if codegraph is already installed globally via npm.
-
-    Fast path: check if the binary exists in PATH first (instant).
-    """
-    if command_exists("codegraph"):
-        return True
-    try:
-        result = subprocess.run(
-            ["npm", "list", "-g", "@colbymchenry/codegraph", "--depth=0"],
-            capture_output=True,
-            text=True,
-            timeout=15,
-        )
-        return result.returncode == 0 and "@colbymchenry/codegraph" in result.stdout
-    except Exception:
-        return False
 
 
 def _symlink_to_pilot_bin(binary_name: str) -> None:
@@ -265,74 +225,14 @@ def _symlink_to_pilot_bin(binary_name: str) -> None:
         pass
 
 
-def _get_codegraph_pkg_dir() -> Path | None:
-    """Get the codegraph package directory from npm global root."""
-    try:
-        result = subprocess.run(
-            ["npm", "root", "-g"],
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-        if result.returncode == 0:
-            pkg_dir = Path(result.stdout.strip()) / "@colbymchenry" / "codegraph"
-            if pkg_dir.exists():
-                return pkg_dir
-    except Exception:
-        pass
-    return None
-
-
-def _is_better_sqlite3_compatible() -> bool:
-    """Check if better-sqlite3 native module loads under the current Node."""
-    pkg_dir = _get_codegraph_pkg_dir()
-    if not pkg_dir:
-        return False
-
-    try:
-        result = subprocess.run(
-            ["node", "-e", "require('better-sqlite3')"],
-            capture_output=True,
-            cwd=pkg_dir,
-            timeout=10,
-        )
-        return result.returncode == 0
-    except Exception:
-        return False
-
-
-def _rebuild_better_sqlite3() -> bool:
-    """Rebuild better-sqlite3 native module against the current Node.js version.
-
-    When codegraph is installed with one Node version (e.g. homebrew's) but
-    runs under a different one (e.g. nvm's), the native addon ABI mismatches.
-    Rebuilding ensures the compiled module matches the active Node.
-    Skips if the module already loads correctly.
-    """
-    if _is_better_sqlite3_compatible():
-        return True
-
-    pkg_dir = _get_codegraph_pkg_dir()
-    if not pkg_dir:
-        return False
-
-    return _run_bash_with_retry(
-        npm_global_cmd("npm rebuild better-sqlite3"),
-        cwd=pkg_dir,
-        timeout=GLOBAL_NPM_INSTALL_TIMEOUT,
-    )
-
 
 def install_codegraph() -> bool:
-    """Install CodeGraph for code knowledge graph and structural analysis."""
-    if not _is_codegraph_installed():
-        if not _run_bash_with_retry(
-            npm_global_cmd("npm install -g @colbymchenry/codegraph --force"),
-            timeout=GLOBAL_NPM_INSTALL_TIMEOUT,
-        ):
-            return False
-    else:
-        _rebuild_better_sqlite3()
+    """Install or update CodeGraph for code knowledge graph and structural analysis."""
+    if not _run_bash_with_retry(
+        npm_global_cmd("npm install -g @colbymchenry/codegraph --force"),
+        timeout=GLOBAL_NPM_INSTALL_TIMEOUT,
+    ):
+        return False
 
     _symlink_to_pilot_bin("codegraph")
     return True
@@ -467,11 +367,7 @@ def _is_golangci_lint_installed() -> bool:
 
 
 def install_golangci_lint() -> bool:
-    """Install golangci-lint for comprehensive Go code linting.
-
-    Installs Go via apt first if missing on Linux.
-    Uses the official install script to place the binary in $(go env GOPATH)/bin.
-    """
+    """Install golangci-lint for comprehensive Go code linting."""
     if _is_golangci_lint_installed():
         return True
     if not command_exists("go"):
@@ -485,9 +381,7 @@ def install_golangci_lint() -> bool:
 
 
 def install_ccusage() -> bool:
-    """Install ccusage globally for usage tracking."""
-    if command_exists("ccusage"):
-        return True
+    """Install or update ccusage globally for usage tracking."""
     return _run_bash_with_retry(
         npm_global_cmd("npm install -g ccusage@latest"),
         timeout=GLOBAL_NPM_INSTALL_TIMEOUT,
@@ -548,16 +442,18 @@ def _is_agent_browser_ready() -> bool:
 
 
 def install_agent_browser() -> bool:
-    """Install agent-browser for headless browser automation.
+    """Install or update agent-browser for headless browser automation.
 
     On Linux ARM64, Chrome for Testing has no builds — install system chromium
     via apt instead. On other Linux, use --with-deps. On macOS, plain install.
     """
-    if _is_agent_browser_ready():
-        return True
+    had_browser = _is_agent_browser_ready()
 
     if not _run_bash_with_retry(npm_global_cmd("npm install -g agent-browser")):
         return False
+
+    if had_browser:
+        return True
 
     if is_linux_arm64():
         _run_bash_with_retry("apt-get update -qq && apt-get install -y -qq chromium", timeout=180)
@@ -567,6 +463,62 @@ def install_agent_browser() -> bool:
 
     install_cmd = "agent-browser install --with-deps" if platform.system() == "Linux" else "agent-browser install"
     return _run_bash_with_retry(install_cmd, timeout=300)
+
+
+def _get_playwright_cache_dirs() -> list[Path]:
+    """Get possible Playwright cache directories for the current platform."""
+    import platform as _platform
+
+    dirs = []
+    if _platform.system() == "Darwin":
+        dirs.append(Path.home() / "Library" / "Caches" / "ms-playwright")
+    dirs.append(Path.home() / ".cache" / "ms-playwright")
+    return dirs
+
+
+def _is_playwright_cli_ready() -> bool:
+    """Check if playwright-cli is installed and Chromium is available."""
+    if not command_exists("playwright-cli"):
+        return False
+
+    for cache_dir in _get_playwright_cache_dirs():
+        if not cache_dir.exists():
+            continue
+        for chromium_dir in cache_dir.glob("chromium-*"):
+            if (chromium_dir / "INSTALLATION_COMPLETE").exists():
+                return True
+        for chromium_dir in cache_dir.glob("chromium_headless_shell-*"):
+            if (chromium_dir / "INSTALLATION_COMPLETE").exists():
+                return True
+
+    return False
+
+
+def install_playwright_cli() -> bool:
+    """Install or update playwright-cli for advanced browser automation.
+
+    Always runs npm install to keep up to date. Skips browser download
+    only if Chromium is already present in the Playwright cache.
+    """
+    if not _run_bash_with_retry(
+        npm_global_cmd("npm install -g @playwright/cli@latest"),
+        timeout=GLOBAL_NPM_INSTALL_TIMEOUT,
+    ):
+        return False
+
+    if _is_playwright_cli_ready():
+        return True
+
+    try:
+        result = subprocess.run(
+            ["playwright-cli", "install-browser"],
+            capture_output=True,
+            text=True,
+            timeout=300,
+        )
+        return result.returncode == 0
+    except Exception:
+        return False
 
 
 def _install_with_spinner(ui: Any, name: str, install_fn: Any, *args: Any) -> bool:
@@ -837,6 +789,9 @@ class DependenciesStep(BaseStep):
 
             if _install_with_spinner(ui, "agent-browser (browser automation)", install_agent_browser):
                 installed.append("agent_browser")
+
+            if _install_with_spinner(ui, "playwright-cli (advanced browser automation)", install_playwright_cli):
+                installed.append("playwright_cli")
 
             if _install_with_spinner(ui, "Probe (code search)", install_probe):
                 installed.append("probe")

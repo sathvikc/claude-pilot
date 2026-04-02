@@ -95,7 +95,7 @@ All subsequent work happens inside the worktree directory.
    - Skip TDD for: docs, config, IaC, formatting-only changes
    - **Surprise discovery:** If something contradicts how you expected it to work, check plan's `## Assumptions` section — identify which task numbers are affected and note the invalidated assumption in the plan before continuing.
 5. **Verify tests pass** — run test suite
-6. **Run actual program** — use plan's Runtime Environment. Check port: `lsof -i :<port>`. For browser verification: prefer Claude Code Chrome if available, otherwise agent-browser with `--session "${PILOT_SESSION_ID:-default}"` (see `browser-automation.md`)
+6. **Run actual program** — use plan's Runtime Environment. Check port: `lsof -i :<port>`. For browser verification: prefer Claude Code Chrome if available, then playwright-cli, then agent-browser (see `browser-automation.md` for 3-tier selection)
 7. **Check diagnostics** — zero errors
 8. **Validate Definition of Done** — all criteria from plan
 9. **Self-review:** Completeness? Names clear? YAGNI? Tests verify behavior not implementation?

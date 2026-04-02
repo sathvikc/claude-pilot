@@ -36,9 +36,9 @@ curl -fsSL https://raw.githubusercontent.com/maxritter/pilot-shell/main/install.
 
 **Claude Code writes code fast**. But without structure, it skips tests, loses context, and produces inconsistent results — especially on complex, established codebases where there are real conventions to follow and real regressions to catch. I tried other frameworks. Most of them add complexity — dozens of agents, elaborate scaffolding, thousands of lines of instruction files — but the output doesn't get a lot better. You just burn more tokens, wait longer and have to deal with a more complex setup.
 
-**So I built Pilot Shell**. Instead of adding process on top, it bakes quality into every interaction. Linting, formatting, and type checking run as enforced hooks on every edit. TDD is mandatory, not suggested. Context is preserved across sessions. Every rule exists because I hit a real problem: a bug that slipped through, a regression that shouldn't have happened, a session where Claude cut corners.
+**So I built Pilot Shell**. Spec-driven development plans, implements, and verifies features end-to-end. Context engineering preserves decisions and knowledge across sessions. Quality hooks enforce linting, formatting, type checking, and TDD on every edit — not as suggestions, but as gates. Semantic search and a code knowledge graph give Claude deep codebase understanding. Token optimization cuts costs by 60–90%. A modular extension system with team sharing makes everything reusable. MCP servers and language servers provide real-time diagnostics and library docs. Every component exists because I hit a real problem — and solved it structurally.
 
-**This isn't a vibe coding tool**, it's true agentic engineering with many months of effort put into it. You install it once, run `pilot` in any project, then `/setup-rules` to generate your project rules. Automate your common workflows by invoking the `/create-skill` command. Use `/prd` to brainstorm and turn vague ideas into clear requirements, then start a `/spec` task and let it run — when it's done, the work is tested, verified and ready to ship.
+**This isn't a vibe coding tool**, it's agentic engineering that produces production-grade results. You install it once, run `pilot` in any project, then `/setup-rules` to generate your project rules. Use `/prd` to brainstorm and turn vague ideas into clear requirements, then `/spec` to plan, implement, and verify — when it's done, the work is tested and ready to ship. As patterns emerge, `/create-skill` captures your workflows so they're reusable across projects.
 
 ---
 
@@ -50,7 +50,7 @@ curl -fsSL https://raw.githubusercontent.com/maxritter/pilot-shell/main/install.
 
 **Claude Subscription:** Solo developers should choose [Max 5x](https://claude.com/pricing) for moderate usage or [Max 20x](https://claude.com/pricing) for heavy usage. Teams should use [Team Premium](https://claude.com/pricing) (6.25x usage per member, SSO, admin tools, billing management). Companies with stricter compliance or procurement requirements should use [Enterprise](https://claude.com/pricing) (API based pricing applies per usage).
 
-**Chrome Extension (Recommended):** Install the [Claude Code Chrome extension](https://code.claude.com/docs/en/chrome) for browser automation and E2E testing. Pilot automatically detects it and prefers it over [agent-browser](https://agent-browser.dev/). In environments where the extension can't be installed (dev containers, headless CI), Pilot falls back to [agent-browser](https://agent-browser.dev/) automatically.
+**Chrome Extension (Recommended):** Install the [Claude Code Chrome extension](https://code.claude.com/docs/en/chrome) for browser automation and E2E testing. Pilot automatically detects it and uses it as the preferred tool. When Chrome isn't available, Pilot falls back to [playwright-cli](https://github.com/microsoft/playwright-cli) (reliable element targeting, persistent sessions, tracing) or [agent-browser](https://agent-browser.dev/) (lightweight, fast startup).
 
 **Codex Plugin (Optional):** Install the [Codex plugin](https://github.com/openai/codex-plugin-cc) for adversarial code review powered by OpenAI Codex. When enabled in Console Settings, Codex provides an independent second opinion during `/spec` planning and verification phases. A [ChatGPT Plus](https://chatgpt.com/#pricing) subscription ($20/mo) covers the Codex API usage needed for code reviews.
 
@@ -72,7 +72,7 @@ Installs globally on macOS, Linux, and Windows (WSL2). All tools and rules go to
 1. **Prerequisites** — Checks/installs Homebrew, Node.js, Python 3.12+, uv, git, jq
 2. **Claude files** — Sets up `~/.claude/` plugin — rules, commands, hooks, MCP servers
 3. **Config files** — Creates `.nvmrc` and project config
-4. **Dependencies** — Installs Probe, RTK, CodeGraph, [agent-browser](https://agent-browser.dev/), language servers
+4. **Dependencies** — Installs Probe, RTK, CodeGraph, [playwright-cli](https://github.com/microsoft/playwright-cli), [agent-browser](https://agent-browser.dev/), language servers
 5. **Shell integration** — Auto-configures bash, fish, and zsh with `pilot` alias
 6. **VS Code extensions** — Installs recommended extensions for your stack
 7. **Finalize** — Success message with next steps
@@ -130,11 +130,43 @@ A local web dashboard with different views and real-time notifications when Clau
 
 </details>
 
-**Visual Plan Annotation:** When a spec plan is pending approval, the Specifications tab defaults to Annotate mode. Select any text or click **+** on any block to write a note — annotations save automatically. The agent reads them at the next checkpoint, revises the plan accordingly, and asks for approval again.
+<details>
+<summary><b>Visual plan annotation</b></summary>
 
-**Spec Sharing:** Click **Share with Teammate** to generate a compressed link — the entire spec and annotations are compressed into the URL fragment, so no data is transmitted to any server. Your colleague opens it in their Console (or on pilot-shell.com), sees your annotations, adds their own feedback, and sends it back. Click **Receive Feedback** to import their annotations with per-item accept/reject controls. Everything works locally — no cloud service required.
+When a spec plan is pending approval, the Specifications tab defaults to **Annotate mode**. Two ways to annotate:
 
-**Code Review:** After a spec completes all automated checks, the agent prompts you to review the changes in the Changes tab. Enable Review mode, click **+** on any diff line to add an inline annotation — they save automatically. The agent reads every annotation and addresses them before marking the spec as verified.
+- **Select text** — highlight any passage and write a note via the floating toolbar
+- **Click +** — hover over any block to add a note without selecting text
+
+Annotations save automatically. The agent reads them at the next checkpoint, revises the plan accordingly, and asks for approval again. This turns plan review into a conversation — you mark what needs changing, the agent addresses it, you review again.
+
+</details>
+
+<details>
+<summary><b>Spec sharing</b></summary>
+
+Share specs and requirements with teammates for async review — no cloud service required:
+
+1. **Share** — Click **Share with Teammate** to generate a compressed link. The entire spec and annotations are encoded into the URL fragment, so no data is transmitted to any server.
+2. **Review** — Your colleague opens the link in their Console (or on pilot-shell.com), sees your annotations, and adds their own feedback.
+3. **Import** — Click **Receive Feedback** to import their annotations. Each annotation has per-item **accept/reject** controls — accepted annotations merge into your plan, rejected ones are removed from both the sidebar and inline markers.
+
+Everything works locally. The link is self-contained — the recipient doesn't need access to your machine, repository, or any shared service.
+
+</details>
+
+<details>
+<summary><b>Code review</b></summary>
+
+After a spec completes all automated checks, the agent prompts you to review the changes in the **Changes** tab:
+
+1. **Enable Review mode** — toggle it in the Changes tab header
+2. **Annotate diffs** — click **+** on any diff line to add an inline note. Annotations save automatically.
+3. **Agent addresses feedback** — the agent reads every annotation and resolves them before marking the spec as verified
+
+This gives you a final quality gate with direct, line-level feedback — the same workflow as a PR review, but before the code ever leaves your machine.
+
+</details>
 
 ### Status Line
 
@@ -189,7 +221,7 @@ Choose a research tier at the start: **Quick** (skip), **Standard** (web search 
 
 **`/spec` replaces Claude Code's built-in plan mode** (Shift+Tab). It provides a complete planning workflow with TDD, verification, and code review — use `/spec` instead of plan mode for all planned work.
 
-Features, bug fixes, refactoring — describe it and `/spec` handles the rest. Auto-detects whether it's a feature or a bugfix and adapts the workflow.
+Features, bug fixes, refactoring — describe it and `/spec` handles the rest. Auto-detects whether it's a feature or a bugfix and adapts the workflow. Specs are saved to `docs/plans/` and visible in the Console's **Specification** tab.
 
 ```bash
 pilot
@@ -416,7 +448,7 @@ Pilot Shell is source-available under a commercial license. See the [LICENSE](LI
 | :------------- | :---- | :-------------------------------------------------------------------------------------------------------------- |
 | **Solo**       | 1     | All features, continuous updates, community support via [GitHub Issues][gh-issues]                              |
 | **Team**       | Multi | Solo + extension sharing, seat management, priority support, team onboarding                                    |
-| **Enterprise** | 100+  | Team + full source code access (launcher, console, all components), fork and modify rights, dedicated support   |
+| **Enterprise** | 100+  | Team + full source code access (launcher, console, all components), dedicated support   |
 
 A **free 7-day trial** starts automatically on install — full features, no license required. All plans work across multiple personal machines — one subscription, all your devices.
 

@@ -2,23 +2,39 @@
 
 **MANDATORY for E2E testing of any app with a UI.** API tests verify backend; browser automation verifies what the user sees.
 
-### Tool Selection: Claude Code Chrome vs agent-browser
+### Tool Selection: 3-Tier Priority
 
-**Claude Code Chrome (`mcp__claude-in-chrome__*`) is the preferred browser automation tool.** It provides richer visual context, better interaction reliability, and direct access to the user's browser.
+Each tool has a distinct strength. **Quality and reliability are the priority** — use the tool that gives the most accurate verification for the situation.
 
-**Detection:** Check your available/deferred tools list for `mcp__claude-in-chrome__*` entries (e.g., `mcp__claude-in-chrome__navigate`, `mcp__claude-in-chrome__read_page`).
+| Priority | Tool | Best For | Key Advantage |
+|----------|------|----------|---------------|
+| **1st** | Claude Code Chrome | Quick E2E, visual verification | Shares existing browser session, natural language `find` |
+| **2nd** | playwright-cli | Thorough E2E, complex workflows | Most reliable element targeting, persistent sessions, network mocking, tracing, multi-tab |
+| **3rd** | agent-browser | Lightweight checks, simple interactions | Concise output, fast startup |
 
-| Chrome Available? | Action |
-|-------------------|--------|
-| **Yes** (`mcp__claude-in-chrome__*` tools visible) | Use Claude Code Chrome |
-| **No** | Output warning below, then fall back to agent-browser |
+### When to Override Priority
 
-**Fallback warning (output when Chrome is not available):**
+| Situation | Use Instead |
+|-----------|-------------|
+| Need network mocking, tracing, or video | playwright-cli |
+| Multi-tab workflow | playwright-cli |
+| Need persistent browser profile | playwright-cli (`--persistent`) |
+| Auth flow testing (Clerk, OAuth) | playwright-cli (most reliable) or agent-browser |
+| Already logged in, quick visual check | Claude Code Chrome |
+| Simple click-and-verify | agent-browser (lightweight) |
+
+### Detection
+
+1. **Claude Code Chrome:** Check your available/deferred tools list for `mcp__claude-in-chrome__*` entries.
+2. **agent-browser:** `which agent-browser` (installed by Pilot Shell).
+3. **playwright-cli:** `which playwright-cli` (installed by Pilot Shell).
+
+**Fallback warning (output when neither Chrome nor agent-browser is available):**
 
 ```
-⚠️ Claude Code Chrome is not enabled. For better browser automation,
-install the Claude Code Chrome extension from the Chrome Web Store.
-Falling back to agent-browser.
+⚠️ Neither Claude Code Chrome nor agent-browser is available.
+Install the Chrome extension or run the Pilot Shell installer.
+Falling back to playwright-cli.
 ```
 
 ---
@@ -55,40 +71,34 @@ Load tools via `ToolSearch(query="select:mcp__claude-in-chrome__<tool_name>")` b
 
 ---
 
-### agent-browser (Fallback)
+### agent-browser (Lightweight Fallback)
 
-**Only use when Claude Code Chrome is not available.** All instructions below apply to the agent-browser fallback.
+**Best for simple interactions and quick checks.** Concise output (200-400 tokens/page), fast startup.
 
 #### Session Isolation (Parallel Workflows)
 
-**MANDATORY when running inside `/spec` or any parallel workflow.** Without session isolation, parallel agents share the default browser instance and overwrite each other's state (wrong pages, failed snapshots, broken interactions).
+**MANDATORY when running inside `/spec` or any parallel workflow.** Without session isolation, parallel agents share the default browser instance and overwrite each other's state.
 
 **Use `--session $PILOT_SESSION_ID` on ALL `agent-browser` commands:**
 
 ```bash
-# Resolve session name once at the start of E2E testing
 AB_SESSION="${PILOT_SESSION_ID:-default}"
 
-# All subsequent commands use --session
 agent-browser --session "$AB_SESSION" open <url>
 agent-browser --session "$AB_SESSION" snapshot -i
 agent-browser --session "$AB_SESSION" click @e1
-agent-browser --session "$AB_SESSION" close       # Always close when done
+agent-browser --session "$AB_SESSION" close
 ```
-
-**Why:** Each `/spec` session gets a unique `PILOT_SESSION_ID`. The `--session` flag gives each session its own isolated browser instance, preventing parallel workflows from interfering with each other.
-
-**NEVER use bare `agent-browser` commands (without `--session`) during `/spec` workflows.** This causes cross-session interference that is extremely difficult to debug.
 
 #### Core Workflow
 
 ```bash
 AB_SESSION="${PILOT_SESSION_ID:-default}"
 agent-browser --session "$AB_SESSION" open <url>        # 1. Open browser
-agent-browser --session "$AB_SESSION" snapshot -i       # 2. Get interactive elements with refs (@e1, @e2, ...)
+agent-browser --session "$AB_SESSION" snapshot -i       # 2. Interactive elements only
 agent-browser --session "$AB_SESSION" fill @e1 "text"   # 3. Interact using @refs
 agent-browser --session "$AB_SESSION" click @e2
-agent-browser --session "$AB_SESSION" snapshot -i       # 4. Re-snapshot to verify result
+agent-browser --session "$AB_SESSION" snapshot -i       # 4. Re-snapshot to verify
 agent-browser --session "$AB_SESSION" close             # 5. Clean up
 ```
 
@@ -127,20 +137,53 @@ agent-browser --session "$AB_SESSION" close             # 5. Clean up
 
 **Browser config:** `--headed`, `--color-scheme dark`, `--auto-connect` (attach to user's Chrome)
 
-#### Parallel Sessions
-
-```bash
-agent-browser --session site1 open https://site-a.com
-agent-browser --session site2 open https://site-b.com
-agent-browser session list
-agent-browser close --all
-```
-
-**In `/spec` workflows**, the session name is always `$PILOT_SESSION_ID` — never invent custom names. This ensures each parallel spec run is fully isolated.
-
 #### Ref Lifecycle
 
 Refs (`@e1`, `@e2`, etc.) are invalidated when the page changes. Always re-snapshot after clicking links/buttons that navigate, form submissions, or dynamic content loading.
+
+---
+
+### playwright-cli (Complex Automation)
+
+**Use when you need:** persistent browser sessions, network mocking/interception, tracing, video recording, multi-tab workflows, or storage management (cookies, localStorage).
+
+See the `playwright-cli` skill (`/playwright-cli`) for the full command reference.
+
+#### Core Workflow
+
+```bash
+playwright-cli open <url>          # 1. Open browser
+playwright-cli snapshot            # 2. Get accessibility tree with refs
+playwright-cli fill e1 "text"      # 3. Interact using refs (bare, no @)
+playwright-cli click e2
+playwright-cli snapshot            # 4. Re-snapshot to verify
+playwright-cli close               # 5. Clean up
+```
+
+**Key differences from agent-browser:** Refs are bare numbers (`e1` not `@e1`). Snapshots are saved to files. Use `--persistent` for sessions that survive restarts.
+
+#### Session Isolation
+
+```bash
+playwright-cli -s=$PILOT_SESSION_ID open <url>
+playwright-cli -s=$PILOT_SESSION_ID click e1
+playwright-cli -s=$PILOT_SESSION_ID close
+```
+
+#### Unique Capabilities (not in agent-browser)
+
+| Capability | Command |
+|-----------|---------|
+| Persistent profile | `open --persistent` or `open --profile=/path` |
+| Network mocking | `route "**/*.jpg" --status=404` |
+| Tracing | `tracing-start` / `tracing-stop` |
+| Video recording | `video-start` / `video-stop output.webm` |
+| Cookie management | `cookie-list`, `cookie-set`, `cookie-clear` |
+| localStorage | `localstorage-get key`, `localstorage-set key val` |
+| Run Playwright code | `run-code "async page => ..."` |
+| Console/Network logs | `console`, `network` |
+
+---
 
 ### E2E Checklist
 

@@ -192,24 +192,11 @@ class TestProbeInstall:
 
         assert callable(install_probe)
 
-    @patch("installer.steps.dependencies._is_probe_installed")
-    def test_install_probe_skips_if_already_installed(self, mock_installed):
-        """install_probe skips installation if already installed."""
-        from installer.steps.dependencies import install_probe
-
-        mock_installed.return_value = True
-
-        result = install_probe()
-
-        assert result is True
-
     @patch("installer.steps.dependencies._run_bash_with_retry")
-    @patch("installer.steps.dependencies._is_probe_installed")
-    def test_install_probe_runs_npm_install(self, mock_installed, mock_bash):
-        """install_probe runs npm install when not installed."""
+    def test_install_probe_always_runs_npm_install(self, mock_bash):
+        """install_probe always runs npm install to update to latest."""
         from installer.steps.dependencies import install_probe
 
-        mock_installed.return_value = False
         mock_bash.return_value = True
 
         result = install_probe()
@@ -220,8 +207,7 @@ class TestProbeInstall:
         assert "@probelabs/probe" in call_args
 
     @patch("installer.steps.dependencies._run_bash_with_retry", return_value=True)
-    @patch("installer.steps.dependencies._is_probe_installed", return_value=False)
-    def test_install_probe_uses_longer_timeout(self, _mock_installed, mock_bash):
+    def test_install_probe_uses_longer_timeout(self, mock_bash):
         """Probe install gets a longer timeout because npm downloads can be slow."""
         from installer.steps.dependencies import GLOBAL_NPM_INSTALL_TIMEOUT, install_probe
 
@@ -231,12 +217,10 @@ class TestProbeInstall:
         assert mock_bash.call_args.kwargs["timeout"] == GLOBAL_NPM_INSTALL_TIMEOUT
 
     @patch("installer.steps.dependencies._run_bash_with_retry")
-    @patch("installer.steps.dependencies._is_probe_installed")
-    def test_install_probe_returns_false_on_failure(self, mock_installed, mock_bash):
+    def test_install_probe_returns_false_on_failure(self, mock_bash):
         """install_probe returns False when npm install fails."""
         from installer.steps.dependencies import install_probe
 
-        mock_installed.return_value = False
         mock_bash.return_value = False
 
         result = install_probe()
@@ -254,19 +238,16 @@ class TestInstallRtk:
         assert callable(install_rtk)
 
     @patch("installer.steps.dependencies.command_exists", return_value=True)
-    def test_install_rtk_skips_if_already_installed(self, _mock_cmd):
-        """install_rtk skips curl install when rtk binary exists."""
+    def test_install_rtk_skips_when_already_installed(self, _mock_cmd):
+        """install_rtk returns True without curl when rtk already exists (e.g., via brew)."""
         from installer.steps.dependencies import install_rtk
 
-        with patch("installer.steps.dependencies._run_bash_with_retry") as mock_bash:
-            result = install_rtk()
-
+        result = install_rtk()
         assert result is True
-        mock_bash.assert_not_called()
 
     @patch("installer.steps.dependencies.command_exists", return_value=False)
-    def test_install_rtk_runs_curl_when_not_installed(self, _mock_cmd):
-        """install_rtk runs curl installer when binary not found."""
+    def test_install_rtk_runs_curl_fallback(self, _mock_cmd):
+        """install_rtk runs curl installer when rtk not found."""
         from installer.steps.dependencies import install_rtk
 
         with patch("installer.steps.dependencies._run_bash_with_retry", return_value=True) as mock_bash:
@@ -299,24 +280,8 @@ class TestInstallCodegraph:
         assert callable(install_codegraph)
 
     @patch("installer.steps.dependencies._symlink_to_pilot_bin")
-    @patch("installer.steps.dependencies._rebuild_better_sqlite3", return_value=True)
-    @patch("installer.steps.dependencies._is_codegraph_installed", return_value=True)
-    def test_install_codegraph_skips_npm_if_already_installed(self, _mock_check, mock_rebuild, mock_symlink):
-        """install_codegraph skips npm, rebuilds better-sqlite3, creates symlink."""
-        from installer.steps.dependencies import install_codegraph
-
-        with patch("installer.steps.dependencies._run_bash_with_retry") as mock_bash:
-            result = install_codegraph()
-
-        assert result is True
-        mock_bash.assert_not_called()
-        mock_rebuild.assert_called_once()
-        mock_symlink.assert_called_once_with("codegraph")
-
-    @patch("installer.steps.dependencies._symlink_to_pilot_bin")
-    @patch("installer.steps.dependencies._is_codegraph_installed", return_value=False)
-    def test_install_codegraph_runs_npm_when_not_installed(self, _mock_check, mock_symlink):
-        """install_codegraph runs npm install and creates symlink."""
+    def test_install_codegraph_always_runs_npm_install(self, mock_symlink):
+        """install_codegraph always runs npm install to update to latest."""
         from installer.steps.dependencies import install_codegraph
 
         with patch("installer.steps.dependencies._run_bash_with_retry", return_value=True) as mock_bash:
@@ -330,8 +295,7 @@ class TestInstallCodegraph:
         mock_symlink.assert_called_once_with("codegraph")
 
     @patch("installer.steps.dependencies._symlink_to_pilot_bin")
-    @patch("installer.steps.dependencies._is_codegraph_installed", return_value=False)
-    def test_install_codegraph_uses_longer_timeout(self, _mock_check, mock_symlink):
+    def test_install_codegraph_uses_longer_timeout(self, mock_symlink):
         """CodeGraph install gets a longer timeout because it can build native modules."""
         from installer.steps.dependencies import GLOBAL_NPM_INSTALL_TIMEOUT, install_codegraph
 
@@ -343,8 +307,7 @@ class TestInstallCodegraph:
         mock_symlink.assert_called_once_with("codegraph")
 
     @patch("installer.steps.dependencies._symlink_to_pilot_bin")
-    @patch("installer.steps.dependencies._is_codegraph_installed", return_value=False)
-    def test_install_codegraph_returns_false_when_npm_fails(self, _mock_check, _mock_symlink):
+    def test_install_codegraph_returns_false_when_npm_fails(self, _mock_symlink):
         """install_codegraph returns False when npm install fails."""
         from installer.steps.dependencies import install_codegraph
 
@@ -976,22 +939,31 @@ class TestPrecacheNpxMcpServers:
 
             mock_run.assert_not_called()
 
-    @patch("installer.steps.dependencies.command_exists", return_value=False)
-    @patch("installer.steps.dependencies._run_bash_with_retry", return_value=True)
-    def test_install_ccusage_installs_when_not_present(self, _mock_run, _mock_cmd):
-        """install_ccusage runs npm install when binary not found."""
-        from installer.steps.dependencies import install_ccusage
-
-        result = install_ccusage()
-        assert result is True
-
     @patch("installer.steps.dependencies.command_exists", return_value=True)
     def test_install_ccusage_skips_when_already_installed(self, _mock_cmd):
-        """install_ccusage returns True without installing when already present."""
+        """install_ccusage returns True without npm when already exists (e.g., via brew)."""
         from installer.steps.dependencies import install_ccusage
 
         result = install_ccusage()
         assert result is True
+
+    @patch("installer.steps.dependencies.command_exists", return_value=False)
+    @patch("installer.steps.dependencies._run_bash_with_retry", return_value=True)
+    def test_install_ccusage_runs_npm_fallback(self, _mock_run, _mock_cmd):
+        """install_ccusage runs npm install when not found."""
+        from installer.steps.dependencies import install_ccusage
+
+        result = install_ccusage()
+        assert result is True
+
+    @patch("installer.steps.dependencies.command_exists", return_value=False)
+    @patch("installer.steps.dependencies._run_bash_with_retry", return_value=False)
+    def test_install_ccusage_returns_false_on_failure(self, _mock_run, _mock_cmd):
+        """install_ccusage returns False when npm install fails."""
+        from installer.steps.dependencies import install_ccusage
+
+        result = install_ccusage()
+        assert result is False
 
 
 class TestMacosArm64Detection:

@@ -27,7 +27,7 @@ Rules load automatically at session start — they're enforced standards, not su
 ### Tools (3 rules)
 
 - `cli-tools.md` — Pilot CLI, Probe code search, RTK token optimization
-- `browser-automation.md` — Browser automation for E2E UI testing (Claude Code Chrome preferred, agent-browser fallback)
+- `browser-automation.md` — Browser automation for E2E UI testing (Chrome → playwright-cli → agent-browser)
 - `mcp-servers.md` — MCP server reference and tool selection guidance
 
 ## Coding Standards — Activated by File Type

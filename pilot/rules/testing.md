@@ -73,9 +73,11 @@ npm test -- --silent                          # Jest/Vitest
 
 Mock at module level (where imported, not where defined). Test > 1s = likely unmocked I/O.
 
-### E2E: Frontend/UI (MANDATORY for web apps)
+### ⛔ E2E: Frontend/UI (MANDATORY for web apps)
 
-Use browser automation for all E2E verification. **Claude Code Chrome is preferred** — fall back to agent-browser only when Chrome is not available. See `browser-automation.md` for detection and workflow details.
+**Any change that affects what the user sees MUST be verified with browser automation** — in both `/spec` and quick mode. Unit tests do not catch layout bugs, stale bundles, or wiring issues.
+
+**Tool priority:** Claude Code Chrome (preferred) → playwright-cli (thorough) → agent-browser (lightweight). See `browser-automation.md` for detection and workflow. See `verification.md` for the quick-mode procedure.
 
 ### ⛔ Mock Audit on Dependency Changes
 

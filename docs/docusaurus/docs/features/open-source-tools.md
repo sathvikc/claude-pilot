@@ -67,8 +67,9 @@ Pilot Shell installs the following open-source tools during setup. Each tool is 
 
 | Tool | Purpose | License |
 |------|---------|---------|
-| [agent-browser](https://github.com/vercel-labs/agent-browser) | Browser automation and E2E testing | Apache-2.0 |
-| [Chrome for Testing](https://developer.chrome.com/blog/chrome-for-testing/) | Headless browser engine (via agent-browser) | BSD-3-Clause |
+| [playwright-cli](https://github.com/microsoft/playwright-cli) | Browser automation — persistent sessions, tracing, network mocking | Apache-2.0 |
+| [agent-browser](https://github.com/vercel-labs/agent-browser) | Browser automation — lightweight, fast startup | Apache-2.0 |
+| [Chrome for Testing](https://developer.chrome.com/blog/chrome-for-testing/) | Headless browser engine (via playwright-cli / agent-browser) | BSD-3-Clause |
 | [hypothesis](https://github.com/HypothesisWorks/hypothesis) | Property-based testing (Python) | MPL-2.0 |
 | [fast-check](https://github.com/dubzzz/fast-check) | Property-based testing (TypeScript) | MIT |
 

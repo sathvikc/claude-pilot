@@ -307,14 +307,19 @@ List what was **NOT** verified and why. Include in the verification report (Step
 
 #### 3.9a: Resolve Browser Tool
 
-**Detect Claude Code Chrome:** Check if `mcp__claude-in-chrome__*` tools are in your available/deferred tools list.
+**3-tier priority** (see `browser-automation.md`): Chrome → playwright-cli → agent-browser.
 
-- **If available:** Use Claude Code Chrome for all E2E steps below. Load tools via `ToolSearch(query="select:mcp__claude-in-chrome__<tool>")`. No session isolation needed.
-- **If NOT available:** Output the fallback warning (see `browser-automation.md`), then use agent-browser:
+1. **Claude Code Chrome:** Check if `mcp__claude-in-chrome__*` tools are in your available/deferred tools list. If available, use Chrome for all E2E steps below. Load tools via `ToolSearch(query="select:mcp__claude-in-chrome__<tool>")`. No session isolation needed.
 
+2. **playwright-cli (preferred CLI fallback):** If Chrome is not available, use playwright-cli for thorough E2E — it provides the most reliable element targeting.
+```bash
+playwright-cli -s=$PILOT_SESSION_ID open <url>
+```
+
+3. **agent-browser (lightweight fallback):** If neither Chrome nor playwright-cli is available:
 ```bash
 AB_SESSION="${PILOT_SESSION_ID:-default}"
-# ALL agent-browser commands use: --session "$AB_SESSION"
+agent-browser --session "$AB_SESSION" open <url>
 ```
 
 #### 3.9b: Check for Structured Scenarios
@@ -348,7 +353,8 @@ TaskCreate(subject="TS-NNN: [name]", description="[priority] | [preconditions]")
 1. `TaskUpdate → in_progress`
 2. Execute each step using the resolved browser tool:
    - **Chrome:** `navigate` to open pages, `read_page` after interactions, `computer`/`form_input` per the step's action
-   - **agent-browser (fallback):** `open`/`goto` to navigate, `snapshot -i` after interactions, `click`/`fill`/`press` per the step's action
+   - **playwright-cli:** `open`/`goto` to navigate, `snapshot` after interactions, `click`/`fill`/`press` per the step's action (refs are bare: `e1` not `@e1`)
+   - **agent-browser:** `open`/`goto` to navigate, `snapshot -i` after interactions, `click`/`fill`/`press` per the step's action (refs use `@`: `@e1`)
    - Verify the expected result by reading the page output
 3. **PASS:** All steps match expected results → `TaskUpdate → completed`, note `TS-NNN: PASS`
 4. **FAIL:** Step result doesn't match expected:
@@ -377,6 +383,7 @@ After all scenarios are executed, append to the plan file:
 
 ```bash
 # Chrome: no explicit close needed (tab remains open)
+# playwright-cli: playwright-cli -s=$PILOT_SESSION_ID close
 # agent-browser: agent-browser --session "$AB_SESSION" close
 ```
 

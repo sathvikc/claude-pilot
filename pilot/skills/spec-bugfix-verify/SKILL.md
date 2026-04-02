@@ -66,25 +66,29 @@ Check whether the plan has a `## Verification Scenario` section (only present fo
 
 **If Verification Scenario exists:**
 
-**Resolve browser tool:** Check if `mcp__claude-in-chrome__*` tools are available. If yes, use Chrome. If not, output fallback warning (see `browser-automation.md`) and use agent-browser with session isolation:
+**Resolve browser tool (3-tier):** Check if `mcp__claude-in-chrome__*` tools are available → use Chrome. Otherwise use playwright-cli (preferred CLI) or agent-browser (lightweight). See `browser-automation.md`.
 
 ```bash
-# agent-browser fallback only:
+# playwright-cli:
+playwright-cli -s=$PILOT_SESSION_ID open <url>
+# agent-browser fallback:
 AB_SESSION="${PILOT_SESSION_ID:-default}"
+agent-browser --session "$AB_SESSION" open <url>
 ```
 
 1. Execute each step from the scenario using the resolved browser tool
    - **Chrome:** `navigate`, `read_page`, `computer`/`form_input`
-   - **agent-browser (fallback):** `agent-browser --session "$AB_SESSION"` commands
+   - **playwright-cli:** `open`/`goto`, `snapshot`, `click`/`fill` (bare refs: `e1`)
+   - **agent-browser:** `open`/`goto`, `snapshot -i`, `click`/`fill` (refs: `@e1`)
 2. Verify the expected result for each step (read page after each interaction)
-3. **PASS:** Scenario confirms fix works — close browser (agent-browser only), proceed to Final
+3. **PASS:** Scenario confirms fix works — close browser (CLI tools only), proceed to Final
 4. **FAIL (attempt 1):** Analyze root cause, implement fix, re-run tests, re-execute scenario
 5. **FAIL (attempt 2):** Implement second fix, re-run tests, re-execute scenario
 6. **FAIL after 2 attempts:** The bug is not fully fixed — set `Status: PENDING`, increment `Iterations`, invoke `Skill(skill='spec-implement', args='<plan-path>')`. Do not proceed to VERIFIED.
 
 ```bash
-# agent-browser fallback only:
-agent-browser --session "$AB_SESSION" close
+# playwright-cli: playwright-cli -s=$PILOT_SESSION_ID close
+# agent-browser: agent-browser --session "$AB_SESSION" close
 ```
 
 ---

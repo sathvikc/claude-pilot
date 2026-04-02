@@ -25,16 +25,16 @@ Run from any directory — it installs globally to `~/.pilot/` and `~/.claude/`.
 | 1 | Prerequisites | Checks/installs Homebrew, Node.js, Python 3.12+, uv, git, jq |
 | 2 | Claude files | Sets up `~/.claude/` plugin — rules, commands, hooks, MCP servers |
 | 3 | Config files | Creates `.nvmrc` and project config |
-| 4 | Dependencies | Installs Probe, RTK, CodeGraph, agent-browser (fallback), language servers |
+| 4 | Dependencies | Installs Probe, RTK, CodeGraph, playwright-cli, agent-browser, language servers |
 | 5 | Shell integration | Auto-configures bash, fish, and zsh with the `pilot` alias |
 | 6 | VS Code extensions | Installs recommended extensions for your language stack |
 | 7 | Finalize | Success message with next steps |
 
 ## Chrome Extension (Recommended)
 
-For the best browser automation and E2E testing experience, install the [Claude Code Chrome extension](https://code.claude.com/docs/en/chrome). It provides richer visual context and more reliable interactions than the agent-browser fallback.
+For the best browser automation and E2E testing experience, install the [Claude Code Chrome extension](https://code.claude.com/docs/en/chrome). It provides richer visual context and direct access to your existing browser sessions.
 
-Pilot automatically detects the Chrome extension and uses it when available. In environments where the extension can't be installed (e.g., dev containers, headless CI), Pilot falls back to agent-browser automatically.
+Pilot uses a 3-tier browser tool selection: **Chrome extension** (preferred) → **playwright-cli** (thorough E2E with persistent sessions, tracing, network mocking) → **agent-browser** (lightweight, fast startup). All three are installed automatically. In environments where Chrome can't be installed (dev containers, headless CI), Pilot falls back to the CLI tools automatically.
 
 ## Codex Plugin (Optional)
 

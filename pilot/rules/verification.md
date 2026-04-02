@@ -6,7 +6,7 @@
 
 Unit tests with mocks prove nothing about real-world behavior. After tests pass:
 
-- CLI command → **run it** | API endpoint → **call it** | Frontend UI → **use browser automation** (see `browser-automation.md` for tool selection: Claude Code Chrome preferred, agent-browser as fallback)
+- CLI command → **run it** | API endpoint → **call it** | Frontend UI → **use browser automation** (see `browser-automation.md` for 3-tier tool selection: Chrome → playwright-cli → agent-browser)
 - Any runnable program → **run it**
 
 **When:** After tests pass, after refactoring, after changing imports/deps/config, before marking any task complete.
@@ -15,7 +15,18 @@ Unit tests with mocks prove nothing about real-world behavior. After tests pass:
 
 ### ⛔ Frontend Changes Require Browser Verification
 
-**Unit tests and typechecks are NOT sufficient.** After tests pass, verify with browser automation that the change works in the running app. Use Claude Code Chrome if available, otherwise fall back to agent-browser (see `browser-automation.md` for detection and workflow).
+**Unit tests and typechecks are NOT sufficient.** After tests pass, verify with browser automation that the change works in the running app. This applies in BOTH `/spec` and quick mode.
+
+**Procedure (quick mode — outside `/spec`):**
+
+1. Build/deploy the change
+2. **Resolve browser tool** (see `browser-automation.md` for full details):
+   - **Chrome available** (`mcp__claude-in-chrome__*` in tools list): Use Claude Code Chrome.
+   - **Otherwise:** Use playwright-cli for thorough verification, or agent-browser for simple checks.
+3. Navigate to the affected page, interact with the changed UI, verify correct behavior
+4. Report what you saw — "UI works" requires browser evidence, not just "tests pass"
+
+**Do NOT skip this step.** "It's a small CSS change" or "the tests cover it" is not an excuse — CSS layout issues, stale bundles, and elements in DOM but not visible/interactive are invisible to tests.
 
 **Common pitfalls:** stale cached bundles, bundle not deployed to served location, CSS layout issues invisible to tests, elements in DOM but not visible/interactive.
 
@@ -39,7 +50,7 @@ Unit tests with mocks prove nothing about real-world behavior. After tests pass:
 | "Tests pass" | Fresh run: 0 failures | Previous run, "should pass" |
 | "Build succeeds" | Build exit 0 | "Linter passed" |
 | "Bug fixed" | Reproducing test passes | "Code changed" |
-| "UI works" | Browser verification (Chrome `read_page` or agent-browser `snapshot -i`) | "API returns 200" |
+| "UI works" | Browser verification (Chrome `read_page`, playwright-cli `snapshot`, or agent-browser `snapshot -i`) | "API returns 200" |
 | "No perf regression" | Hot paths cache/memoize, no heavy full imports, no redundant work on repeat | "Tests pass" |
 
 ### ⛔ Fix ALL Errors — No Exceptions, No Asking

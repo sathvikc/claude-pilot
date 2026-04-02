@@ -284,7 +284,7 @@ For features with UI or user-facing workflows, create structured E2E scenarios d
 - 3–8 scenarios typical — focus on user-visible workflows, not unit-level behavior
 - **Critical** = must pass before deployment; **High** = essential UX; **Medium** = edge cases / error states
 - Every task that changes UI or user-visible behavior must be covered by at least one scenario
-- Steps must be executable via browser automation — Claude Code Chrome or agent-browser (concrete: navigate, click, fill, read page — no "observe manually")
+- Steps must be executable via browser automation — Claude Code Chrome, playwright-cli, or agent-browser (concrete: navigate, click, fill, read page — no "observe manually")
 - Test what users see, not internal implementation — same observable inputs and outputs
 
 When scenarios are written, update Goal Verification truths to reference them (e.g., "TS-001 passes end-to-end").

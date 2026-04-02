@@ -215,7 +215,7 @@ Propose 2-3 fix approaches. For each:
 
 **Defense-in-depth:** When the bug was caused by invalid data flowing through multiple layers, plan validation at every layer the data passes through — not just the source. Entry point validation, business logic validation, environment guards where appropriate.
 
-**Verification Scenario (if UI-facing bug):** If the bug manifests in the UI or through user-visible behavior, add a single structured scenario to the plan describing the user steps that reproduce the bug and confirm the fix. Same format as feature E2E scenarios — concrete browser automation steps with expected results (tool-agnostic: Claude Code Chrome or agent-browser). This serves as the acceptance test beyond the regression unit test.
+**Verification Scenario (if UI-facing bug):** If the bug manifests in the UI or through user-visible behavior, add a single structured scenario to the plan describing the user steps that reproduce the bug and confirm the fix. Same format as feature E2E scenarios — concrete browser automation steps with expected results (tool-agnostic: Claude Code Chrome, playwright-cli, or agent-browser). This serves as the acceptance test beyond the regression unit test.
 
 ```markdown
 ### TS-001: [Bug Trigger / Fix Confirmation]

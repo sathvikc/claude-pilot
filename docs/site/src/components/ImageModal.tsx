@@ -3,39 +3,22 @@ import { Dialog, DialogContent } from "@/components/ui/dialog";
 
 interface ImageModalProps {
   src: string;
-  fallback?: string;
   alt: string;
   className?: string;
 }
 
-const ImageModal = ({ src, fallback, alt, className = "" }: ImageModalProps) => {
+const ImageModal = ({ src, alt, className = "" }: ImageModalProps) => {
   const [isOpen, setIsOpen] = useState(false);
 
-  const renderImage = (imgClassName: string, onClick: () => void) => {
-    if (fallback) {
-      return (
-        <picture>
-          <source srcSet={src} type="image/webp" />
-          <img
-            src={fallback}
-            alt={alt}
-            className={imgClassName}
-            onClick={onClick}
-            loading="lazy"
-          />
-        </picture>
-      );
-    }
-    return (
-      <img
-        src={src}
-        alt={alt}
-        className={imgClassName}
-        onClick={onClick}
-        loading="lazy"
-      />
-    );
-  };
+  const renderImage = (imgClassName: string, onClick: () => void) => (
+    <img
+      src={src}
+      alt={alt}
+      className={imgClassName}
+      onClick={onClick}
+      loading="lazy"
+    />
+  );
 
   return (
     <>
