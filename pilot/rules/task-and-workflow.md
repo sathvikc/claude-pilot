@@ -94,7 +94,7 @@ Use EXACT parameter names — abbreviated names cause `InputValidationError`:
 **Search:** Probe CLI (`probe search`) → Grep/Glob (exact patterns). See `cli-tools.md` for Probe reference.
 **Structure:** CodeGraph `codegraph_callers`/`codegraph_callees` (call graphs), `codegraph_impact` (blast radius). See `development-practices.md`.
 
-All other Agent sub-agent types (e.g., `pilot:changes-review`, `pilot:spec-review`, `general-purpose`) pass through.
+**Exceptions:** `web-search-agent` and `pilot:web-search-agent` are allowed even with "Research" descriptions (used by `/prd` deep research). `pilot:changes-review`, `pilot:spec-review`, and `general-purpose` also pass through.
 
 ### ⛔ Web Search/Fetch
 

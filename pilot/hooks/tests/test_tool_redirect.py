@@ -150,6 +150,26 @@ class TestAllowedSpecReviewerAgents:
         assert output == ""
 
 
+class TestAllowedWebSearchAgents:
+    """web-search-agent passes through silently — used by /prd deep research."""
+
+    def test_allows_web_search_agent(self):
+        code, output = _run_with_input("Agent", {"subagent_type": "web-search-agent", "description": "Research competitor landscape", "prompt": "search"})
+        assert code == 0
+        assert output == ""
+
+    def test_allows_pilot_web_search_agent(self):
+        code, output = _run_with_input("Agent", {"subagent_type": "pilot:web-search-agent", "description": "Research technical approaches", "prompt": "search"})
+        assert code == 0
+        assert output == ""
+
+    def test_web_search_agent_bypasses_research_pattern(self):
+        """web-search-agent with 'Research' description must NOT be blocked."""
+        code, output = _run_with_input("Agent", {"subagent_type": "web-search-agent", "description": "Research UX patterns for onboarding", "prompt": "search"})
+        assert code == 0
+        assert output == ""
+
+
 class TestAllowedTools:
     """Tests for tools that should pass through."""
 
@@ -296,3 +316,8 @@ class TestSubprocessIntegration:
         exit_code, stdout, _ = _run_subprocess("Agent", {"subagent_type": "Plan"})
         assert exit_code == 2
         assert "/spec" in stdout
+
+    def test_web_search_agent_allowed_with_research_description(self):
+        exit_code, stdout, _ = _run_subprocess("Agent", {"subagent_type": "web-search-agent", "description": "Research competitor landscape"})
+        assert exit_code == 0
+        assert not _is_denied(stdout)
