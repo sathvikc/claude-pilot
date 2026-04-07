@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Hook to block built-in WebSearch/WebFetch/Plan mode and research-type Agent sub-agent calls.
+"""Hook to block built-in WebSearch/WebFetch/Plan mode and research/explore-type Agent calls.
 
 Agent calls for /spec workflow reviewers (pilot:spec-review, pilot:changes-review)
 and web-search-agent (used by /prd deep research) pass through silently.
-Explore and Plan agents are hard-blocked.
+Explore and Plan agents are hard-blocked (both by subagent_type AND description).
 Research-pattern agents (description starts with "Research") are blocked,
 unless the subagent_type is in SILENT_AGENT_TYPES.
 All other Agent calls pass through silently.
@@ -50,6 +50,14 @@ RESEARCH_BLOCK = (
     "-> Graph: codegraph_search/codegraph_callers/codegraph_callees/codegraph_impact",
 )
 
+EXPLORE_BLOCK = (
+    "Explore-description agent blocked: use Probe CLI + CodeGraph directly",
+    "Agent with Explore description is blocked. Use Probe CLI for intent-based search and "
+    "CodeGraph for structural analysis instead.\n"
+    "-> Probe: probe search \"query\" ./ --max-results 5 --max-tokens 2000\n"
+    "-> Graph: codegraph_search/codegraph_callers/codegraph_callees/codegraph_impact/codegraph_context",
+)
+
 BLOCKED_AGENT_REASONS: dict[str, tuple[str, str]] = {
     "Explore": (
         "Explore agent blocked: use Probe CLI + CodeGraph",
@@ -77,12 +85,13 @@ SILENT_AGENT_TYPES: set[str] = {
 # Agent sub-agent types that are hard-blocked
 BLOCKED_AGENT_TYPES: set[str] = set(BLOCKED_AGENT_REASONS)
 
-# Patterns in Agent description that indicate research (case-insensitive)
+# Patterns in Agent description that indicate research or exploration (case-insensitive)
 RESEARCH_PATTERN: re.Pattern[str] = re.compile(r"^research\b", re.IGNORECASE)
+EXPLORE_PATTERN: re.Pattern[str] = re.compile(r"\bexplore\b", re.IGNORECASE)
 
 
 def run_tool_redirect() -> int:
-    """Block WebSearch/WebFetch/Explore/Plan agents and research-pattern agents."""
+    """Block WebSearch/WebFetch/Explore/Plan agents, research-pattern and explore-pattern agents."""
     try:
         hook_data = json.load(sys.stdin)
     except (json.JSONDecodeError, OSError):
@@ -105,6 +114,11 @@ def run_tool_redirect() -> int:
             return 2
         if RESEARCH_PATTERN.search(description):
             stderr_msg, deny_reason = RESEARCH_BLOCK
+            sys.stderr.write(f"\033[0;31m[Pilot] {stderr_msg}\033[0m\n")
+            print(pre_tool_use_deny(deny_reason))
+            return 2
+        if EXPLORE_PATTERN.search(description):
+            stderr_msg, deny_reason = EXPLORE_BLOCK
             sys.stderr.write(f"\033[0;31m[Pilot] {stderr_msg}\033[0m\n")
             print(pre_tool_use_deny(deny_reason))
             return 2

@@ -2,25 +2,31 @@
 
 ### Codebase Exploration — Probe + CodeGraph
 
-**⛔ Use Probe and CodeGraph as primary exploration tools. They complement each other — use both, fall back to Grep/Glob only for exact patterns.**
+**⛔ STOP: Are you about to use Grep or Glob? Use CodeGraph or Probe FIRST.**
 
-| Need | Tool |
+Grep and Glob are last-resort tools for exact text/regex patterns only. For everything else, CodeGraph and Probe are faster, more accurate, and return structural context that Grep cannot.
+
+**⛔ NEVER pass `projectPath` to CodeGraph tools when searching the current project.** Omit it — the MCP server already defaults to the right project. Passing it explicitly causes "not initialized" errors even when CodeGraph is working.
+
+#### Mandatory Checkpoints
+
+| Before you... | ⛔ STOP and use |
 |------|------|
-| **Understand a feature/concept** | Probe `probe search "how does auth work"` |
-| **Orient on a task** | CodeGraph `codegraph_context(task=<description>)` |
-| **Find symbols by name** | CodeGraph `codegraph_search` |
-| **Extract code by symbol/line** | Probe `probe extract src/auth.ts#login` |
-| **AST pattern matching** | Probe `probe query "async function $NAME($$$)"` |
-| **Project file structure** | CodeGraph `codegraph_files` |
-| **Call tracing** | CodeGraph `codegraph_callers`/`codegraph_callees` |
-| **Blast radius before changes** | CodeGraph `codegraph_impact` |
-| **Exact text/regex** | Grep/Glob (last resort) |
+| **Search for a function/class/symbol** | `codegraph_search` (NOT Grep) |
+| **Start any new task** | `codegraph_context(task=<description>)` to orient |
+| **Modify a function** | `codegraph_callers` + `codegraph_callees` (NOT Grep for call sites) |
+| **Plan a change** | `codegraph_impact` to check blast radius |
+| **Explore file structure** | `codegraph_files` (NOT Glob/ls) |
+| **Understand a feature** | Probe `probe search "how does auth work"` |
+| **Extract code by symbol** | Probe `probe extract src/auth.ts#login` |
+| **Match AST patterns** | Probe `probe query "async function $NAME($$$)"` |
+| **Search exact text/regex** | Grep/Glob (the ONLY valid use case for these) |
 
 ### Project-Specific Policies
 
 **File Size:** Aim for production files under 800 lines. Over 1000 lines is a signal to consider splitting — but only when it's the focus of the current task, not as a side-refactor. Test files exempt.
 
-**Dependency Check:** Before modifying any function, use CodeGraph `codegraph_callers` and `codegraph_callees` to find all callers and callees. This is the primary tool — it returns the actual call graph, not just text mentions. Fallback: Probe CLI, `Grep`, or LSP `findReferences`. Update all affected call sites.
+**⛔ Dependency Check:** Before modifying any function, you MUST run `codegraph_callers` and `codegraph_callees`. This returns the actual call graph — not text mentions. Grep misses dynamic calls and catches false positives. Only fall back to Grep if CodeGraph is unavailable. Update all affected call sites.
 
 **Self-Correction:** Fix obvious mistakes (syntax errors, typos, missing imports) in code you are actively writing. Do not auto-fix errors in code the user edited — report them and let the user decide.
 

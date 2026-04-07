@@ -89,12 +89,19 @@ Use EXACT parameter names — abbreviated names cause `InputValidationError`:
 
 ### ⛔ Agent Tool — NEVER Use Explore, Plan, or Research Agents
 
-**NEVER call Agent with `subagent_type` "Explore" or "Plan", or with a description starting with "Research".** These are prohibited — not as a suggestion, but as a hard rule. Use direct tools instead:
+**NEVER call Agent with `subagent_type` "Explore" or "Plan".** These are prohibited — not as a suggestion, but as a hard rule. Use direct tools instead.
 
-**Search:** Probe CLI (`probe search`) → Grep/Glob (exact patterns). See `cli-tools.md` for Probe reference.
-**Structure:** CodeGraph `codegraph_callers`/`codegraph_callees` (call graphs), `codegraph_impact` (blast radius). See `development-practices.md`.
+**Description-based blocking (ANY `subagent_type`, including `general-purpose`):**
+- Description starting with "Research" → **BLOCKED**
+- Description containing "Explore" (anywhere) → **BLOCKED**
 
-**Exceptions:** `web-search-agent` and `pilot:web-search-agent` are allowed even with "Research" descriptions (used by `/prd` deep research). `pilot:changes-review`, `pilot:spec-review`, and `general-purpose` also pass through.
+The hook enforces BOTH `subagent_type` and description patterns. Using `general-purpose` with an "Explore codebase" description is the same violation as using `subagent_type="Explore"`.
+
+**Use direct tools instead:**
+- **Search:** CodeGraph `codegraph_search` (symbols) → Probe CLI `probe search` (intent) → Grep/Glob (exact text only, last resort). See `development-practices.md` for mandatory checkpoints.
+- **Structure:** CodeGraph `codegraph_callers`/`codegraph_callees` (call graphs), `codegraph_impact` (blast radius), `codegraph_files` (file tree).
+
+**Exceptions (pass through silently regardless of description):** `web-search-agent`, `pilot:web-search-agent`, `pilot:changes-review`, `pilot:spec-review`. These are in `SILENT_AGENT_TYPES` and bypass all description checks.
 
 ### ⛔ Web Search/Fetch
 

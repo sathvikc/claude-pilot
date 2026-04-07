@@ -155,6 +155,8 @@ Options: `waitUntil` (load/domcontentloaded/networkidle), `returnHtml`, `waitFor
 
 **Workflow:** `codegraph_search` to find symbol → `codegraph_callers`/`codegraph_callees` to trace flow → `codegraph_impact` before changes
 
+**⛔ NEVER pass `projectPath` when searching the current project.** The MCP server already defaults to the current project. Passing `projectPath` explicitly triggers a different code path that fails if `.codegraph/` isn't at that exact path. Only use `projectPath` for querying a genuinely different codebase.
+
 ```
 codegraph_search(query="Handler", kind="function")
 codegraph_callers(symbol="processOrder")
@@ -166,16 +168,16 @@ codegraph_node(symbol="MyClass", includeCode=true)
 
 **Primary use cases (Probe can't do these):**
 
-- **`codegraph_callers`/`codegraph_callees`** — complete caller/callee graph. Use before modifying any function during `/spec`.
-- **`codegraph_impact`** — transitive blast radius analysis. Use during planning to scope impact.
-- **`codegraph_context`** — task-driven context retrieval with entry points, related symbols, and code.
+- **`codegraph_callers`/`codegraph_callees`** — complete caller/callee graph. **⛔ MUST use before modifying any function.**
+- **`codegraph_impact`** — transitive blast radius analysis. **⛔ MUST use during planning to scope impact.**
+- **`codegraph_context`** — task-driven context retrieval. **⛔ MUST use at the start of every task to orient.**
 
-**Quick lookup preferences:**
+**⛔ CodeGraph replaces Grep/Glob for these — not "prefer", REPLACE:**
 
-- Use `codegraph_search` instead of Grep for finding symbols
-- Use `codegraph_callers`/`codegraph_callees` to trace code flow
-- Use `codegraph_impact` before making changes to see what's affected
-- Use `codegraph_files` instead of Glob for project file structure
+- `codegraph_search` → finding symbols (NOT Grep)
+- `codegraph_callers`/`codegraph_callees` → tracing code flow (NOT Grep)
+- `codegraph_impact` → pre-change analysis (nothing else does this)
+- `codegraph_files` → project file structure (NOT Glob/ls)
 
 **When Probe is better:**
 
