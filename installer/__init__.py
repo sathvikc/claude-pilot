@@ -1,4 +1,4 @@
 """Pilot Shell Installer - Step-based installation pipeline."""
 
-__version__ = "8.4.1"
+__version__ = "8.5.0"
 __build__ = "dev"

@@ -2,6 +2,18 @@
 
 All notable changes to Pilot Shell will be documented in this file.
 
+## [8.5.0] - 2026-04-29
+
+### Features
+
+- Bugfix workflow redesign with new /fix command 
+
+### Miscellaneous
+
+- Change to Vercel Config
+- Updated Website SEO
+- Updated Readme
+
 ## [8.4.1] - 2026-04-27
 
 ### Bug Fixes
