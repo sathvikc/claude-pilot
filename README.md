@@ -133,7 +133,7 @@ For tighter isolation when working with untrusted code, combine the dev containe
 
 Just chat — no plan, no approval gate. [Quick mode](https://pilot-shell.com/docs/workflows/quick-mode) is the default: quality hooks and TDD enforcement still apply, best for small tasks and exploration. For anything that needs a plan, use `/spec` — not Claude Code's built-in plan mode.
 
-### /spec — Spec-Driven Development (features)
+### /spec — Spec-Driven Development
 
 **[`/spec`](https://pilot-shell.com/docs/workflows/spec) replaces Claude Code's built-in plan mode** (Shift+Tab) for new features, refactoring, and architectural work. It provides a complete planning workflow with TDD, verification, and code review.
 
