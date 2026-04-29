@@ -44,6 +44,7 @@ curl -fsSL https://raw.githubusercontent.com/maxritter/pilot-shell/main/install.
 **Pilot Shell is different.** Every component solves a real problem:
 
 - **`/spec`** — plans, implements, and verifies features end-to-end with TDD
+- **`/fix`** — bugfix workflow with TDD; bails out when complexity exceeds the standard fix lane
 - **`/prd`** — brainstorm ideas into clear requirements through with optional deep research
 - **Quality hooks** — enforce linting, formatting, type checking, and tests as quality gates
 - **Context engineering** — preserves decisions and knowledge across sessions
@@ -107,6 +108,8 @@ curl -fsSL https://raw.githubusercontent.com/maxritter/pilot-shell/main/uninstal
 
 Pilot Shell works inside Dev Containers. Copy the [`.devcontainer`](https://github.com/maxritter/pilot-shell/tree/main/.devcontainer) folder from this repository into your project, adapt it to your needs (base image, extensions, dependencies), and run the installer inside the container. The installer auto-detects the container environment and skips system-level dependencies like Homebrew.
 
+For tighter isolation when working with untrusted code, combine the dev container with Claude Code's [`/sandbox`](https://code.claude.com/docs/en/sandboxing) — `bubblewrap`, `socat`, `iptables`, and `ipset` are pre-installed in the Dockerfile so it works out of the box on Linux. See Anthropic's [development containers](https://code.claude.com/docs/en/devcontainer) and [sandboxing](https://code.claude.com/docs/en/sandboxing) docs for hardening patterns (egress allowlist, managed settings, persistent volumes).
+
 </details>
 
 <details>
@@ -130,16 +133,14 @@ Pilot Shell works inside Dev Containers. Copy the [`.devcontainer`](https://gith
 
 Just chat — no plan, no approval gate. [Quick mode](https://pilot-shell.com/docs/workflows/quick-mode) is the default: quality hooks and TDD enforcement still apply, best for small tasks and exploration. For anything that needs a plan, use `/spec` — not Claude Code's built-in plan mode.
 
-### /spec — Spec-Driven Development
+### /spec — Spec-Driven Development (features)
 
-**[`/spec`](https://pilot-shell.com/docs/workflows/spec) replaces Claude Code's built-in plan mode** (Shift+Tab). It provides a complete planning workflow with TDD, verification, and code review — use `/spec` instead of plan mode for all planned work.
-
-Features, bug fixes, refactoring — describe it and `/spec` handles the rest. Auto-detects whether it's a feature or a bugfix and adapts the workflow. Specs are saved to `docs/plans/` and visible in the Console's **Specification** tab.
+**[`/spec`](https://pilot-shell.com/docs/workflows/spec) replaces Claude Code's built-in plan mode** (Shift+Tab) for new features, refactoring, and architectural work. It provides a complete planning workflow with TDD, verification, and code review.
 
 ```bash
 pilot
-> /spec "Add user authentication with OAuth and JWT tokens"   # → feature mode
-> /spec "Fix the crash when deleting nodes with two children"  # → bugfix mode (auto-detected)
+> /spec "Add user authentication with OAuth and JWT tokens"
+> /spec "Migrate the REST API to GraphQL"
 ```
 
 ```
@@ -163,18 +164,177 @@ Full exploration workflow for new functionality, refactoring, or architectural c
 
 </details>
 
+### /fix — Bugfix Workflow
+
+**[`/fix`](https://pilot-shell.com/docs/workflows/fix) is the bugfix command.** Investigate the bug, write the failing test, fix at the root cause, single-pass audit, done. No plan file, no approval mid-flow, no separate verify phase.
+
+```bash
+pilot
+> /fix "annotation persistence drops fields between save and reload"
+> /fix "off-by-one in pagination at boundary"
+> /fix "wrong default for max_retries"
+```
+
+```text
+Investigate  →  RED  →  Fix  →  Audit  →  Quality Gate  →  Done
+```
+
+If investigation reveals the bug is multi-component or architectural, `/fix` stops cleanly and tells you to re-invoke with `/spec`. `/fix` is always quick; `/spec` is the full workflow.
+
 <details>
-<summary><b>Bugfix Mode</b></summary>
+<summary><b>How <code>/fix</code> works</b></summary>
 
-Investigation-first workflow for targeted fixes. Finds the root cause before touching any code.
+For local bugs. Single file, obvious-once-traced root cause. No plan file, no approval mid-flow, no separate verify phase. TDD still enforced — bugfixes without a failing test don't ship.
 
-**Investigate:** Reproduces the bug → traces backward through the call chain to find the **root cause** at a specific `file:line` → compares against working code patterns → states the fix with confidence level. If 3+ hypotheses fail, escalates as an architectural problem.
+- **Investigate:** Reproduce the bug → trace to root cause at `file:line` with `codegraph_context` + targeted reads → state confidence (High/Medium required to proceed). For UI / async / race bugs, add temporary `SPEC-DEBUG:`-marked logs at component boundaries before tracing.
+- **RED:** Write the failing test via an existing public entry point → run, must fail with the documented symptom.
+- **Fix:** Minimal change at the root cause. Symptom patches are forbidden. Reproducing test must pass, then the targeted test module. Diff sanity check (root-cause file in diff, no unplanned files, < 20 lines, symptom-patching grep) catches issues with the fix itself.
+- **Verify End-to-End:** The primary correctness signal. Run the actual program with the original input (Claude Code Chrome → Chrome DevTools MCP → playwright-cli → agent-browser for UI; CLI / API / REPL / job trigger for non-UI) and capture concrete evidence. A passing unit test alone is never accepted as proof.
+- **Quality Gate:** Lint + types + build + full anti-regression suite, once.
+- **Bail-out:** If investigation reveals the bug is multi-component, architectural, needs defense-in-depth at multiple layers, or two fix attempts have failed, `/fix` stops cleanly and tells you to re-invoke with `/spec`. It does not silently switch lanes.
 
-**Test-Before-Fix:** Writes a regression test that FAILS on current code → implements the minimal fix at the root cause → verifies all tests pass. Defense-in-depth validation at multiple layers when the bug involves data flowing through shared code paths.
+</details>
 
-**Verify:** Lightweight verification — regression test confirmation → full test suite → lint + type check → quality checks. No review sub-agents — the regression test proves the fix works, the full suite proves nothing else broke.
+<details>
+<summary><b>How <code>/spec</code> handles bugs</b></summary>
 
-**Why this matters:** Root cause investigation prevents "fix one thing, break another." The regression test locks in the fix. No formal notation overhead — just trace, test, fix, verify.
+When you type `/spec "<bug description>"`, the full bugfix workflow runs — for bugs that warrant a written plan, approval, code review, and the full verify ceremony.
+
+- **Behavior Contract:** every plan pins down `Given / When / Currently / Expected / Anti-regression` — the invariant the fix must produce and the behavior it must not break
+- **Three uniform tasks** (always, regardless of bug size): Write Reproducing Test (RED) → Implement Fix at Root Cause → Quality Gate
+- **Verify audit:** always-on `cp`+`trap` revert-test (proves the reproducing test would genuinely fail without the fix — rules out retroactive rubber-stamp tests) + root-cause-at-source audit (flags symptom patches and caller-side workarounds) + original-symptom re-check — no sub-agents, tests carry the proof
+- **Iteration cap at 3:** after three failed verify cycles, the workflow stops and asks if the bug is architectural rather than letting you loop forever
+
+</details>
+
+### /prd — Brainstorm Ideas Into Product Requirements Documents
+
+[`/prd`](https://pilot-shell.com/docs/workflows/prd) is the brainstorming surface for ideas that aren't specs yet — vague problem statements and fuzzy shapes. It pitches directions, pressure-tests them with you, and converges on a PRD you can hand to `/spec`. PRDs are saved to `docs/prd/` and visible in the Console's **Requirements** tab.
+
+```bash
+pilot
+> /prd "Add real-time notifications for team updates"
+> /prd "We need better onboarding — users drop off after signup"
+```
+
+<details>
+<summary><b>What /prd Does</b></summary>
+
+**When to use `/prd` over `/spec`:** `/prd` is for **what** and **why**; `/spec` is for **how**. Reach for `/prd` first when you only have a problem statement, want to riff across multiple directions, or need scope boundaries defined before someone starts building.
+
+**Flow:** two modes, picked automatically from how fuzzy the idea is:
+
+1. **Ideate** — free-form prose, Claude pitches 3-5 directions, you react (only runs when the idea is vague)
+2. **Clarify → Converge → Write** — structured multiple-choice questions once the shape is known, then the PRD is written
+
+**Research tiers** (picked at the start):
+
+| Tier | Behavior |
+|------|----------|
+| **Quick** | Skip research |
+| **Standard** | Web search for competitors, prior art, best practices |
+| **Deep** | Parallel research agents for comprehensive findings |
+
+The final PRD covers problem statement, core user flows, scope boundaries, and technical context — then offers to hand off directly to `/spec` for implementation.
+
+</details>
+
+### /setup-rules — Generate Modular Rules
+
+[`/setup-rules`](https://pilot-shell.com/docs/workflows/setup-rules) explores your codebase, discovers conventions, generates modular rules and documents MCP servers. Run once initially, then anytime your project changes significantly.
+
+```bash
+pilot
+> /setup-rules
+```
+
+<details>
+<summary><b>What /setup-rules Does</b></summary>
+
+12 phases that read your codebase and produce comprehensive AI context:
+
+0. **Reference** — load best practices for rule structure, path-scoping, and quality standards
+1. **Read existing rules** — inventory all `.claude/rules/` files, detect structure and path-scoping. Also detects `CLAUDE.md` and `AGENTS.md` (the cross-framework agent context file used by Codex, Cursor, etc.)
+2. **Migrate unscoped assets** — prefix with project slug for better sharing
+3. **Quality audit** — check rules against best practices (size, specificity, stale references, conflicts)
+4. **Explore codebase** — semantic search with Probe CLI, structural analysis with CodeGraph
+5. **Compare patterns** — discovered vs documented conventions
+6. **Sync project rule** — update `{slug}-project.md` with current tech stack, structure, commands. Migrates `CLAUDE.md` / `AGENTS.md` content into modular rules
+7. **Sync MCP docs** — smoke-test user MCP servers, document working tools
+8. **Discover new rules** — find undocumented patterns worth capturing
+9. **Cross-check** — validate all references, ensure consistency across generated files
+10. **Sync AGENTS.md** — if `AGENTS.md` already exists, offer to re-export the updated rules into it so non-Claude agents see the same context. Always asks first, never creates the file if absent, preserves user-authored sections
+11. **Summary** — report all changes made
+
+**For monorepos:** Organizes rules in nested subdirectories by product and team, with `paths` frontmatter to scope rules to specific file types. Generates a `README.md` documenting the structure.
+
+</details>
+
+### /create-skill — Reusable Skill Creator
+
+[`/create-skill`](https://pilot-shell.com/docs/workflows/create-skill) builds a reusable skill from any topic — explores the codebase and creates it interactively with you. If no topic is given, evaluates the current session for extractable knowledge.
+
+```bash
+pilot
+> /create-skill "Automate the review and triaging of our PR Bot comments"
+```
+
+<details>
+<summary><b>What /create-skill Does</b></summary>
+
+6 phases that turn domain knowledge into a reusable skill:
+
+1. **Reference** — load use case categories, complexity spectrum, file structure template, description formula, security restrictions
+2. **Understand** — explore the codebase for relevant patterns, ask clarifying questions, or evaluate the current session for extractable knowledge
+3. **Check existing** — search project and global skills to avoid duplicates
+4. **Create** — write to `.claude/skills/` (project) or `~/.claude/skills/` (global), apply portability and determinism checklists
+5. **Quality gates** — structure checklist (SKILL.md naming, frontmatter fields), content checklist (error handling, examples, exclusions), triggering test (should/shouldn't trigger), iteration signals
+6. **Test & iterate** — run test prompts with sub-agents, evaluate results, optimize description triggering
+
+**Use case categories:**
+
+| Category                      | Best For                                                                   |
+| ----------------------------- | -------------------------------------------------------------------------- |
+| **Document & Asset Creation** | Consistent reports, designs, code with embedded style guides and templates |
+| **Workflow Automation**       | Multi-step processes with validation gates and iterative refinement        |
+| **MCP Enhancement**           | Workflow guidance on top of MCP tool access, multi-MCP coordination        |
+
+**Skill structure:** Each skill is a folder with a `SKILL.md` file (case-sensitive), optional `scripts/`, `references/`, and `assets/` directories. The YAML frontmatter description determines when Claude loads the skill — it must include what the skill does, when to use it, and specific trigger phrases. Progressive disclosure keeps context lean: frontmatter loads always (~100 tokens), SKILL.md loads on activation, linked files load on demand.
+
+</details>
+
+### /benchmark — Measure Rule & Skill Impact
+
+[`/benchmark`](https://pilot-shell.com/docs/workflows/benchmark) runs your prompts with and without the target, grades outputs against falsifiable assertions, and shows a structured report you can absorb in 30 seconds — labeled verdict, quadrant breakdown, and only the divergent assertions in the drill-down. Finishes with a concrete improvement plan so you know exactly what to change next.
+
+```bash
+pilot
+> /benchmark pilot/skills/create-skill
+> /benchmark pilot/rules/testing.md
+```
+
+<details>
+<summary><b>What /benchmark Does</b></summary>
+
+Six phases turn a rule or skill into a before/after comparison with an actionable plan:
+
+1. **Intake** — pick up an existing `benchmarks/<target>/evals.json` or author one
+2. **Target discovery** — classify as `skill` or `rules`
+3. **Author evals** — draft 3 falsifiable assertions; falsifiability gate ensures baseline actually fails
+4. **Execute** — run both configs in isolated sandboxes; grader subagent scores every assertion
+5. **Present findings** — three layers, scannable top-to-bottom:
+
+   | Layer | Content |
+   |---|---|
+   | **Verdict** | One labeled sentence with a recommended next step. Delta bands: 🟢 Strong (≥ +0.50) / 🟢 Moderate (+0.20) / 🟡 Weak (+0.05) / ⚪ Indistinguishable (±0.05) / 🔴 Regression (< −0.05) |
+   | **Quadrant breakdown** | Counts each assertion as Signal (✓/✗) / Baseline (✓/✓) / Unreachable (✗/✗) / Regression (✗/✓). The dominant quadrant drives the plan |
+   | **Per-eval drill-down** | Only divergent assertions get a row; matching ones fold into header counts so the report stays under one screen |
+
+6. **Improvement plan** — ≤ 5 ranked proposals in a uniform format (`[TARGET]` or `[EVALS]` tag, location, current quote, replacement, "Lever" line). You pick: apply target edits, iterate on evals, both, or save the plan and stop. Re-runs land in a fresh `runs/<ts>/` so iteration deltas stay legible.
+
+**Isolation:** each run gets its own sandbox directory; a globally-installed copy of the target in `~/.claude/` is auto-hidden for the duration and restored afterward (with on-disk recovery manifest covering SIGKILL / power loss / segfault). Conditional-loading frontmatter (`path:` / `paths:`) is stripped from the copy installed into the `with` sandbox so the target loads unconditionally for every prompt — without that, rules scoped to e.g. `paths: ["**/*.py"]` would stay dormant in both configs and the delta would collapse to 0.00. The source file is never modified.
+
+**Key flags:** `--runs N` (default 1), `--configs with,without`, `--workers N`, `--model`, `--no-isolate-global`, `--restore-hidden`.
 
 </details>
 
@@ -412,137 +572,6 @@ Pilot Bot defines scheduled jobs, automates recurring tasks, and monitor system 
 
 </details>
 
-### /prd — Brainstorm Ideas Into Product Requirements Documents
-
-[`/prd`](https://pilot-shell.com/docs/workflows/prd) is the brainstorming surface for ideas that aren't specs yet — vague problem statements and fuzzy shapes. It pitches directions, pressure-tests them with you, and converges on a PRD you can hand to `/spec`. PRDs are saved to `docs/prd/` and visible in the Console's **Requirements** tab.
-
-```bash
-pilot
-> /prd "Add real-time notifications for team updates"
-> /prd "We need better onboarding — users drop off after signup"
-```
-
-<details>
-<summary><b>What /prd Does</b></summary>
-
-**When to use `/prd` over `/spec`:** `/prd` is for **what** and **why**; `/spec` is for **how**. Reach for `/prd` first when you only have a problem statement, want to riff across multiple directions, or need scope boundaries defined before someone starts building.
-
-**Flow:** two modes, picked automatically from how fuzzy the idea is:
-
-1. **Ideate** — free-form prose, Claude pitches 3-5 directions, you react (only runs when the idea is vague)
-2. **Clarify → Converge → Write** — structured multiple-choice questions once the shape is known, then the PRD is written
-
-**Research tiers** (picked at the start):
-
-| Tier | Behavior |
-|------|----------|
-| **Quick** | Skip research |
-| **Standard** | Web search for competitors, prior art, best practices |
-| **Deep** | Parallel research agents for comprehensive findings |
-
-The final PRD covers problem statement, core user flows, scope boundaries, and technical context — then offers to hand off directly to `/spec` for implementation.
-
-</details>
-
-### /setup-rules — Generate Modular Rules
-
-[`/setup-rules`](https://pilot-shell.com/docs/workflows/setup-rules) explores your codebase, discovers conventions, generates modular rules and documents MCP servers. Run once initially, then anytime your project changes significantly.
-
-```bash
-pilot
-> /setup-rules
-```
-
-<details>
-<summary><b>What /setup-rules Does</b></summary>
-
-12 phases that read your codebase and produce comprehensive AI context:
-
-0. **Reference** — load best practices for rule structure, path-scoping, and quality standards
-1. **Read existing rules** — inventory all `.claude/rules/` files, detect structure and path-scoping. Also detects `CLAUDE.md` and `AGENTS.md` (the cross-framework agent context file used by Codex, Cursor, etc.)
-2. **Migrate unscoped assets** — prefix with project slug for better sharing
-3. **Quality audit** — check rules against best practices (size, specificity, stale references, conflicts)
-4. **Explore codebase** — semantic search with Probe CLI, structural analysis with CodeGraph
-5. **Compare patterns** — discovered vs documented conventions
-6. **Sync project rule** — update `{slug}-project.md` with current tech stack, structure, commands. Migrates `CLAUDE.md` / `AGENTS.md` content into modular rules
-7. **Sync MCP docs** — smoke-test user MCP servers, document working tools
-8. **Discover new rules** — find undocumented patterns worth capturing
-9. **Cross-check** — validate all references, ensure consistency across generated files
-10. **Sync AGENTS.md** — if `AGENTS.md` already exists, offer to re-export the updated rules into it so non-Claude agents see the same context. Always asks first, never creates the file if absent, preserves user-authored sections
-11. **Summary** — report all changes made
-
-**For monorepos:** Organizes rules in nested subdirectories by product and team, with `paths` frontmatter to scope rules to specific file types. Generates a `README.md` documenting the structure.
-
-</details>
-
-### /create-skill — Reusable Skill Creator
-
-[`/create-skill`](https://pilot-shell.com/docs/workflows/create-skill) builds a reusable skill from any topic — explores the codebase and creates it interactively with you. If no topic is given, evaluates the current session for extractable knowledge.
-
-```bash
-pilot
-> /create-skill "Automate the review and triaging of our PR Bot comments"
-```
-
-<details>
-<summary><b>What /create-skill Does</b></summary>
-
-6 phases that turn domain knowledge into a reusable skill:
-
-1. **Reference** — load use case categories, complexity spectrum, file structure template, description formula, security restrictions
-2. **Understand** — explore the codebase for relevant patterns, ask clarifying questions, or evaluate the current session for extractable knowledge
-3. **Check existing** — search project and global skills to avoid duplicates
-4. **Create** — write to `.claude/skills/` (project) or `~/.claude/skills/` (global), apply portability and determinism checklists
-5. **Quality gates** — structure checklist (SKILL.md naming, frontmatter fields), content checklist (error handling, examples, exclusions), triggering test (should/shouldn't trigger), iteration signals
-6. **Test & iterate** — run test prompts with sub-agents, evaluate results, optimize description triggering
-
-**Use case categories:**
-
-| Category                      | Best For                                                                   |
-| ----------------------------- | -------------------------------------------------------------------------- |
-| **Document & Asset Creation** | Consistent reports, designs, code with embedded style guides and templates |
-| **Workflow Automation**       | Multi-step processes with validation gates and iterative refinement        |
-| **MCP Enhancement**           | Workflow guidance on top of MCP tool access, multi-MCP coordination        |
-
-**Skill structure:** Each skill is a folder with a `SKILL.md` file (case-sensitive), optional `scripts/`, `references/`, and `assets/` directories. The YAML frontmatter description determines when Claude loads the skill — it must include what the skill does, when to use it, and specific trigger phrases. Progressive disclosure keeps context lean: frontmatter loads always (~100 tokens), SKILL.md loads on activation, linked files load on demand.
-
-</details>
-
-### /benchmark — Measure Rule & Skill Impact
-
-[`/benchmark`](https://pilot-shell.com/docs/workflows/benchmark) runs your prompts with and without the target, grades outputs against falsifiable assertions, and shows a structured report you can absorb in 30 seconds — labeled verdict, quadrant breakdown, and only the divergent assertions in the drill-down. Finishes with a concrete improvement plan so you know exactly what to change next.
-
-```bash
-pilot
-> /benchmark pilot/skills/create-skill
-> /benchmark pilot/rules/testing.md
-```
-
-<details>
-<summary><b>What /benchmark Does</b></summary>
-
-Six phases turn a rule or skill into a before/after comparison with an actionable plan:
-
-1. **Intake** — pick up an existing `benchmarks/<target>/evals.json` or author one
-2. **Target discovery** — classify as `skill` or `rules`
-3. **Author evals** — draft 3 falsifiable assertions; falsifiability gate ensures baseline actually fails
-4. **Execute** — run both configs in isolated sandboxes; grader subagent scores every assertion
-5. **Present findings** — three layers, scannable top-to-bottom:
-
-   | Layer | Content |
-   |---|---|
-   | **Verdict** | One labeled sentence with a recommended next step. Delta bands: 🟢 Strong (≥ +0.50) / 🟢 Moderate (+0.20) / 🟡 Weak (+0.05) / ⚪ Indistinguishable (±0.05) / 🔴 Regression (< −0.05) |
-   | **Quadrant breakdown** | Counts each assertion as Signal (✓/✗) / Baseline (✓/✓) / Unreachable (✗/✗) / Regression (✗/✓). The dominant quadrant drives the plan |
-   | **Per-eval drill-down** | Only divergent assertions get a row; matching ones fold into header counts so the report stays under one screen |
-
-6. **Improvement plan** — ≤ 5 ranked proposals in a uniform format (`[TARGET]` or `[EVALS]` tag, location, current quote, replacement, "Lever" line). You pick: apply target edits, iterate on evals, both, or save the plan and stop. Re-runs land in a fresh `runs/<ts>/` so iteration deltas stay legible.
-
-**Isolation:** each run gets its own sandbox directory; a globally-installed copy of the target in `~/.claude/` is auto-hidden for the duration and restored afterward (with on-disk recovery manifest covering SIGKILL / power loss / segfault). Conditional-loading frontmatter (`path:` / `paths:`) is stripped from the copy installed into the `with` sandbox so the target loads unconditionally for every prompt — without that, rules scoped to e.g. `paths: ["**/*.py"]` would stay dormant in both configs and the delta would collapse to 0.00. The source file is never modified.
-
-**Key flags:** `--runs N` (default 1), `--configs with,without`, `--workers N`, `--model`, `--no-isolate-global`, `--restore-hidden`.
-
-</details>
-
 ### Claude CLI Flag Passthrough
 
 All Claude Code CLI flags work directly with `pilot` — current and future. Pilot forwards any flag it doesn't recognize to the Claude CLI automatically.
@@ -718,6 +747,8 @@ On **Team**, every developer runs `pilot customize install <source>` once and st
 <summary><b>Can I use Pilot Shell inside a Dev Container?</b></summary>
 
 Yes. Copy the `.devcontainer` folder from this repository into your project, adapt it to your needs (base image, extensions, dependencies), and install Pilot Shell inside the container. Everything works the same — hooks, rules, MCP servers, persistent memory, and the Console dashboard all run inside the container. This is a great option for teams that want a consistent, reproducible development environment.
+
+For tighter isolation when working with untrusted code, layer Claude Code's [`/sandbox`](https://code.claude.com/docs/en/sandboxing) on top — the Dockerfile pre-installs `bubblewrap`, `socat`, `iptables`, and `ipset` so it works out of the box. See Anthropic's [development containers](https://code.claude.com/docs/en/devcontainer) and [sandboxing](https://code.claude.com/docs/en/sandboxing) docs for the hardening patterns.
 
 </details>
 

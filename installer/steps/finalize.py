@@ -110,10 +110,12 @@ class FinalizeStep(BaseStep):
         )
 
         workflows: list[tuple[str, str]] = [
+            ("/spec", "Plan, implement & verify features end-to-end with TDD"),
+            ("/fix", "Investigate, RED test, fix, audit — bugfix workflow"),
+            ("/prd", "Brainstorm ideas into PRDs with optional research before /spec"),
             ("/setup-rules", "Create modular and concise rules for your project codebase"),
             ("/create-skill", "Create well-structured reusable skills for your workflows"),
-            ("/prd", "Brainstorm ideas into PRDs with optional research before /spec"),
-            ("/spec", "Plan, implement & verify features and bug fixes (replaces CC plan mode)"),
+            ("/benchmark", "Quantitative before/after evals for rules, skills, and workflows"),
         ]
 
         ui.next_steps(
