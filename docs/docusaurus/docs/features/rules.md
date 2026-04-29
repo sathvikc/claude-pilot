@@ -18,10 +18,9 @@ Rules load automatically at session start — they're enforced standards, not su
 - `testing.md` — TDD workflow, test strategy, coverage requirements (≥80%)
 - `verification.md` — Execution verification, completion requirements
 
-### Development Practices (4 rules)
+### Development Practices (3 rules)
 
 - `development-practices.md` — Project policies, systematic debugging, git rules
-- `context-management.md` — Context optimization and compaction resilience
 - `code-review-reception.md` — How to receive and act on code review feedback
 - `documentation-sync.md` — Update affected docs (README, API docs, CLAUDE.md, AGENTS.md) in the same change as the code
 
@@ -29,7 +28,7 @@ Rules load automatically at session start — they're enforced standards, not su
 
 - `cli-tools.md` — Pilot CLI, Probe code search, RTK token optimization
 - `browser-automation.md` — Browser automation for E2E UI testing (Chrome → Chrome DevTools MCP → playwright-cli → agent-browser)
-- `context-mode.md` — Mandatory routing rules for large-output analysis and sandbox execution
+- `context-mode.md` — Routing rules for large-output analysis, sandbox execution, and compaction resilience
 - `mcp-servers.md` — MCP server reference and tool selection guidance
 
 ## Coding Standards — Activated by File Type

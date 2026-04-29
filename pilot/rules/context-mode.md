@@ -1,120 +1,90 @@
-# context-mode — Mandatory Routing Rules
+# Context — Routing & Compaction
 
-You have context-mode MCP tools available. These rules protect your context window from flooding. A single unrouted command can dump 56 KB into context and waste the entire session.
+Two things to know: context-mode MCP keeps tool output out of your window; auto-compaction handles overflow. Both are automatic — your job is to route correctly and not panic at high context.
+
+## Compaction Is Automatic
+
+PreCompact hook → captures plan/tasks/decisions to Memory. Compaction → summarizes. SessionStart(compact) hook → re-injects state. You continue exactly where you were.
+
+**⛔ NEVER rush or skip steps because of context level.** Don't cut corners, skip sub-agents, reduce coverage, or compress output to "finish before it runs out." Context level is never a valid reason to skip a workflow step (reviewer, verification, tests). Complete the current task at full quality.
+
+When compaction occurs, your summary must preserve: active plan path + status, current objective, TDD phase, files being modified, key decisions, blockers. Condensable: pleasantries, intermediate file reads, repetitive "explored N similar" patterns.
 
 ## Think in Code — MANDATORY
 
-When you need to analyze, count, filter, compare, search, parse, transform, or process data: **write code** that does the work via `ctx_execute(language, code)` and `console.log()` only the answer. Do NOT read raw data into context to process mentally. Your role is to PROGRAM the analysis, not to COMPUTE it. Write robust, pure JavaScript — no npm dependencies, only Node.js built-ins (`fs`, `path`, `child_process`). Always use `try/catch`, handle `null`/`undefined`. One script replaces ten tool calls and saves 100x context.
+To analyze, count, filter, compare, parse, or transform data: **write code** via `ctx_execute(language, code)` and `console.log()` only the answer. Don't read raw data into context. Pure JS, Node.js built-ins (`fs`, `path`, `child_process`), `try/catch`, handle null. One script replaces ten tool calls.
 
-## BLOCKED Commands
+## Blocked Commands
 
-### curl / wget — BLOCKED
-Any Bash command containing `curl` or `wget` is intercepted and replaced with an error. Do NOT retry.
-Instead use:
-- Web search MCP: `ToolSearch(query="+web-search search")` then call `mcp__plugin_pilot_web-search__search`
-- Web fetch MCP: `ToolSearch(query="+web-fetch fetch")` then call `mcp__plugin_pilot_web-fetch__fetch_url`
-- `ctx_execute(language: "javascript", code: "const r = await fetch(...)")` for API calls in sandbox
+| Command | Why | Use instead |
+|---------|-----|-------------|
+| `curl` / `wget` in Bash | Floods context | web-search/web-fetch MCP, or `ctx_execute` with `fetch()` |
+| `fetch('http`, `requests.get(`, `http.get(` in Bash | Floods context | `ctx_execute` |
+| Built-in `WebFetch` | Denied by hook | `mcp__plugin_pilot_web-fetch__fetch_url` |
 
-### Inline HTTP — BLOCKED
-Any Bash command containing `fetch('http`, `requests.get(`, `http.get(` is intercepted. Do NOT retry with Bash.
-Instead use `ctx_execute(language, code)` to run HTTP calls in sandbox.
+## Redirected Tools
 
-### WebFetch — BLOCKED
-WebFetch calls are denied entirely. Use web-fetch MCP: `ToolSearch(query="+web-fetch fetch")` then call `mcp__plugin_pilot_web-fetch__fetch_url(url="...")`.
-
-## REDIRECTED Tools
-
-### Bash (>20 lines output)
-Bash is ONLY for: `git`, `mkdir`, `rm`, `mv`, `cd`, `ls`, `npm install`, `pip install`, and other short-output commands.
-For everything else, use:
-- `ctx_batch_execute(commands, queries)` — run multiple commands + search in ONE call
-- `ctx_execute(language: "shell", code: "...")` — run in sandbox, only stdout enters context
-
-### Read (for analysis)
-If you are reading a file to **Edit** it → Read is correct.
-If you are reading to **analyze, explore, or summarize** → use `ctx_execute_file(path, language, code)` instead.
-
-### Grep (large results)
-Grep results can flood context. Use `ctx_execute(language: "shell", code: "grep ...")` to run searches in sandbox.
+- **Bash** — only `git`, `mkdir`, `rm`, `mv`, `cd`, `ls`, `npm install`, `pip install`, and other short-output commands. Long output → `ctx_execute(language: "shell", ...)` or `ctx_batch_execute`.
+- **Read** — correct when you intend to Edit. For analyze/explore/summarize use `ctx_execute_file(path, language, code)`.
+- **Grep** — large results flood context. Wrap in `ctx_execute(language: "shell", code: "grep ...")`.
 
 ## Tool Selection Hierarchy
 
-1. **GATHER**: `ctx_batch_execute(commands, queries)` — Primary tool. Runs all commands, auto-indexes output, returns search results. ONE call replaces 30+ individual calls.
-2. **FOLLOW-UP**: `ctx_search(queries: ["q1", "q2", ...])` — Query indexed content. Pass ALL questions as array in ONE call.
-3. **PROCESSING**: `ctx_execute(language, code)` | `ctx_execute_file(path, language, code)` — Sandbox execution. Only stdout enters context.
-4. **WEB**: Use dedicated MCP servers — `web-search` for searching, `web-fetch` for fetching pages. NOT context-mode.
-5. **INDEX**: `ctx_index(content, source)` — Store content in FTS5 knowledge base for later search.
+1. **GATHER** — `ctx_batch_execute(commands, queries)`. Primary tool. Runs commands, auto-indexes, searches in ONE call.
+2. **FOLLOW-UP** — `ctx_search(queries: [...])`. Pass ALL questions in one array.
+3. **PROCESSING** — `ctx_execute` / `ctx_execute_file`. Sandbox; only stdout enters context.
+4. **WEB** — dedicated MCP servers (`web-search`, `web-fetch`), NOT context-mode.
+5. **INDEX** — `ctx_index(path: ...)`. Never pass large `content`.
 
 ## Decision Tree
 
 ```
 About to run a command / read a file / call an API?
-│
-├── Command is on the Bash whitelist (file mutations, git writes, navigation, echo)?
-│   └── Use Bash
-│
-├── Output MIGHT be large or you're UNSURE?
-│   └── Use ctx_execute or ctx_execute_file
-│
-├── Fetching web documentation or HTML page?
-│   └── Use web-fetch MCP (fetch_url) or web-search MCP (search)
-│
+├── Bash whitelist (file mutations, git writes, navigation)?       → Bash
+├── Output might be large or unsure?                               → ctx_execute / ctx_execute_file
+├── Fetching web docs or HTML?                                     → web-fetch / web-search MCP
 ├── Processing output from another MCP tool?
-│   ├── Output already in context? → use it directly
-│   ├── Need multi-query? → save to file, ctx_index(path) → ctx_search
-│   └── One-shot? → save to file, ctx_execute_file(path)
-│
-└── Reading a file to analyze/summarize (not edit)?
-    └── Use ctx_execute_file
+│   ├── Already in context? → use it directly
+│   ├── Multi-query needed? → save → ctx_index(path) → ctx_search
+│   └── One-shot?           → save → ctx_execute_file(path)
+└── Reading file to analyze (not edit)?                            → ctx_execute_file
 ```
 
 ## Automatic Triggers
 
-Use context-mode for ANY of these without being asked:
-- **API debugging**: hit endpoint, call API, check response
-- **Log analysis**: check logs, read access.log, debug 500s
-- **Test runs**: run tests, check if tests pass, coverage report
-- **Git history**: show recent commits, git log, diff between branches
-- **Data inspection**: look at CSV, parse JSON, analyze config
-- **Infrastructure**: list containers, check pods, disk usage
-- **Build output**: build the project, check for warnings
-- **Code metrics**: count lines, find TODOs, codebase statistics
+Use context-mode without being asked for: API debugging, log analysis, test runs, git history, data inspection (CSV/JSON), infrastructure listings, build output, code metrics.
 
 ## Language Selection
 
-| Situation | Language | Why |
-|-----------|----------|-----|
-| HTTP/API calls, JSON | `javascript` | Native fetch, JSON.parse, async/await |
-| Data analysis, CSV, stats | `python` | csv, statistics, collections, re |
-| Shell commands with pipes | `shell` | grep, awk, jq, native tools |
+| Situation | Language |
+|-----------|----------|
+| HTTP/API, JSON | `javascript` (native fetch, async/await) |
+| Data analysis, CSV, stats | `python` (csv, statistics, re) |
+| Shell pipes | `shell` (grep, awk, jq) |
 
 ## Search Strategy
 
-- BM25 uses **OR semantics** — results matching more terms rank higher
-- Use 2-4 specific technical terms per query
-- **Always use `source` parameter** when multiple docs are indexed
-- **Always use `queries` array** — batch ALL search questions in ONE call
+BM25 uses OR semantics — more matched terms rank higher. Use 2–4 specific technical terms. Always pass `source` when multiple docs indexed. Always batch via `queries` array.
 
 ## Critical Rules
 
-1. **Always console.log/print your findings.** stdout is all that enters context.
-2. **Write analysis code, not data dumps.** Analyze first, print findings.
-3. **Be specific in output.** Print bug details with IDs, line numbers, exact values.
-4. **For files you need to EDIT**: Use the normal Read tool. context-mode is for analysis, not editing.
-5. **For Bash whitelist commands only**: Use Bash for file mutations, git writes, navigation, process control, package install, and echo.
-6. **Never use `ctx_index(content: large_data)`.** Use `ctx_index(path: ...)` to read files server-side.
-7. **Don't re-index data already in context.** If an MCP tool returned data in a previous response, use it directly.
+1. Always `console.log` your findings — stdout is all that enters context.
+2. Write analysis code, not data dumps. Print conclusions with IDs, line numbers, exact values.
+3. Files you need to EDIT → normal `Read`. context-mode is for analysis only.
+4. Bash whitelist only — file mutations, git writes, navigation, process control, package install.
+5. Never `ctx_index(content: large_data)` — always `ctx_index(path: ...)`.
+6. Don't re-index data already in context.
 
 ## Subagent Routing
 
-When spawning subagents, the routing block is automatically injected into their prompt by the PreToolUse hook. You do NOT need to manually instruct subagents about context-mode.
+The PreToolUse hook injects the routing block into subagent prompts. You don't need to instruct them about context-mode.
 
 ## ctx Commands
 
 | Command | Action |
 |---------|--------|
-| `ctx stats` | Call `ctx_stats` MCP tool and display full output |
-| `ctx doctor` | Call `ctx_doctor` MCP tool, run the returned shell command |
-| `ctx purge` | Call `ctx_purge` MCP tool with confirm: true (irreversible) |
+| `ctx stats` | `ctx_stats` MCP tool, display output |
+| `ctx doctor` | `ctx_doctor` MCP tool, run the returned shell command |
+| `ctx purge` | `ctx_purge` with `confirm: true` (irreversible) |
 
-After /clear or /compact: knowledge base and session stats are preserved. Use `ctx purge` to start fresh.
+After `/clear` or `/compact` the knowledge base persists — use `ctx purge` to wipe.
