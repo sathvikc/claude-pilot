@@ -2,6 +2,12 @@
 
 All notable changes to Pilot Shell will be documented in this file.
 
+## [8.5.1] - 2026-04-29
+
+### Bug Fixes
+
+- Optimize Context Usage for Rules, Memory and MCPs
+
 ## [8.5.0] - 2026-04-29
 
 ### Features
