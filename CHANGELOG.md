@@ -2,6 +2,12 @@
 
 All notable changes to Pilot Shell will be documented in this file.
 
+## [8.5.2] - 2026-04-30
+
+### Bug Fixes
+
+- Tighten /fix and refine spec/prd/create-skill/setup-rules skills
+
 ## [8.5.1] - 2026-04-29
 
 ### Bug Fixes
