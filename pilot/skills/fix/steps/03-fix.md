@@ -14,7 +14,7 @@ If the buggy data flows from upstream, fix upstream. Red flags in the diff:
 - Early return that hides wrong state from the caller.
 - Renamed/suppressed log lines that previously surfaced the bug.
 
-A defensive layer is occasionally legitimate (defense-in-depth). When it is, document it explicitly in the Step 6 summary. Otherwise revert it.
+**Quick-lane fixes are single-site.** If you find yourself adding validation at 2+ layers (entry + business + storage, etc.) to make the bug "structurally impossible," you're in `/spec` territory — bail out. Defense-in-depth is a feature of `/spec`, not `/fix`. The one exception: a single boundary check that prevents the same root cause from re-entering through one other obvious path — document it in the Step 6 summary.
 
 ### 3.3 Run the reproducing test — it MUST pass
 

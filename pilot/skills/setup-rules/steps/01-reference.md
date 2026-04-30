@@ -5,6 +5,7 @@
 ### Guidelines
 
 - **Always use AskUserQuestion** when asking the user anything
+- **Explainer-first prompts** — when prompting the user to choose between options, lead with one short paragraph that names what the term means, why these skills need it, and what changes if they pick differently. Then show the choices and the recommended default. Assume the user does not know the term — never present `paths` frontmatter, MCP scoping, or rule-vs-skill distinctions as a multiple-choice without context. Walk them through one section at a time, not all sections at once.
 - **Read before writing** — check existing rules before creating
 - **Write concise rules** — every word costs tokens in context
 - **Idempotent** — running multiple times produces consistent results

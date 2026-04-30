@@ -8,6 +8,12 @@ model: opus
 
 # /prd - Generate Product Requirements Documents
 
+<HARD-GATE>
+Do NOT invoke `/spec`, `/spec-plan`, `/spec-implement`, write any code, scaffold any project, or take any implementation action until you have written a PRD and the user has approved it. This applies to EVERY idea regardless of perceived simplicity.
+
+`/prd`'s output is a written PRD at the path determined in Step 6 (write-prd). The terminal state is offering hand-off to `/spec` and waiting for the user. The skill does not invoke implementation skills directly.
+</HARD-GATE>
+
 **Strategic thought partner and brainstorming surface** — turns vague ideas into concrete Product Requirements Documents (PRDs) through one-on-one conversation, with optional research. Produces a PRD that can be handed off directly to `/spec` for implementation.
 
 **Use `/prd` when:**

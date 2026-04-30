@@ -1,5 +1,21 @@
 ## Step 8: Implementation Planning
 
+### 8.0: File Structure (when 4+ tasks expected, otherwise inline per task)
+
+When the plan will have 4+ tasks, write a `## File Structure` section before tasks listing every file with one-line responsibility — decomposition decisions get locked in here. For 1–3 task plans skip this; the per-task `Files:` block already gives the same view.
+
+```markdown
+## File Structure
+
+- `src/foo/bar.ts` (create) — pure function: `parseFoo(input) → Foo`. No I/O.
+- `src/foo/loader.ts` (create) — fetches and caches Foo from API. Wraps `parseFoo`.
+- `tests/foo/bar.test.ts` (create) — unit tests for `parseFoo`.
+```
+
+One responsibility per file. Files that change together live together. In existing codebases, follow established patterns — don't restructure unrelated code.
+
+### 8.1: Task Granularity
+
 **Task Granularity:** Each task: independently testable, focused (2-4 files max), verifiable. Split if multiple unrelated DoD criteria; merge if one can't be tested without the other. Don't create tasks for setup/boilerplate with no standalone value — fold into the first task that uses them.
 
 **Task Structure:**
@@ -40,7 +56,7 @@
 
 **Assumptions:** After creating tasks, write the `## Assumptions` section — one bullet per assumption: what you assume, which finding supports it, which task numbers depend on it. When implementation hits a surprise, this list tells the implementer which tasks are affected.
 
-#### Step 8.1: Goal Verification Criteria
+#### Step 8.2: Goal Verification Criteria
 
 After creating tasks, derive for the `## Goal Verification` section:
 

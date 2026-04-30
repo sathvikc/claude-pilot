@@ -13,15 +13,15 @@
 1. Summarize: goal, key tasks, approach
 
 2. AskUserQuestion:
-   - "Yes, proceed with implementation" — I've reviewed and it looks good
-   - "No, I need to make changes" — Let me edit the plan file first
-   - "No, I'll annotate in the Console" — I'll use the Specifications tab to mark up the plan visually
+   - "Yes, proceed with implementation" — Approve as-is and start spec-implement (TDD loop)
+   - "No, I have feedback" — I've annotated in the Console or edited the plan file; process my feedback
+
+   The user can pause at this prompt, annotate in the Console's Specifications tab (annotations auto-save), or edit the plan file directly, then pick option 2. No "ready" handshake required.
 
    Note: `Worktree:` field was already set at creation time (Step 4). Do NOT ask again here.
 
 3. **If "Yes":** Set `Approved: Yes`, invoke `Skill(skill='spec-implement', args='<plan-path>')`
-   **If "No, I need to make changes":** Tell user to edit plan directly or annotate in the Console's Specifications tab (annotations auto-save — no button needed), then say "ready". Wait. Re-run Step 12 (check for annotation feedback), re-read plan, ask again
-   **If "No, I'll annotate in the Console":** Tell user to annotate in the Console Specifications tab — annotations save automatically as they type. Say "ready" when done. Wait. Re-run Step 12, re-read plan, ask again
-   **If other feedback (config values, threshold changes, clarifications):** This is NOT approval — incorporate changes into plan, then re-ask with fresh AskUserQuestion.
+   **If "No, I have feedback":** Re-run Step 12 (process Console annotations), re-read the plan file (in case the user edited it directly), then return to Step 13 and ask again.
+   **If other free-text feedback (config values, threshold changes, clarifications):** This is NOT approval — incorporate the changes into the plan, then re-ask with a fresh AskUserQuestion.
 
 ARGUMENTS: $ARGUMENTS

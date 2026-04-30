@@ -44,7 +44,20 @@ Handle:
 
 Best-effort — don't block on failure.
 
-### 6.4 Report
+### 6.4 Pre-report verification checklist
+
+⛔ Walk every box before writing the report. Missing any one = not done — return to the relevant step.
+
+- [ ] Reproducing test passes (Step 3.3 fresh run, this message).
+- [ ] Full anti-regression suite green (Step 5.2 fresh run).
+- [ ] E2E executed against the actual program with concrete evidence captured (Step 4).
+- [ ] `git diff | grep -E "SPEC-DEBUG|^\\+.*\\b(console\\.log|print\\()"` returns nothing (no leftover instrumentation).
+- [ ] Diff is small and every changed line traces to the bug (lineage rule).
+- [ ] Worktree mode: single bundled `fix:` commit. Non-worktree: changes ready, no commit yet.
+
+If any box is unchecked, do not write the report and do not ask for approval — fix the gap first.
+
+### 6.5 Report
 
 ```
 Bugfix complete — <bug>.
@@ -56,5 +69,15 @@ Run /clear before starting new work — this resets context while keeping projec
 ```
 
 The `E2E:` line is **mandatory** — it documents that the actual program was exercised, not just the unit tests.
+
+### 6.6 Post-mortem flag (optional, one line)
+
+Ask once, now that you have more information than when you started: **what would have prevented this bug?** If the answer is architectural — no clean test seam, hidden coupling between modules, validation absent at the boundary the bad data crossed, repeated near-miss in the same area — name it as a `/spec` follow-up candidate in one line:
+
+```
+Follow-up (architectural): <one-line description> — candidate for /spec.
+```
+
+Skip when the answer is "nothing structural, it was a one-line typo / off-by-one / wrong default." Don't manufacture follow-ups.
 
 ARGUMENTS: $ARGUMENTS

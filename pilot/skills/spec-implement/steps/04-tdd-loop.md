@@ -2,6 +2,16 @@
 
 ## Step 4: TDD Loop
 
+### Anti-pattern: horizontal slicing
+
+⛔ **Do NOT write all RED tests for the plan first, then all GREEN implementations.** That is "horizontal slicing" — it produces tests that test imagined behaviour and shapes, not actual behaviour. Tests written in bulk anchor on the function signatures you imagined, not the ones you'd actually want after writing the implementation.
+
+The TDD loop runs **per task**, vertical slice: RED for this task → GREEN for this task → refactor → next task. One test → one implementation → repeat. Each cycle informs the next.
+
+If you find yourself queuing 3+ RED tests before any GREEN, stop and complete the first cycle.
+
+---
+
 **For EVERY task (generic flow — features use this as-is; bugfixes use it via the Bugfix Lane overrides below):**
 
 1. **Read plan's implementation steps** — list files to create/modify/delete

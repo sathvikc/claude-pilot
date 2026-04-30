@@ -30,6 +30,17 @@ Bugfix workflow with TDD. Investigate the bug, write the failing test, fix at th
 5. STOP WHEN OVER YOUR HEAD — multi-component / architectural bugs need /spec.
 ```
 
+### Common rationalizations
+
+| Excuse | Reality |
+|--------|---------|
+| "Emergency, no time for process" | Systematic is faster than guess-and-check thrashing. |
+| "Issue is simple, don't need to trace" | Simple bugs have root causes too — tracing one file is fast. |
+| "I'll write the test after confirming the fix" | Tests written after pass immediately and prove nothing. RED first or it isn't TDD. |
+| "One more fix attempt" (after 2 failures) | Two failed quick-lane attempts means the lane is wrong. Bail to /spec. |
+| "Looks fixed, tests pass" | E2E evidence required. Unit-pass is not user-pass. |
+| "Quick patch now, investigate later" | This IS the quick lane. If you can't trace it now, bail to /spec — don't patch blind. |
+
 ---
 
 ## Critical Constraints

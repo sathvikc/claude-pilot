@@ -1,6 +1,30 @@
 ## Step 11: Plan Verification
 
-**⛔ If `PILOT_SPEC_REVIEW_ENABLED` is `"false"` (from Step 0),** skip this step entirely and proceed to Step 13.
+### 11.0: No-Placeholders Self-Check (always — before launching reviewers)
+
+⛔ Walk the plan file once, fresh-eyed, and grep for the patterns below. **Every match is a plan failure** — fix inline before sending the plan to a reviewer or asking for approval.
+
+**Forbidden placeholder patterns:**
+
+- `TBD`, `TODO`, `FIXME`, "implement later", "fill in details", "details below"
+- "add appropriate error handling", "add validation", "handle edge cases" — without specifying which cases
+- "write tests for the above" — tasks must specify the actual test cases, not a meta-instruction
+- "similar to Task N" — implementers may read tasks out of order; repeat the relevant content
+- Steps that describe *what* to do without showing *how* (code blocks required for code steps)
+- References to types, functions, methods, files, or env vars not defined in any task
+- Bracketed angle-brackets like `<your-code-here>`, `<insert-X>` outside of header literal placeholders
+- Goal Verification truths that are not falsifiable ("works correctly", "is fast enough")
+
+```bash
+# Quick grep (run in worktree or repo root):
+grep -nEi "TBD|TODO|FIXME|implement later|fill in details|appropriate error handling|similar to Task" "<plan_path>"
+```
+
+If anything matches, fix it inline (no new round-trip needed). Then proceed to spec-review launch below.
+
+---
+
+**⛔ If `PILOT_SPEC_REVIEW_ENABLED` is `"false"` (from Step 0),** skip the rest of this step and proceed to Step 13.
 
 **When enabled:** Run spec-review for every feature spec. Small plans benefit from a second pair of eyes just as much as large ones — missing edge cases and unclear DoD criteria are size-independent.
 
