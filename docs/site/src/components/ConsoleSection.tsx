@@ -2,74 +2,71 @@ import { useState } from "react";
 import { useInView } from "@/hooks/use-in-view";
 import ImageModal from "@/components/ImageModal";
 
-const consoleSlides = [
+interface ConsoleSlide {
+  label: string;
+  name: string;
+  alt: string;
+  desc: string;
+}
+
+const consoleSlides: ConsoleSlide[] = [
   {
     label: "Dashboard",
-    src: "/console/dashboard.webp",
-    thumb: "/console/thumbs/dashboard.webp",
+    name: "dashboard",
     alt: "Console Dashboard — stats, recent specifications, sessions, requirements, memories",
     desc: "Global command center with 8 clickable stat cards and 4 recent cards (Specifications, Requirements, Sessions, Memories) with quick navigation. Active specs as pills in the top bar, notification bell in top right.",
   },
   {
     label: "Sessions",
-    src: "/console/sessions.webp",
-    thumb: "/console/thumbs/sessions.webp",
+    name: "sessions",
     alt: "Sessions view — browse, search, and resume past sessions",
     desc: "Browse and search past sessions. Copy the Claude Code session ID and use /resume to jump back into any session instantly.",
   },
   {
     label: "Memories",
-    src: "/console/memories.webp",
-    thumb: "/console/thumbs/memories.webp",
+    name: "memories",
     alt: "Memories view — captured decisions and patterns with semantic search",
     desc: "Decisions, discoveries, and patterns captured automatically. Each memory links to its session — click to navigate. Semantic search across all memories.",
   },
   {
     label: "Extensions",
-    src: "/console/extensions.webp",
-    thumb: "/console/thumbs/extensions.webp",
+    name: "extensions",
     alt: "Extensions view — local, plugin, and remote extensions with team sharing",
     desc: "Browse, edit, and share extensions across global, project, plugin, and remote scopes. Team sharing via git with push, pull, and diff.",
   },
   {
     label: "Requirements",
-    src: "/console/requirements.webp",
-    thumb: "/console/thumbs/requirements.webp",
+    name: "requirements",
     alt: "Requirements view — PRD brainstorming, research tiers, and requirement tracking",
     desc: "Brainstorm vague ideas into Product Requirements Documents through back-and-forth conversation. Tiered deep research, requirement tracking, and team sharing.",
   },
   {
     label: "Specifications",
-    src: "/console/specifications.webp",
-    thumb: "/console/thumbs/specifications.webp",
+    name: "specifications",
     alt: "Specification view — plan annotation, task progress, and phase tracking",
     desc: "All spec plans with task progress, phase tracking, and iteration history. Annotate mode lets you mark up plans visually — select any text and write a note.",
   },
   {
     label: "Changes",
-    src: "/console/changes.webp",
-    thumb: "/console/thumbs/changes.webp",
+    name: "changes",
     alt: "Changes view — git diff, staged files, code review annotations",
     desc: "Git changes, staged files, and diff viewer with branch and worktree context. Review mode adds inline annotations on diff lines.",
   },
   {
     label: "Usage",
-    src: "/console/usage.webp",
-    thumb: "/console/thumbs/usage.webp",
+    name: "usage",
     alt: "Usage view — daily costs, token charts, and model routing",
     desc: "Daily token costs, model routing breakdown, and usage trends over time.",
   },
   {
     label: "Settings",
-    src: "/console/settings.webp",
-    thumb: "/console/thumbs/settings.webp",
+    name: "settings",
     alt: "Settings view — model selection per command, spec workflow toggles",
     desc: "Choose models per command and sub-agent. Spec workflow toggles, reviewer configuration, and pricing info.",
   },
   {
     label: "Help",
-    src: "/console/help.webp",
-    thumb: "/console/thumbs/help.webp",
+    name: "help",
     alt: "Help view — embedded documentation and quick-start guides",
     desc: "Embedded documentation from pilot-shell.com — full technical reference without leaving the Console.",
   },
@@ -109,7 +106,8 @@ const ConsoleSection = () => {
               style={{ aspectRatio: `${SLIDE_W} / ${SLIDE_H}` }}
             >
               <ImageModal
-                src={slide.src}
+                src={`/console/${slide.name}.webp`}
+                inlineSrc={`/console/${slide.name}_sm.webp`}
                 alt={slide.alt}
                 className="w-full h-auto rounded-xl"
                 width={SLIDE_W}
@@ -145,13 +143,13 @@ const ConsoleSection = () => {
                     }`}
                 >
                   <img
-                    src={s.thumb}
+                    src={`/console/thumbs/${s.name}.webp`}
                     alt=""
                     className="w-full h-auto rounded-md"
                     loading="lazy"
                     decoding="async"
-                    width={280}
-                    height={204}
+                    width={120}
+                    height={87}
                   />
                   <div
                     className={`absolute inset-x-0 bottom-0 py-0.5 text-[8px] sm:text-[10px] font-medium text-center

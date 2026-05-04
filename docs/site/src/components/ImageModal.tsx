@@ -3,6 +3,7 @@ import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/compone
 
 interface ImageModalProps {
   src: string;
+  inlineSrc?: string;
   alt: string;
   className?: string;
   width?: number;
@@ -13,6 +14,7 @@ interface ImageModalProps {
 
 const ImageModal = ({
   src,
+  inlineSrc,
   alt,
   className = "",
   width,
@@ -31,7 +33,7 @@ const ImageModal = ({
         className="block w-full p-0 m-0 border-0 bg-transparent cursor-pointer hover:opacity-90 transition-opacity"
       >
         <img
-          src={src}
+          src={inlineSrc ?? src}
           alt={alt}
           className={className}
           loading={loading}

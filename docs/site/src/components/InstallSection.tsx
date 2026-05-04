@@ -127,6 +127,7 @@ const InstallSection = () => {
           >
             <source src="/demo.webm" type="video/webm" />
             <source src="/demo.mp4" type="video/mp4" />
+            <track kind="captions" srcLang="en" src="/demo.vtt" label="No audio (silent screen recording)" default />
           </video>
         </div>
       </div>
