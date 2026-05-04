@@ -33,6 +33,14 @@ const config: Config = {
 
   themes: ["@easyops-cn/docusaurus-search-local"],
 
+  scripts: [
+    {
+      src: "https://analytics.ahrefs.com/analytics.js",
+      "data-key": "z+ZckeCmmFW1kMjAfQEXLA",
+      async: true,
+    },
+  ],
+
   presets: [
     [
       "classic",
