@@ -12,6 +12,11 @@ pilot/skills/*/hashes.json
 # Local reference clones (not part of this repo)
 claude-pace/
 
+# Local-only blog migration helper. Kept off the source tree on purpose —
+# the skill at pilot/skills/sync-blog/ runs it from /Users locally.
+scripts/sync-blog.py
+scripts/blog-dates.json
+
 # C extensions
 *.so
 

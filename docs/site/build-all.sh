@@ -30,6 +30,12 @@ cp -r "$BUILD/docs" "$DIST/docs"
 # the marketing page instead of the docs intro.
 [ -f "$BUILD/docs.html" ] && cp "$BUILD/docs.html" "$DIST/docs.html"
 
+# Copy Docusaurus blog. Same trailingSlash story: blog list page builds as
+# `blog.html` at the build root, individual posts under `blog/`. RSS/atom feeds
+# land inside `blog/` too (rss.xml, atom.xml, feed.json).
+[ -d "$BUILD/blog" ] && cp -r "$BUILD/blog" "$DIST/blog"
+[ -f "$BUILD/blog.html" ] && cp "$BUILD/blog.html" "$DIST/blog.html"
+
 # Merge Docusaurus assets into Vite assets (no filename conflicts — Vite uses hashes, Docusaurus uses css/js subdirs)
 cp -r "$BUILD/assets/"* "$DIST/assets/"
 
@@ -56,6 +62,18 @@ for f in "$BUILD"/*.xml; do
     cp "$f" "$DIST/docs/" 2>/dev/null || true
   fi
 done
+
+# IndexNow: submit /blog/ + /docs/ URLs from the merged Docusaurus sitemap.
+# The Vite plugin runs at the end of `npm run build` and only sees /
+# (Docusaurus hasn't been merged in yet at that point). We submit the rest
+# here, after the merge. Submission is gated by the same INDEXNOW_DISABLE
+# env var as the Vite plugin, and only runs when VERCEL_ENV=production.
+if [ "$VERCEL_ENV" = "production" ] && [ -f "$DIST/docs/sitemap.xml" ]; then
+  echo "=== IndexNow: submitting blog + docs URLs ==="
+  cd "$SITE_DIR"
+  node scripts/indexnow-submit.mjs "$DIST/docs/sitemap.xml" --filter /blog/ || true
+  node scripts/indexnow-submit.mjs "$DIST/docs/sitemap.xml" --filter /docs/ || true
+fi
 
 echo "=== Build complete ==="
 echo "Landing page: $DIST/"

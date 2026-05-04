@@ -51,9 +51,31 @@ const config: Config = {
           editUrl:
             "https://github.com/maxritter/pilot-shell/tree/main/docs/docusaurus/",
         },
-        blog: false,
+        blog: {
+          routeBasePath: "blog",
+          path: "./blog",
+          blogTitle: "Pilot Shell Blog",
+          blogDescription:
+            "Insights on Claude Code, AI engineering, and the Pilot Shell platform — guides, tools, and model comparisons.",
+          blogSidebarTitle: "Recent posts",
+          blogSidebarCount: "ALL",
+          postsPerPage: 12,
+          showReadingTime: true,
+          feedOptions: {
+            type: ["rss", "atom"],
+            title: "Pilot Shell Blog",
+            description:
+              "Latest posts from the Pilot Shell blog — Claude Code engineering, AI tools, and model deep-dives.",
+            copyright: `Copyright © ${new Date().getFullYear()} Pilot Shell.`,
+          },
+        },
         theme: {
           customCss: "./src/css/custom.css",
+        },
+        sitemap: {
+          changefreq: "weekly",
+          priority: 0.7,
+          ignorePatterns: ["/tags/**"],
         },
       } satisfies Preset.Options,
     ],
@@ -88,6 +110,11 @@ const config: Config = {
           label: "Docs",
         },
         {
+          to: "/blog",
+          label: "Blog",
+          position: "left",
+        },
+        {
           href: "https://pilot-shell.com",
           label: "Home",
           position: "right",
@@ -108,6 +135,7 @@ const config: Config = {
             { label: "Getting Started", to: "/docs/getting-started/prerequisites" },
             { label: "Spec Workflow", to: "/docs/workflows/spec" },
             { label: "Hooks Pipeline", to: "/docs/features/hooks" },
+            { label: "Blog", to: "/blog" },
           ],
         },
         {

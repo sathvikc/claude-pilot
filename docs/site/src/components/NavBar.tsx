@@ -62,6 +62,14 @@ const NavBar = () => {
         <div className="flex items-center gap-3 sm:gap-4">
           <Button
             asChild
+            variant="ghost"
+            size="sm"
+            className="hidden sm:inline-flex"
+          >
+            <a href="/blog">Blog</a>
+          </Button>
+          <Button
+            asChild
             variant="outline"
             size="sm"
             className="hidden sm:inline-flex"
@@ -136,6 +144,12 @@ const NavBar = () => {
               {link.label}
             </button>
           ))}
+          <a
+            href="/blog"
+            className="block w-full text-left py-3 text-muted-foreground hover:text-foreground border-b border-border transition-colors"
+          >
+            Blog
+          </a>
           <a
             href="/docs"
             className="block w-full text-left py-3 text-muted-foreground hover:text-foreground border-b border-border transition-colors"
