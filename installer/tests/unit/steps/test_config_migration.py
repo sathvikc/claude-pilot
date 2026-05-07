@@ -222,15 +222,27 @@ class TestMigrationIdempotency:
         assert result is False
         assert json.loads(config_path.read_text()) == original
 
+    def test_skips_when_no_config_file(self, tmp_path: Path) -> None:
+        """Default behavior (create_if_missing=False) skips when config file is absent.
+
+        Tests use this default so they don't trigger subprocess calls or write
+        the user's real ~/.pilot/config.json as a side effect.
+        """
+        from installer.steps.config_migration import migrate_model_config
+
+        result = migrate_model_config(tmp_path / "nonexistent.json")
+
+        assert result is False
+
     def test_creates_subscription_aware_config_on_fresh_install(
         self, tmp_path: Path
     ) -> None:
-        """Fresh install (no config file) triggers a subscription-aware default write.
+        """create_if_missing=True (used by installer) triggers fresh-install defaults.
 
-        Regression: previously this returned False without writing, leaving fresh
-        Max installs to fall through to DEFAULT_MODEL_CONFIG's sonnet default for
-        spec-implement/spec-verify — which doesn't work on Max plan because Max
-        does not include sonnet 1M.
+        Regression: previously the installer skipped migrations entirely when no
+        config file existed, leaving fresh Max installs to fall through to
+        DEFAULT_MODEL_CONFIG's sonnet default for spec-implement/spec-verify —
+        which doesn't work on Max plan because Max does not include sonnet 1M.
         """
         from installer.steps.config_migration import (
             CURRENT_CONFIG_VERSION,
@@ -239,28 +251,21 @@ class TestMigrationIdempotency:
 
         config_path = tmp_path / "nonexistent.json"
         with patch("installer.steps.config_migration._get_subscription_type", return_value="max"):
-            result = migrate_model_config(config_path)
+            result = migrate_model_config(config_path, create_if_missing=True)
 
         assert result is True
         assert config_path.exists()
         written = json.loads(config_path.read_text())
         assert written.get("_configVersion") == CURRENT_CONFIG_VERSION
 
-    def test_fresh_install_unknown_subscription_skips_write(self, tmp_path: Path) -> None:
-        """When subscription can't be detected, fresh install still writes a versioned config.
-
-        v9's safe-fallback rule (leave skills unchanged) still applies — it just
-        means the file gets `_configVersion: N` and no skill overrides, leaving
-        the read-time defaults to apply (which are safe `opus` after the
-        DEFAULT_MODEL_CONFIG fix).
-        """
+    def test_fresh_install_unknown_subscription_still_writes(self, tmp_path: Path) -> None:
+        """When subscription can't be detected, fresh install still writes a versioned config."""
         from installer.steps.config_migration import migrate_model_config
 
         config_path = tmp_path / "nonexistent.json"
         with patch("installer.steps.config_migration._get_subscription_type", return_value=None):
-            result = migrate_model_config(config_path)
+            result = migrate_model_config(config_path, create_if_missing=True)
 
-        # File is written with _configVersion bump even if no migration set fields.
         assert result is True
         assert config_path.exists()
 

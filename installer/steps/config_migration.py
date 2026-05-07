@@ -24,23 +24,30 @@ _STALE_AGENT_KEYS = frozenset(
 )
 
 
-def migrate_model_config(config_path: Path | None = None) -> bool:
+def migrate_model_config(
+    config_path: Path | None = None,
+    *,
+    create_if_missing: bool = False,
+) -> bool:
     """Run pending one-time migrations on ~/.pilot/config.json.
 
     Returns True if any migration was applied, False otherwise.
     Safe to call repeatedly — already-applied migrations are skipped.
+
+    `create_if_missing=True` (used by the installer at install time) treats
+    a missing config as an empty one and runs all migrations against it so
+    subscription-aware defaults (notably v9's Max-vs-non-Max spec-implement
+    / spec-verify defaulting) get written. The install path passes True;
+    tests default to False so they don't trigger subprocess calls + write
+    the user's real ~/.pilot/config.json.
     """
     if config_path is None:
         config_path = Path.home() / ".pilot" / "config.json"
 
     raw: dict[str, Any]
-    fresh_install = not config_path.exists()
-    if fresh_install:
-        # Fresh install: synthesize an empty config so subscription-aware
-        # migrations (notably v9's Max-vs-non-Max model defaulting) apply
-        # to the newly-created file. Without this, fresh Max installs land
-        # on the sonnet[1m] default in DEFAULT_MODEL_CONFIG and fail because
-        # Max plan doesn't include sonnet 1M.
+    if not config_path.exists():
+        if not create_if_missing:
+            return False
         raw = {}
     else:
         try:

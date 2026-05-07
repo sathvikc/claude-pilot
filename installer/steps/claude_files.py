@@ -419,7 +419,7 @@ class ClaudeFilesStep(BaseStep):
             self._update_hooks_config(home_pilot_plugin_dir)
 
         self._merge_app_config()
-        migrate_model_config()
+        migrate_model_config(create_if_missing=True)
         self._cleanup_stale_managed_files(ctx)
         self._build_skill_md_files(ctx, ui)
         self._save_pilot_manifest(ctx)
