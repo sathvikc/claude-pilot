@@ -60,12 +60,51 @@ jobs:
           echo "Not a release trigger commit - skipping"
           echo "should_run=false" >> "$GITHUB_OUTPUT"
 
+  supply-chain-gate:
+    # Cross-workflow `needs:` doesn't link supply-chain.yml to this workflow.
+    # Poll the Checks API for the `supply-chain` check on the release SHA and
+    # fail when it concludes anything other than `success`. Both workflows
+    # start on the same push, so we wait up to 12 min for it to land.
+    name: Supply-Chain Gate
+    permissions:
+      contents: read
+      checks: read
+    runs-on: ubuntu-latest
+    needs: check-trigger
+    if: needs.check-trigger.outputs.should_run == 'true'
+    steps:
+      - uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        with:
+          script: |
+            const sleep = ms => new Promise(r => setTimeout(r, ms));
+            const deadline = Date.now() + 12 * 60 * 1000;
+            let last = null;
+            while (Date.now() < deadline) {
+              const { data } = await github.rest.checks.listForRef({
+                ...context.repo, ref: context.sha
+              });
+              const sc = data.check_runs.find(r => r.name === 'supply-chain');
+              last = sc;
+              if (sc && sc.status === 'completed') {
+                if (sc.conclusion === 'success') return;
+                core.setFailed(
+                  `supply-chain check concluded ${sc.conclusion} for ${context.sha}; release blocked.`
+                );
+                return;
+              }
+              await sleep(20000);
+            }
+            core.setFailed(
+              `supply-chain check did not complete within 12m for ${context.sha} ` +
+              `(last status: ${last?.status ?? 'missing'}); release blocked.`
+            );
+
   security-scan:
     name: Security Scan (Trivy)
     permissions:
       contents: read
     runs-on: ubuntu-latest
-    needs: check-trigger
+    needs: [check-trigger, supply-chain-gate]
     if: needs.check-trigger.outputs.should_run == 'true'
     steps:
       - name: Checkout code
@@ -114,7 +153,7 @@ jobs:
     permissions:
       contents: read
     runs-on: ubuntu-latest
-    needs: check-trigger
+    needs: [check-trigger, supply-chain-gate]
     if: needs.check-trigger.outputs.should_run == 'true'
     steps:
       - name: Checkout code
@@ -149,7 +188,7 @@ jobs:
     permissions:
       contents: read
     runs-on: ubuntu-latest
-    needs: check-trigger
+    needs: [check-trigger, supply-chain-gate]
     if: needs.check-trigger.outputs.should_run == 'true'
     steps:
       - name: Checkout code
@@ -181,7 +220,7 @@ jobs:
     permissions:
       contents: read
     runs-on: ubuntu-latest
-    needs: check-trigger
+    needs: [check-trigger, supply-chain-gate]
     if: needs.check-trigger.outputs.should_run == 'true'
     steps:
       - name: Checkout code
@@ -227,7 +266,7 @@ jobs:
     permissions:
       contents: write
     runs-on: ubuntu-latest
-    needs: check-trigger
+    needs: [check-trigger, supply-chain-gate]
     if: needs.check-trigger.outputs.should_run == 'true'
     outputs:
       should_release: ${{ steps.check.outputs.should_release }}
