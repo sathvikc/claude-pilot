@@ -2,6 +2,17 @@
 
 All notable changes to Pilot Shell will be documented in this file.
 
+## [8.7.0] - 2026-05-07
+
+### Bug Fixes
+
+- Don't run subscription-aware migrations in unit tests
+- Use default-foreground ANSI so splash and spinner stay readable in light-mode terminals
+
+### Features
+
+- Supply-chain monitoring + credential scanning + console settings
+
 ## [8.6.2] - 2026-05-06
 
 ### Bug Fixes
