@@ -2,6 +2,12 @@
 
 All notable changes to Pilot Shell will be documented in this file.
 
+## [8.7.1] - 2026-05-08
+
+### Bug Fixes
+
+- Download installer/upstreams.yaml in install.sh bootstrap
+
 ## [8.7.0] - 2026-05-07
 
 ### Bug Fixes
