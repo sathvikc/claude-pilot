@@ -35,6 +35,49 @@ def test_install_sh_downloads_installer_files():
     assert ".py" in content, "Must filter for Python files"
 
 
+def test_install_sh_grep_pattern_includes_yaml_manifests():
+    """Regression for #142: download_installer must also fetch installer/upstreams.yaml.
+
+    install.sh's tree-filter grep originally only matched ``.py``, so fresh
+    ``curl | bash`` installs landed without ``installer/upstreams.yaml`` and
+    crashed at ``installer/manifest.py:127`` with FileNotFoundError.
+    """
+    import re
+    import subprocess
+
+    install_sh = Path(__file__).parent.parent.parent.parent / "install.sh"
+    content = install_sh.read_text()
+
+    match = re.search(r"grep -oE '(\"path\":[^']+installer/[^']+)'", content)
+    assert match, "Could not locate file-selection grep in install.sh"
+    grep_pattern = match.group(1)
+
+    sample_tree = (
+        '{"tree":['
+        '{"path":"installer/cli.py","type":"blob"},'
+        '{"path":"installer/upstreams.yaml","type":"blob"},'
+        '{"path":"installer/manifest.py","type":"blob"},'
+        '{"path":"installer/tests/unit/test_x.py","type":"blob"},'
+        '{"path":"docs/site/README.md","type":"blob"}'
+        "]}"
+    )
+
+    result = subprocess.run(
+        ["grep", "-oE", grep_pattern],
+        input=sample_tree,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    selected = result.stdout
+
+    assert "installer/cli.py" in selected, "must still match .py files"
+    assert "installer/upstreams.yaml" in selected, (
+        "install.sh:download_installer must match installer/upstreams.yaml — "
+        "issue #142, manifest.py imports it at module load"
+    )
+
+
 def test_install_sh_runs_installer():
     """Verify install.sh runs the Python installer (which downloads Pilot binary)."""
     install_sh = Path(__file__).parent.parent.parent.parent / "install.sh"
