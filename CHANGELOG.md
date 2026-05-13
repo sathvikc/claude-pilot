@@ -2,6 +2,16 @@
 
 All notable changes to Pilot Shell will be documented in this file.
 
+## [8.9.0] - 2026-05-13
+
+### Bug Fixes
+
+- Add missing UI file
+
+### Features
+
+- Spec workflow overhaul, share spec/prd URL shortener, claude auto-update  
+
 ## [8.8.0] - 2026-05-12
 
 ### Bug Fixes
