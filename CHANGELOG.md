@@ -2,6 +2,12 @@
 
 All notable changes to Pilot Shell will be documented in this file.
 
+## [8.10.1] - 2026-05-15
+
+### Bug Fixes
+
+- Persistent share-id with singleton lock, unified UI across view/review on Specs and Requirements, manual fetch-feedback button
+
 ## [8.10.0] - 2026-05-15
 
 ### Features
