@@ -54,7 +54,7 @@ Hook blocks `subagent_type` of `Explore`/`Plan`, AND any description starting wi
 
 Use direct tools instead — see `development-practices.md` and `mcp-servers.md` for CodeGraph + Semble workflow.
 
-**Whitelisted (pass through silently):** `web-search-agent`, `pilot:web-search-agent`, `pilot:changes-review`, `pilot:spec-review`.
+**Whitelisted (pass through silently):** `web-search-agent`,`changes-review`, `spec-review`.
 
 ### ⛔ Web Search/Fetch
 

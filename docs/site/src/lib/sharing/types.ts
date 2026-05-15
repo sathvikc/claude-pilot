@@ -13,9 +13,13 @@ export interface Annotation {
   createdAt: number;
   /** Attribution — set for feedback annotations from collaborators */
   author?: string;
-  /** Feedback lifecycle for imported external annotations */
+  /**
+   * @deprecated Legacy accept/reject lifecycle (pre-2026-05-15). New code
+   * never sets this field; legacy values are stripped on load. Kept on the
+   * interface only so older `.annotations` JSON parses without error.
+   */
   feedbackStatus?: "pending" | "accepted" | "rejected";
-  /** When this annotation was imported */
+  /** When this annotation was imported from teammate feedback */
   importedAt?: number;
 }
 
@@ -46,3 +50,34 @@ export interface FeedbackPayload {
   /** Timestamp when feedback was created */
   createdAt: number;
 }
+
+// ─── Multi-user feedback polling (2026-05-15) ─────────────────────────────────
+// These types are shared verbatim between the Console worker and the pilotshell.com
+// Edge API. The same block must appear in console/src/shared/sharing/types.ts.
+
+/** One submission on the server-side feedback queue for a single share id. */
+export interface FeedbackQueueEntry {
+  /** Server-assigned 0-based position in the share's feedback list (= RPUSH return - 1). */
+  position: number;
+  /** When the server received this submission (server-side Date.now()). */
+  receivedAt: number;
+  /** The submitted feedback batch. */
+  payload: FeedbackPayload;
+}
+
+/** Console → pilotshell.com batch-read request body. */
+export interface FeedbackBatchRequest {
+  items: Array<{ id: string; cursor: number }>;
+}
+
+/** pilotshell.com → Console batch-read response. Keyed by share id. */
+export type FeedbackBatchResponse = Record<
+  string,
+  {
+    entries: FeedbackQueueEntry[];
+    /** Cursor to send on the next poll. Equals the input cursor when entries is empty. */
+    cursor: number;
+    /** Present only when `share:<id>` does not exist (expired or never created). */
+    error?: "not_found";
+  }
+>;

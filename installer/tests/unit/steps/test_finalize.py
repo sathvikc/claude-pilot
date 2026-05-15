@@ -205,8 +205,8 @@ class TestFinalSuccessPanel:
                 sections = mock_next_steps.call_args[0][0]
                 section_titles = [title for title, _ in sections]
                 assert section_titles == ["Getting Started", "Workflows"]
-                # Getting Started has 4 items, Workflows has 6 (incl. /fix and /benchmark)
-                expected_lengths = {"Getting Started": 4, "Workflows": 6}
+                # Getting Started has 5 items (incl. Share Specs), Workflows has 6 (incl. /fix and /benchmark)
+                expected_lengths = {"Getting Started": 5, "Workflows": 6}
                 for title, items in sections:
                     assert len(items) == expected_lengths[title]
                 workflow_labels = [label for label, _ in dict(sections)["Workflows"]]

@@ -4,12 +4,16 @@
  * Two URL families coexist:
  *
  *   1. Short URL (current): https://pilot-shell.com/s/<8-char-id>
- *      Payload POSTed to /api/share and stored on Upstash Redis for ≤ 3 days;
- *      anyone with the link can fetch and view. See `generateShortFeedbackUrl`.
+ *      Payload POSTed to /api/share and stored on Upstash Redis for ≤ 7 days;
+ *      anyone with the link can fetch and view.
  *
  *   2. Legacy fragment URL (back-compat only): https://pilot-shell.com/shared#<compressed-data>
  *      Compressed payload embedded in the URL fragment; never transmitted to the server.
  *      Still decoded by `Shared.tsx` so in-flight legacy links keep working.
+ *
+ * Teammate feedback flows back via `submitFeedback` → POST /api/share/feedback,
+ * which appends to the existing share's server-side feedback queue. The old
+ * "generate a feedback URL to copy back" flow is removed.
  *
  * No encryption — both formats rely on the unguessable URL itself as the access token.
  */
@@ -51,60 +55,47 @@ export function generateWebShareUrl(
   return buildCompressedUrl(payload, baseUrl);
 }
 
-/** Generate a web feedback URL. Returns null if payload would exceed inline URL limits. */
-export function generateWebFeedbackUrl(
-  payload: FeedbackPayload,
-  baseUrl: string,
-): Promise<WebShareUrlResult | null> {
-  return buildCompressedUrl(payload, baseUrl);
-}
+const SUBMIT_TIMEOUT_MS = 10_000;
 
-export type ShortShareResult =
-  | { ok: true; url: string }
-  | { ok: false; reason: "too_large" | "rate_limited" | "network" | "timeout" };
-
-const SHARE_POST_TIMEOUT_MS = 10_000;
+export type SubmitFeedbackResult =
+  | { ok: true; position: number }
+  | { ok: false; reason: "not_found" | "rate_limited" | "too_large" | "network" };
 
 /**
- * Compress + upload the feedback payload to /api/share and return the short URL.
- * Used by the recipient on pilot-shell.com to send annotations back to the sharer.
+ * Submit a teammate's feedback batch to an existing share id. Replaces the
+ * old `generateShortFeedbackUrl` flow — no copy-URL round trip; the Console's
+ * poller picks the entry up directly.
  */
-export async function generateShortFeedbackUrl(
+export async function submitFeedback(
+  shareId: string,
   payload: FeedbackPayload,
   apiBaseUrl: string = "",
-): Promise<ShortShareResult> {
-  let compressed: string;
-  try {
-    compressed = await compress(JSON.stringify(payload));
-  } catch {
-    return { ok: false, reason: "network" };
-  }
+): Promise<SubmitFeedbackResult> {
   let res: Response;
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), SHARE_POST_TIMEOUT_MS);
+  const timeoutId = setTimeout(() => controller.abort(), SUBMIT_TIMEOUT_MS);
   try {
-    res = await fetch(`${apiBaseUrl}/api/share`, {
+    res = await fetch(`${apiBaseUrl}/api/share/feedback`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ data: compressed }),
+      body: JSON.stringify({ id: shareId, payload }),
       signal: controller.signal,
     });
-  } catch (err) {
-    if (controller.signal.aborted) return { ok: false, reason: "timeout" };
-    if (err instanceof DOMException && err.name === "AbortError") return { ok: false, reason: "timeout" };
+  } catch {
     return { ok: false, reason: "network" };
   } finally {
     clearTimeout(timeoutId);
   }
+  if (res.status === 404) return { ok: false, reason: "not_found" };
   if (res.status === 413) return { ok: false, reason: "too_large" };
   if (res.status === 429) return { ok: false, reason: "rate_limited" };
   if (!res.ok) return { ok: false, reason: "network" };
   try {
-    const { id } = (await res.json()) as { id: string };
-    if (!id || !/^[A-Za-z0-9]{8}$/.test(id)) {
+    const body = (await res.json()) as { ok?: boolean; position?: number };
+    if (body.ok !== true || typeof body.position !== "number") {
       return { ok: false, reason: "network" };
     }
-    return { ok: true, url: `https://pilot-shell.com/s/${id}` };
+    return { ok: true, position: body.position };
   } catch {
     return { ok: false, reason: "network" };
   }
@@ -153,23 +144,7 @@ export async function decompressSharePayload(
 }
 
 /**
- * Decompress a feedback payload.
- * Returns null on any failure.
- */
-export async function decompressFeedbackPayload(
-  data: string,
-): Promise<FeedbackPayload | null> {
-  if (!data) return null;
-  try {
-    return JSON.parse(await decompress(data)) as FeedbackPayload;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Detect whether a payload is a SharePayload (has specContent)
- * vs a FeedbackPayload (has only annotations + author).
+ * Detect whether a payload is a SharePayload (has specContent).
  */
 export function isSharePayload(payload: unknown): payload is SharePayload {
   return (
@@ -181,18 +156,21 @@ export function isSharePayload(payload: unknown): payload is SharePayload {
 }
 
 /**
- * Decompress any payload from a hash fragment, auto-detecting type.
+ * Decompress a payload from a legacy hash fragment. Only `share`-shaped
+ * payloads are supported now; legacy `feedback` URL payloads no longer exist
+ * but the type stays in the return shape so the (unused) feedback branch in
+ * Shared.tsx surfaces a graceful "this is a feedback URL" error.
  */
 export async function decompressHashPayload(
   data: string,
-): Promise<{ type: "share"; payload: SharePayload } | { type: "feedback"; payload: FeedbackPayload } | null> {
+): Promise<{ type: "share"; payload: SharePayload } | { type: "feedback" } | null> {
   if (!data) return null;
   try {
     const parsed = JSON.parse(await decompress(data));
     if (isSharePayload(parsed)) {
       return { type: "share", payload: parsed as SharePayload };
     }
-    return { type: "feedback", payload: parsed as FeedbackPayload };
+    return { type: "feedback" };
   } catch {
     return null;
   }

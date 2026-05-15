@@ -5,11 +5,13 @@ vi.mock("./compress", () => ({
   decompress: vi.fn(async (s: string) => s),
 }));
 
-import { generateShortFeedbackUrl } from "./sharing";
+import { submitFeedback } from "./sharing";
 import type { FeedbackPayload } from "./types";
 
 const samplePayload: FeedbackPayload = {
-  annotations: [],
+  annotations: [
+    { id: "a1", blockId: "b1", originalText: "x", text: "tiny note", createdAt: 1 },
+  ],
   author: "Tester",
   planPath: "docs/plans/x.md",
   createdAt: 0,
@@ -26,41 +28,49 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("generateShortFeedbackUrl", () => {
-  it("returns short URL on 201", async () => {
+describe("submitFeedback", () => {
+  it("returns { ok: true, position } on 201", async () => {
     fetchMock.mockResolvedValueOnce(
-      new Response(JSON.stringify({ id: "ABCDEFGH" }), { status: 201 }),
+      new Response(JSON.stringify({ ok: true, position: 0 }), { status: 201 }),
     );
-    const result = await generateShortFeedbackUrl(samplePayload, "");
-    expect(result).toEqual({
-      ok: true,
-      url: "https://pilot-shell.com/s/ABCDEFGH",
-    });
+    const result = await submitFeedback("ABCDEFGH", samplePayload);
+    expect(result).toEqual({ ok: true, position: 0 });
+  });
+
+  it("POSTs to /api/share/feedback with id + payload as body", async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ ok: true, position: 1 }), { status: 201 }),
+    );
+    await submitFeedback("ABCDEFGH", samplePayload);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toContain("/api/share/feedback");
+    const body = JSON.parse(String((init as RequestInit).body));
+    expect(body.id).toBe("ABCDEFGH");
+    expect(body.payload.author).toBe("Tester");
+  });
+
+  it("returns not_found on 404", async () => {
+    fetchMock.mockResolvedValueOnce(new Response("", { status: 404 }));
+    const result = await submitFeedback("ABCDEFGH", samplePayload);
+    expect(result).toEqual({ ok: false, reason: "not_found" });
   });
 
   it("returns too_large on 413", async () => {
     fetchMock.mockResolvedValueOnce(new Response("", { status: 413 }));
-    const result = await generateShortFeedbackUrl(samplePayload, "");
+    const result = await submitFeedback("ABCDEFGH", samplePayload);
     expect(result).toEqual({ ok: false, reason: "too_large" });
   });
 
   it("returns rate_limited on 429", async () => {
     fetchMock.mockResolvedValueOnce(new Response("", { status: 429 }));
-    const result = await generateShortFeedbackUrl(samplePayload, "");
+    const result = await submitFeedback("ABCDEFGH", samplePayload);
     expect(result).toEqual({ ok: false, reason: "rate_limited" });
   });
 
   it("returns network on fetch rejection", async () => {
     fetchMock.mockRejectedValueOnce(new Error("offline"));
-    const result = await generateShortFeedbackUrl(samplePayload, "");
-    expect(result).toEqual({ ok: false, reason: "network" });
-  });
-
-  it("returns network on malformed response id", async () => {
-    fetchMock.mockResolvedValueOnce(
-      new Response(JSON.stringify({ id: "" }), { status: 201 }),
-    );
-    const result = await generateShortFeedbackUrl(samplePayload, "");
+    const result = await submitFeedback("ABCDEFGH", samplePayload);
     expect(result).toEqual({ ok: false, reason: "network" });
   });
 });

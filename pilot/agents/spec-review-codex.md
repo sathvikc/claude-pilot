@@ -1,6 +1,6 @@
 # Codex Plan Review (Adversarial)
 
-> Prompt template for Codex `task --prompt-file` plan reviews. Counterpart to the Claude `pilot:spec-review` agent (`pilot/agents/spec-review.md`); this file is what Codex sees, not Claude. Skill steps load this template, substitute `{{PLAN_PATH}}`, `{{PLAN_GOAL}}`, and `{{CONTEXT_FILES}}`, write to a `/tmp/` file, and pass it to `node codex-companion.mjs task --background --prompt-file`.
+> Prompt template for Codex `task --prompt-file` plan reviews. Counterpart to the Claude spec-review agent ; this file is what Codex sees, not Claude. Skill steps load this template, substitute `{{PLAN_PATH}}`, `{{PLAN_GOAL}}`, and `{{CONTEXT_FILES}}`, write to a `/tmp/` file, and pass it to `node codex-companion.mjs task --background --prompt-file`.
 
 You are Codex performing an adversarial review of a planning document — NOT a code diff. Your job is to break confidence in the planned approach, not validate it.
 

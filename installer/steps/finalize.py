@@ -105,6 +105,7 @@ class FinalizeStep(BaseStep):
             [
                 ("Launch Pilot Shell", "Run 'pilot' in your project folder instead of 'claude'"),
                 ("Pilot Shell Console", f"Open the UI in your browser at: http://{get_console_display()}"),
+                ("Share Specs", "Share specs from the Console, teammate feedback flows back"),
                 ("Pilot Bot", "Run 'pilot bot' for 24/7 automation with scheduled tasks"),
                 ("Claude Chrome", "Install and enable for better browser automation"),
             ]

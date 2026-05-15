@@ -48,7 +48,7 @@ rm -f "$OUTPUT_PATH"
 
 ```
 Task(
-  subagent_type="pilot:spec-review",
+  subagent_type="spec-review",
   run_in_background=true,
   prompt="""
   **Plan file:** <plan-path>

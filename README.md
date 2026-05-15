@@ -46,11 +46,12 @@ curl -fsSL https://raw.githubusercontent.com/maxritter/pilot-shell/main/install.
 - **`/spec`** — plans, implements, and verifies features end-to-end with TDD
 - **`/fix`** — bugfix workflow with TDD; bails out when complexity exceeds the standard fix lane
 - **`/prd`** — brainstorm ideas into clear requirements through with optional deep research
+- **Spec collaboration** — share specs with teammates, annotations flow back grouped by author
 - **Quality hooks** — enforce linting, formatting, type checking, and tests as quality gates
 - **Context engineering** — preserves decisions and knowledge across sessions
 - **Code intelligence** — semantic search (Semble) + code knowledge graph (CodeGraph)
 - **Token optimization** — 60–90% cost reduction via RTK and context-mode
-- **Extensions** — reusable rules, skills, and MCP servers with team sharing and [customization](https://pilot-shell.com/docs/features/customization)
+- **Extensions** — reusable rules, skills, and MCP servers with team sharing and customization
 - **Console** — local web dashboard with real-time notifications and session management
 - **Pilot Bot** — persistent automation agent with scheduled tasks and background jobs
 
@@ -135,7 +136,7 @@ Just chat — no plan, no approval gate. [Quick mode](https://pilot-shell.com/do
 
 ### /spec — Spec-Driven Development
 
-**[`/spec`](https://pilot-shell.com/docs/workflows/spec) replaces Claude Code's built-in plan mode** (Shift+Tab) for new features, refactoring, and architectural work. It provides a complete planning workflow with TDD, verification, and code review.
+**[`/spec`](https://pilot-shell.com/docs/workflows/spec) replaces Claude Code's built-in plan mode** (Shift+Tab) for new features, refactoring, and architectural work. It provides a complete planning workflow with TDD, verification, and code review. **[Collaborative spec review](https://pilot-shell.com/docs/features/spec-collaboration) shifts review left** — share a single link, teammates annotate inline, feedback flows back into the Console grouped by author.
 
 ```bash
 pilot
@@ -152,15 +153,29 @@ Discuss  →  Plan  →  Approve  →  Implement (TDD)  →  Verify  →  Done
 <img src="docs/img/specifications.png" alt="Pilot Shell Console — Specifications" width="700">
 
 <details>
-<summary><b>Feature Mode</b></summary>
+<summary><b>How <code>/spec</code> works</b></summary>
 
-Full exploration workflow for new functionality, refactoring, or architectural changes.
+`/spec` auto-detects whether the request is a feature or a bugfix and routes to the right workflow. The three phases below apply to both — the verify step differs slightly (features get E2E scenarios; bugfixes get a Behavior Contract audit, see the `/fix` section below).
 
 **Plan:** Explores codebase with semantic search → asks clarifying questions → writes detailed spec with scope, tasks, and definition of done → for UI features, writes **E2E test scenarios** (step-by-step, browser-executable) that become the verification contract → **spec-review sub-agent** validates completeness → waits for your approval. Optional **Codex adversarial review** provides an independent second opinion when enabled.
 
 **Implement:** Creates an isolated git worktree → implements each task with strict TDD (RED → GREEN → REFACTOR) → quality hooks auto-lint, format, and type-check every edit → full test suite after each task.
 
 **Verify:** Full test suite + actual program execution → **unified review sub-agent** (compliance + quality + goal) → for UI features, executes each E2E scenario step-by-step via browser automation (pass/fail tracked, results written to plan) → auto-fixes findings → squash merges to main on success.
+
+</details>
+
+<details>
+<summary><b>Collaborative spec review — catch flaws in the spec, not the PR</b></summary>
+
+Send a single persistent share link to your teammates. They open it in any browser at `pilot-shell.com/s/<id>` — no Pilot Shell install required — and annotate the spec inline. Submitted feedback flows back into your Console automatically (60-second poll), surfaces in the bell as `"<author> left N annotations on <spec>"`, and lands in the annotation panel grouped by teammate.
+
+- **One link, many reviewers.** Click "Share with Teammates" once. The button is permanently replaced by a copyable link. Forward it to anyone.
+- **Zero handoff.** Teammates click Submit on pilot-shell.com — no copy-URL-back step, no manual import.
+- **Author-grouped feedback in the Console.** Keep what's useful, delete what isn't. Annotations land in `.annotations/<spec>.json` so the agent reads them at the next review checkpoint.
+- **Shift left.** Wrong approach, missed edge case, unclear scope, weak architecture — spot it before code is written, where a one-sentence annotation is the entire fix. Not just bugs: anything you'd flag in PR review costs less to flag here.
+
+Links expire after 7 days. No accounts, no encryption — the unguessable URL is the access token.
 
 </details>
 

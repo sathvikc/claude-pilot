@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Hook to block built-in WebSearch/WebFetch/Plan mode and research/explore-type Agent calls.
 
-Agent calls for /spec workflow reviewers (pilot:spec-review, pilot:changes-review)
+Agent calls for /spec workflow reviewers (spec-review, changes-review)
 and web-search-agent (used by /prd deep research) pass through silently.
 Explore and Plan agents are hard-blocked (both by subagent_type AND description).
 Research-pattern agents (description starts with "Research") are blocked,
@@ -86,9 +86,8 @@ BLOCKED_AGENT_REASONS: dict[str, tuple[str, str]] = {
 }
 
 SILENT_AGENT_TYPES: set[str] = {
-    "pilot:spec-review",
-    "pilot:changes-review",
-    "pilot:web-search-agent",
+    "spec-review",
+    "changes-review",
     "web-search-agent",
 }
 

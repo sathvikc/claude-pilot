@@ -1,13 +1,16 @@
 export { compress, decompress } from "./compress";
 export type { Annotation, SharePayload, FeedbackPayload } from "./types";
+export type {
+  FeedbackQueueEntry,
+  FeedbackBatchRequest,
+  FeedbackBatchResponse,
+} from "./types";
 export {
   generateWebShareUrl,
-  generateWebFeedbackUrl,
-  generateShortFeedbackUrl,
   parseHashFragment,
   decompressSharePayload,
-  decompressFeedbackPayload,
   decompressHashPayload,
   isSharePayload,
+  submitFeedback,
 } from "./sharing";
-export type { WebShareUrlResult, ShortShareResult } from "./sharing";
+export type { WebShareUrlResult, SubmitFeedbackResult } from "./sharing";

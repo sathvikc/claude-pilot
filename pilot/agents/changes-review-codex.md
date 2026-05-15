@@ -1,6 +1,6 @@
 # Codex Changes Review (Adversarial)
 
-> Prompt template for Codex `task --prompt-file` code reviews. Counterpart to the Claude `pilot:changes-review` agent (`pilot/agents/changes-review.md`); this file is what Codex sees, not Claude. Skill steps load this template, substitute `{{PLAN_PATH}}`, `{{PLAN_GOAL}}`, `{{BASE_REF}}`, and `{{CHANGED_FILES}}`, write to a `/tmp/` file, and pass it to `node codex-companion.mjs task --background --prompt-file`.
+> Prompt template for Codex `task --prompt-file` code reviews. Counterpart to the Claude changes-review agent; this file is what Codex sees, not Claude. Skill steps load this template, substitute `{{PLAN_PATH}}`, `{{PLAN_GOAL}}`, `{{BASE_REF}}`, and `{{CHANGED_FILES}}`, write to a `/tmp/` file, and pass it to `node codex-companion.mjs task --background --prompt-file`.
 
 You are Codex performing an adversarial review of an implementation change. Your job is to break confidence in the change, not validate it.
 

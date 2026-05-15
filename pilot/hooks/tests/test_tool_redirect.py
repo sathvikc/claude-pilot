@@ -175,12 +175,12 @@ class TestAllowedSpecReviewerAgents:
     """/spec reviewer agents pass through silently — no warning."""
 
     def test_allows_spec_review(self):
-        code, output = _run_with_input("Agent", {"subagent_type": "pilot:spec-review", "prompt": "review plan"})
+        code, output = _run_with_input("Agent", {"subagent_type": "spec-review", "prompt": "review plan"})
         assert code == 0
         assert output == ""
 
     def test_allows_changes_review(self):
-        code, output = _run_with_input("Agent", {"subagent_type": "pilot:changes-review", "prompt": "review code"})
+        code, output = _run_with_input("Agent", {"subagent_type": "changes-review", "prompt": "review code"})
         assert code == 0
         assert output == ""
 
@@ -200,7 +200,7 @@ class TestAllowedWebSearchAgents:
         code, output = _run_with_input(
             "Agent",
             {
-                "subagent_type": "pilot:web-search-agent",
+                "subagent_type": "web-search-agent",
                 "description": "Research technical approaches",
                 "prompt": "search",
             },
@@ -234,7 +234,7 @@ class TestAllowedWebSearchAgents:
         """spec-review with 'Explore' description must NOT be blocked."""
         code, output = _run_with_input(
             "Agent",
-            {"subagent_type": "pilot:spec-review", "description": "Explore alignment with spec", "prompt": "review"},
+            {"subagent_type": "spec-review", "description": "Explore alignment with spec", "prompt": "review"},
         )
         assert code == 0
         assert output == ""
@@ -243,7 +243,7 @@ class TestAllowedWebSearchAgents:
         """changes-review with 'Explore' description must NOT be blocked."""
         code, output = _run_with_input(
             "Agent",
-            {"subagent_type": "pilot:changes-review", "description": "Explore code changes", "prompt": "review"},
+            {"subagent_type": "changes-review", "description": "Explore code changes", "prompt": "review"},
         )
         assert code == 0
         assert output == ""
@@ -379,7 +379,7 @@ class TestSubprocessIntegration:
         assert _is_denied(stdout)
 
     def test_spec_reviewers_silent(self):
-        for subagent in ["pilot:changes-review", "pilot:spec-review"]:
+        for subagent in ["changes-review", "spec-review"]:
             exit_code, stdout, _ = _run_subprocess("Agent", {"subagent_type": subagent})
             assert exit_code == 0
             assert not _is_denied(stdout)
@@ -1081,9 +1081,7 @@ class TestDangerousGitContextMode:
         assert _is_denied(output)
 
     def test_blocks_git_push_force_via_ctx_execute_shell(self):
-        code, output = _run_with_input(
-            _CTX_EXEC, {"language": "shell", "code": "git push --force origin main"}
-        )
+        code, output = _run_with_input(_CTX_EXEC, {"language": "shell", "code": "git push --force origin main"})
         assert code == 2
         assert _is_denied(output)
 
@@ -1095,9 +1093,7 @@ class TestDangerousGitContextMode:
     def test_allows_non_shell_ctx_execute(self):
         # Non-shell language: scanning shell-regex against arbitrary Python source is
         # over-broad. Documented gap; skip the scan when language != "shell".
-        code, output = _run_with_input(
-            _CTX_EXEC, {"language": "python", "code": "print('git reset --hard')"}
-        )
+        code, output = _run_with_input(_CTX_EXEC, {"language": "python", "code": "print('git reset --hard')"})
         assert code == 0
         assert not _is_denied(output)
 
@@ -1115,9 +1111,7 @@ class TestDangerousGitContextMode:
         assert _is_denied(output)
 
     def test_blocks_git_reset_hard_in_first_ctx_batch_command(self):
-        code, output = _run_with_input(
-            _CTX_BATCH, {"commands": [{"label": "destroy", "command": "git reset --hard"}]}
-        )
+        code, output = _run_with_input(_CTX_BATCH, {"commands": [{"label": "destroy", "command": "git reset --hard"}]})
         assert code == 2
         assert _is_denied(output)
 
@@ -1147,8 +1141,6 @@ class TestDangerousGitContextMode:
 
     def test_ctx_batch_execute_with_malformed_entry_does_not_crash(self):
         """A non-dict entry in commands list must be skipped, not crash."""
-        code, output = _run_with_input(
-            _CTX_BATCH, {"commands": [{"label": "a", "command": "ls"}, "not a dict", None]}
-        )
+        code, output = _run_with_input(_CTX_BATCH, {"commands": [{"label": "a", "command": "ls"}, "not a dict", None]})
         assert code == 0
         assert not _is_denied(output)

@@ -54,8 +54,11 @@ Type: Bugfix
 
 ## Tasks
 
-> Always 3 tasks below. Their checkboxes are the progress tracker — no separate `## Progress` section needed.
+> Always 3 tasks below. The `- [ ]` checkboxes immediately under this heading are the progress tracker (`spec-implement` toggles them `[ ]` → `[x]`); the `### Task N:` blocks hold the bodies. No separate `## Progress Tracking` section needed.
 
+- [ ] Task 1: Write Reproducing Test (RED)
+- [ ] Task 2: Implement Fix at Root Cause
+- [ ] Task 3: Quality Gate
 
 ### Task 1: Write Reproducing Test (RED)
 

@@ -1,27 +1,48 @@
 import { useState, useEffect, useMemo } from "react";
-import { ChevronDown } from "lucide-react";
+import {
+  AlertTriangle,
+  BookOpen,
+  Bookmark,
+  Brain,
+  CheckSquare,
+  ChevronDown,
+  ClipboardCheck,
+  ClipboardList,
+  Compass,
+  Cpu,
+  Crosshair,
+  FileText,
+  HelpCircle,
+  Lightbulb,
+  ListTree,
+  MonitorCheck,
+  MousePointerClick,
+  Route,
+  Scale,
+  SquareX,
+  Target,
+  Terminal,
+  Text as TextIcon,
+  Wrench,
+  type LucideIcon,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { BlockRenderer } from "./BlockRenderer";
+import { extractObjectiveBlocks, stripLabelPrefix } from "./sectioned-block-helpers";
 import type { Annotation, Block } from "@/lib/annotation/types";
 
 /**
  * Section-aware wrapper around BlockRenderer for pilot-shell.com / shared
  * spec viewing.
  *
- * Ported from console/src/ui/viewer/views/Spec/annotation/SectionedBlockRenderer.tsx
- * — kept in sync. Same grouping logic; classnames adapted to shadcn tokens
- * (border-border / bg-card / text-muted-foreground) used by the marketing
- * site.
- *
  * Grouping levels:
  *  - H2 (`##`) → top-level collapsible section.
  *  - Inside `## Implementation Tasks` / `## Tasks`, `### Task N:` H3 → per-task collapsible.
  *  - Inside each task, paragraphs whose content is `**Label:**` → per-field collapsible.
  *
- * Annotation anchoring is preserved: the inner BlockRenderer still renders
- * each Block by its stable id, so the existing annotation overlay works
- * unchanged. Clicking an annotation in the sidebar auto-expands its
- * enclosing collapsibles.
+ * Heading blocks are NOT re-rendered inside their own card — the card title
+ * already shows the heading. Annotation auto-expand still works by checking
+ * the heading block id alongside the body blocks.
  */
 
 interface SectionedBlockRendererProps {
@@ -55,8 +76,55 @@ interface FieldGroup {
   blocks: Block[];
 }
 
-const SECTIONS_DEFAULT_OPEN = new Set(["Summary", "Problem Statement"]);
-const FIELD_DEFAULT_OPEN = new Set<string>();
+// Map section headings to lucide icons (ported from console SpecSection.tsx).
+const SECTION_ICONS: Record<string, LucideIcon> = {
+  // Spec sections
+  Summary: TextIcon,
+  Approach: Compass,
+  "Fix Approach": Wrench,
+  "Feature Inventory": ClipboardList,
+  Scope: Target,
+  "Out of Scope": SquareX,
+  "Autonomous Decisions": Brain,
+  "Context for Implementer": BookOpen,
+  "Runtime Environment": Terminal,
+  Assumptions: Lightbulb,
+  "Risks and Mitigations": AlertTriangle,
+  "Goal Verification": CheckSquare,
+  "E2E Test Scenarios": MonitorCheck,
+  "E2E Results": ClipboardCheck,
+  "Verification Scenario": MousePointerClick,
+  "Open Questions": HelpCircle,
+  "Deferred Ideas": Bookmark,
+  "Implementation Details": ListTree,
+  "Implementation Tasks": ListTree,
+  Tasks: ListTree,
+  Investigation: HelpCircle,
+  "Behavior Contract": Scale,
+  // PRD sections
+  "Problem Statement": Crosshair,
+  "Core User Flows": Route,
+  "Technical Context": Cpu,
+  "Key Decisions": Scale,
+};
+
+// Plan-header metadata paragraph: `Created: …\nAuthor: …\nStatus: …\n…`.
+// Hidden from the shared view — reviewers don't review progress.
+const PLAN_METADATA_RE = /^(Created|Author|Status|Approved|Iterations|Worktree|Type):/m;
+
+function isPlanMetadataBlock(block: Block): boolean {
+  return block.type === "paragraph" && PLAN_METADATA_RE.test(block.content);
+}
+
+// Top-of-tasks-section progress checklist: `- [x] Task N: …`. Hidden from
+// the shared view because each task already renders as its own collapsible.
+function isTaskProgressChecklistItem(block: Block): boolean {
+  return (
+    block.type === "list-item" &&
+    typeof block.checked === "boolean" &&
+    /^Task\s+\d+:/.test(block.content)
+  );
+}
 
 function groupByH2(blocks: Block[]): H2Group[] {
   const groups: H2Group[] = [];
@@ -64,9 +132,8 @@ function groupByH2(blocks: Block[]): H2Group[] {
   for (const block of blocks) {
     if (block.type === "heading" && block.level === 2) {
       if (current) groups.push(current);
-      // Include the heading block in the group so annotations anchored to the
-      // heading still render and can be located by selectedAnnotationId.
-      current = { heading: block.content, headingBlock: block, blocks: [block] };
+      // Heading block is NOT in .blocks — the CollapsibleCard title shows it.
+      current = { heading: block.content, headingBlock: block, blocks: [] };
     } else if (current) {
       current.blocks.push(block);
     } else {
@@ -86,8 +153,6 @@ function groupByTaskH3(blocks: Block[]): TaskGroup[] {
       const m = block.content.match(/^Task\s+(\d+):\s*(.+)$/);
       if (m) {
         if (current) groups.push(current);
-        // Flush any blocks that appeared before the first `### Task N:` match
-        // into a prelude group (number=0, no headingBlock) so they aren't lost.
         else if (prelude.length > 0) {
           groups.push({ number: 0, title: "", headingBlock: null, blocks: prelude.splice(0) });
         }
@@ -95,7 +160,8 @@ function groupByTaskH3(blocks: Block[]): TaskGroup[] {
           number: parseInt(m[1], 10),
           title: m[2].trim(),
           headingBlock: block,
-          blocks: [block],
+          // Heading block is NOT in .blocks — the CollapsibleCard title shows it.
+          blocks: [],
         };
         continue;
       }
@@ -124,11 +190,13 @@ function groupByLabel(blocks: Block[]): FieldGroup[] {
     const label = matchLabelMarker(block);
     if (label) {
       if (current) groups.push(current);
-      current = { label, blocks: [block] };
+      const stripped = stripLabelPrefix(block, label);
+      current = { label, blocks: stripped ? [stripped] : [] };
       continue;
     }
     if (current) current.blocks.push(block);
-    else current = { label: "Notes", blocks: [block] };
+    // No leading-`**Label:**` block → blocks go into the parent task body
+    // directly (no synthetic "Notes" group that just mirrors the title).
   }
   if (current) groups.push(current);
   return groups;
@@ -136,6 +204,7 @@ function groupByLabel(blocks: Block[]): FieldGroup[] {
 
 interface CollapsibleCardProps {
   title: React.ReactNode;
+  icon?: LucideIcon;
   defaultOpen: boolean;
   expanded?: boolean;
   rightSlot?: React.ReactNode;
@@ -144,6 +213,7 @@ interface CollapsibleCardProps {
 
 function CollapsibleCard({
   title,
+  icon: SectionIcon,
   defaultOpen,
   expanded,
   rightSlot,
@@ -159,6 +229,9 @@ function CollapsibleCard({
         onClick={() => setIsOpen(!isOpen)}
         className="w-full flex items-center gap-2.5 px-4 py-3 text-left cursor-pointer hover:bg-muted/50 transition-colors"
       >
+        {SectionIcon && (
+          <SectionIcon size={14} className="text-primary flex-shrink-0" />
+        )}
         <div className="flex-1 text-sm font-semibold">{title}</div>
         {rightSlot}
         <ChevronDown
@@ -207,10 +280,15 @@ export function SectionedBlockRenderer({
     />
   );
 
-  const containsBlock = (
+  const containsBlockOrHeading = (
     groupBlocks: Block[],
+    headingBlock: Block | null,
     targetId: string | null,
-  ): boolean => !!targetId && groupBlocks.some((b) => b.id === targetId);
+  ): boolean => {
+    if (!targetId) return false;
+    if (headingBlock && headingBlock.id === targetId) return true;
+    return groupBlocks.some((b) => b.id === targetId);
+  };
 
   return (
     <div className="space-y-2">
@@ -218,39 +296,57 @@ export function SectionedBlockRenderer({
         const isTaskSection =
           section.heading === "Implementation Tasks" ||
           section.heading === "Tasks";
-        const sectionDefaultOpen =
-          !section.heading || SECTIONS_DEFAULT_OPEN.has(section.heading);
-        const sectionForceOpen = containsBlock(section.blocks, forceOpenBlockId);
+        const sectionForceOpen = containsBlockOrHeading(
+          section.blocks,
+          section.headingBlock,
+          forceOpenBlockId,
+        );
         if (!section.heading) {
+          // Preamble before the first H2: drop the plan-metadata paragraph
+          // so reviewers don't see Status/Iterations/Approved/etc.
+          const preambleBlocks = section.blocks.filter(
+            (b) => !isPlanMetadataBlock(b),
+          );
+          if (preambleBlocks.length === 0) return null;
           return (
             <div key={`preamble-${section.headingBlock.id}`}>
-              {renderLeaf(section.blocks)}
+              {renderLeaf(preambleBlocks)}
             </div>
           );
         }
+        const SectionIcon = SECTION_ICONS[section.heading] ?? FileText;
         return (
           <CollapsibleCard
             key={section.headingBlock.id}
             title={section.heading}
-            defaultOpen={sectionDefaultOpen || sectionForceOpen}
+            icon={SectionIcon}
+            defaultOpen={true}
             expanded={sectionForceOpen || undefined}
           >
             {isTaskSection ? (
               <div className="space-y-2">
                 {groupByTaskH3(section.blocks).map((task) => {
-                  const taskForceOpen = containsBlock(
+                  const taskForceOpen = containsBlockOrHeading(
                     task.blocks,
+                    task.headingBlock,
                     forceOpenBlockId,
                   );
-                  // Prelude group (no heading) renders as a section without its own card.
+                  // Prelude blocks (before the first `### Task N:`): drop
+                  // the progress checklist (`- [x] Task N: …`) — the
+                  // per-task cards below already show each task.
                   if (task.headingBlock === null) {
+                    const preludeBlocks = task.blocks.filter(
+                      (b) => !isTaskProgressChecklistItem(b),
+                    );
+                    if (preludeBlocks.length === 0) return null;
                     return (
                       <div key={`prelude-${task.blocks[0]?.id ?? "empty"}`}>
-                        {renderLeaf(task.blocks)}
+                        {renderLeaf(preludeBlocks)}
                       </div>
                     );
                   }
                   const taskHeadingId = task.headingBlock.id;
+                  const { objective, rest } = extractObjectiveBlocks(task.blocks);
                   return (
                     <CollapsibleCard
                       key={taskHeadingId}
@@ -265,10 +361,19 @@ export function SectionedBlockRenderer({
                       defaultOpen={taskForceOpen}
                       expanded={taskForceOpen || undefined}
                     >
+                      {/* The per-task Objective renders inline as the
+                          "what this task does" line — matching the Console
+                          SpecTaskCard layout. No second click required. */}
+                      {objective && objective.length > 0 && (
+                        <div className="mb-3 text-sm text-muted-foreground">
+                          {renderLeaf(objective)}
+                        </div>
+                      )}
                       <div className="space-y-2">
-                        {groupByLabel(task.blocks).map((field) => {
-                          const fieldForceOpen = containsBlock(
+                        {groupByLabel(rest).map((field) => {
+                          const fieldForceOpen = containsBlockOrHeading(
                             field.blocks,
+                            null,
                             forceOpenBlockId,
                           );
                           return (
@@ -279,9 +384,7 @@ export function SectionedBlockRenderer({
                                   {field.label}
                                 </span>
                               }
-                              defaultOpen={
-                                FIELD_DEFAULT_OPEN.has(field.label) || fieldForceOpen
-                              }
+                              defaultOpen={fieldForceOpen}
                               expanded={fieldForceOpen || undefined}
                             >
                               {renderLeaf(field.blocks)}

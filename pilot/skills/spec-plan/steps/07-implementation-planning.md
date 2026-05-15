@@ -18,12 +18,12 @@ One responsibility per file. Files that change together live together. In existi
 
 **Task Granularity:** Each task: independently testable, focused (2-4 files max), verifiable. Split if multiple unrelated DoD criteria; merge if one can't be tested without the other. Don't create tasks for setup/boilerplate with no standalone value — fold into the first task that uses them. Task ORDER implies dependencies — no separate `Dependencies:` field needed.
 
-**Task Structure (3 required fields — keep it tight):**
+**Task Structure (4 required fields — keep it tight):**
 
 ```markdown
-### Task N: [Component Name — make the TITLE the objective. "Rename foo → bar in launcher" tells the reader everything; do not then write a 2-sentence Objective restating it.]
+### Task N: [Component Name — a short imperative title; the Objective below carries the description.]
 
-**Objective:** [OPTIONAL — include ONLY when the title cannot convey purpose. If the title is self-explanatory ("Rename X → Y", "Add /api/users endpoint", "Migrate v10 → v11"), OMIT this field entirely. When included, ≤2 sentences capturing why or cross-task implications the title can't. If covered by a specific E2E scenario, reference it inline: "verified by TS-002".]
+**Objective:** [REQUIRED — 2-3 sentences describing what this task does and why. Reads as the "what this task does" line shown below the title in the Console / pilot-shell.com spec viewer. State the change in plain prose, not bullet form. If a specific E2E scenario verifies it, reference it inline: "verified by TS-002".]
 
 **Files:**
 
@@ -62,7 +62,7 @@ When listing files for a task, do not auto-create a new `tests/.../test_<file>.p
 3. Otherwise, plan **at most 1 new unit test class + at most 1 new functional/integration test class** for this production class. More than that requires an explicit `Why >2 test classes:` note in `Key Decisions`.
 4. Never plan a test file per method or per branch. The test class is the unit; methods inside it cover branches.
 
-The reviewer agent (`pilot/agents/changes-review.md`) and `spec-verify` Step 2 audit these rules against the actual diff — they are not advisory.
+The reviewer agent and `spec-verify` Step 2 audit these rules against the actual diff — they are not advisory.
 
 **Performance considerations:** When a task processes data on a hot path (render loops, request handlers, polling callbacks), note it in Key Decisions. Flag: expensive computations that should be cached/memoized, heavy dependencies that have lighter alternatives, and repeated work that can be avoided when input hasn't changed.
 

@@ -7,6 +7,7 @@ import SEO from "@/components/SEO";
 // Below-the-fold sections — split into separate chunks loaded after first paint.
 const WorkflowSteps = lazy(() => import("@/components/WorkflowSteps"));
 const WhatsInside = lazy(() => import("@/components/WhatsInside"));
+const SpecCollabSection = lazy(() => import("@/components/SpecCollabSection"));
 const ConsoleSection = lazy(() => import("@/components/ConsoleSection"));
 const DemoSection = lazy(() => import("@/components/DemoSection"));
 const PricingSection = lazy(() => import("@/components/PricingSection"));
@@ -98,6 +99,7 @@ const Index = () => {
         <Suspense fallback={<SectionFallback />}>
           <WhatsInside />
           <WorkflowSteps />
+          <SpecCollabSection />
           <ConsoleSection />
           <PricingSection />
           <TestimonialsSection />

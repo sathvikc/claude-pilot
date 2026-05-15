@@ -41,7 +41,7 @@ rm -f ~/.pilot/sessions/$PILOT_SESSION_ID/findings-changes-review-*.json
 
 ```
 Task(
-  subagent_type="pilot:changes-review",
+  subagent_type="changes-review",
   run_in_background=true,
   prompt="""
   **Plan file:** <plan-path>
@@ -123,7 +123,5 @@ pathlib.Path(os.environ["PROMPT_FILE"]).write_text(text)
    ```
 
    The stdout looks like: `Codex Task started in the background as task-<id>. Check /codex:status task-<id> for progress.` Extract the `task-…` token and store as `JOB_ID`.
-
-**Why `task` instead of `adversarial-review --scope working-tree`?** Two reasons: (1) consistency with `spec-plan`, where plan files are gitignored and only `task` works; (2) single source of truth — the Codex prompt lives in `pilot/agents/changes-review-codex.md` and is shared by all `/spec` and `/fix` Codex calls, instead of being embedded in skill steps. Codex still gets the diff — the template instructs it to run `git diff {{BASE_REF}}..HEAD -- {{CHANGED_FILES}}` itself via Bash.
 
 **Do NOT wait** — proceed to Step 2 immediately. You'll be notified when the polling bash (Step 3) completes.

@@ -32,6 +32,7 @@ const sidebars: SidebarsConfig = {
       label: "Features",
       collapsed: false,
       items: [
+        "features/spec-collaboration",
         "features/console",
         "features/bot",
         "features/statusline",

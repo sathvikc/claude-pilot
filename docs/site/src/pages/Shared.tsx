@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useParams } from "react-router-dom";
-import { Link2, Shield, ArrowRight, AlertCircle, RefreshCw, MessageSquarePlus } from "lucide-react";
+import { Shield, ArrowRight, AlertCircle, RefreshCw } from "lucide-react";
 import NavBar from "@/components/NavBar";
 import Footer from "@/components/Footer";
 import SEO from "@/components/SEO";
@@ -14,7 +14,7 @@ import { parseMarkdownToBlocks, useAnnotation, createAnnotation } from "@/lib/an
 import {
   parseHashFragment,
   decompressHashPayload,
-  generateShortFeedbackUrl,
+  submitFeedback,
 } from "@/lib/sharing";
 import type { SharePayload } from "@/lib/sharing";
 
@@ -54,8 +54,7 @@ type PageState =
   | { status: "landing" }
   | { status: "loading" }
   | { status: "error"; message: string }
-  | { status: "ready"; payload: SharePayload }
-  | { status: "feedback-only" };
+  | { status: "ready"; payload: SharePayload };
 
 /** Computed once at module load — stable constant, never changes after page load */
 const BROWSER_ERROR = checkBrowserSupport();
@@ -67,7 +66,8 @@ export default function Shared() {
   );
   const [pasteInput, setPasteInput] = useState("");
   const [authorName, setAuthorName] = useState("Anonymous");
-  const [isSending, setIsSending] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submittedCount, setSubmittedCount] = useState<number | undefined>(undefined);
   const { toast } = useToast();
 
   const {
@@ -86,7 +86,11 @@ export default function Shared() {
         return;
       }
       if (result.type === "feedback") {
-        setPageState({ status: "feedback-only" });
+        // Legacy feedback URLs no longer have a corresponding flow; surface a graceful error.
+        setPageState({
+          status: "error",
+          message: "This is a legacy feedback URL. Feedback URLs are no longer generated — open the spec link your teammate shared with you and submit directly.",
+        });
         return;
       }
       setPageState({ status: "ready", payload: result.payload });
@@ -100,7 +104,7 @@ export default function Shared() {
     try {
       const res = await fetch(`/api/share?id=${encodeURIComponent(id)}`);
       if (res.status === 404) {
-        setPageState({ status: "error", message: "Share link not found or expired (links expire after 3 days)." });
+        setPageState({ status: "error", message: "Share link not found or expired (links expire after 7 days)." });
         return;
       }
       if (!res.ok) {
@@ -154,10 +158,20 @@ export default function Shared() {
     }
   };
 
-  const handleSendFeedback = useCallback(async () => {
+  const handleSubmitFeedback = useCallback(async () => {
     const payload = pageState.status === "ready" ? pageState.payload : null;
     if (!payload || annotationState.annotations.length === 0) return;
-    setIsSending(true);
+    // The share id must come from the URL — only path-id routes get a feedback channel.
+    // Legacy fragment URLs (no Redis-side share id) can't submit; toast and bail.
+    if (!routeId || !/^[A-Za-z0-9]{8}$/.test(routeId)) {
+      toast({
+        title: "Cannot submit feedback",
+        description: "This is a legacy fragment URL with no server-side channel. Ask the owner to re-share with the new short link.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setIsSubmitting(true);
     try {
       const feedbackPayload = {
         annotations: annotationState.annotations,
@@ -165,53 +179,44 @@ export default function Shared() {
         planPath: payload.planPath,
         createdAt: Date.now(),
       };
-      const result = await generateShortFeedbackUrl(feedbackPayload);
+      const result = await submitFeedback(routeId, feedbackPayload);
       if (result.ok) {
-        // Clipboard write is best-effort — preserve the URL on failure so the user
-        // can still copy it manually instead of triggering another /api/share POST.
-        try {
-          await navigator.clipboard.writeText(result.url);
-          toast({ title: "Feedback URL copied!", description: "Share it with the document owner to import your annotations." });
-        } catch {
-          toast({
-            title: "Feedback URL generated — copy it manually",
-            description: result.url,
-          });
-        }
+        setSubmittedCount(annotationState.annotations.length);
+        toast({
+          title: "Feedback submitted",
+          description: `${annotationState.annotations.length} annotation${annotationState.annotations.length === 1 ? "" : "s"} sent to the spec owner.`,
+        });
+      } else if (result.reason === "not_found") {
+        toast({
+          title: "Share link expired",
+          description: "This share is no longer accepting feedback (the 7-day window has closed).",
+          variant: "destructive",
+        });
+      } else if (result.reason === "too_large") {
+        toast({
+          title: "Feedback too large",
+          description: "Please reduce the number or length of annotations and try again.",
+          variant: "destructive",
+        });
+      } else if (result.reason === "rate_limited") {
+        toast({
+          title: "Rate limit reached",
+          description: "Too many submissions from this connection — wait a few minutes and try again.",
+          variant: "destructive",
+        });
       } else {
-        const reason = "reason" in result ? result.reason : "network";
-        if (reason === "too_large") {
-          toast({
-            title: "Feedback too large",
-            description: "Please reduce the number or length of annotations and try again.",
-            variant: "destructive",
-          });
-        } else if (reason === "rate_limited") {
-          toast({
-            title: "Rate limit reached",
-            description: "Too many feedback links from this connection — wait a few minutes and try again.",
-            variant: "destructive",
-          });
-        } else if (reason === "timeout") {
-          toast({
-            title: "Request timed out",
-            description: "pilot-shell.com share service did not respond. Please retry.",
-            variant: "destructive",
-          });
-        } else {
-          toast({
-            title: "Failed to reach pilot-shell.com share service",
-            description: "Please check your connection and try again.",
-            variant: "destructive",
-          });
-        }
+        toast({
+          title: "Failed to reach pilot-shell.com",
+          description: "Please check your connection and try again.",
+          variant: "destructive",
+        });
       }
     } catch {
-      toast({ title: "Failed to generate feedback URL", description: "Please try again.", variant: "destructive" });
+      toast({ title: "Failed to submit feedback", description: "Please try again.", variant: "destructive" });
     } finally {
-      setIsSending(false);
+      setIsSubmitting(false);
     }
-  }, [pageState, annotationState.annotations, authorName, toast]);
+  }, [pageState, annotationState.annotations, authorName, routeId, toast]);
 
   const payload = pageState.status === "ready" ? pageState.payload : null;
   const blocks = payload ? parseMarkdownToBlocks(payload.specContent) : [];
@@ -233,7 +238,7 @@ export default function Shared() {
     <>
       <SEO
         title={`Shared ${contentLabel} — Pilot Shell`}
-        description={`View and annotate a shared ${contentLabel.toLowerCase()} from Pilot Shell. Short-lived storage — links expire after 3 days.`}
+        description={`View and annotate a shared ${contentLabel.toLowerCase()} from Pilot Shell. Short-lived storage — links expire after 7 days.`}
         canonicalUrl={SHARE_BASE_URL}
       />
       <NavBar />
@@ -288,7 +293,7 @@ export default function Shared() {
                   <div className="space-y-1">
                     <p className="text-xs font-medium">Short-lived storage</p>
                     <p className="text-xs text-muted-foreground">
-                      Compressed payload is stored on pilot-shell.com for up to 3 days. Anyone with the link can view; the link itself is the access token.
+                      Compressed payload is stored on pilot-shell.com for up to 7 days. Anyone with the link can view — no Pilot Shell install required; the link itself is the access token.
                     </p>
                   </div>
                 </div>
@@ -298,7 +303,7 @@ export default function Shared() {
                   {[
                     "Paste the share URL and click Load",
                     "Read the document and add annotations by clicking the + button on any block",
-                    "Click Send Feedback to generate a URL to share back",
+                    "Click Submit Feedback — your notes flow back to the spec owner automatically",
                   ].map((step, i) => (
                     <li key={i} className="flex items-start gap-2 text-xs text-muted-foreground">
                       <span className="flex-shrink-0 w-4 h-4 rounded-full bg-primary/15 text-primary text-[9px] font-bold flex items-center justify-center mt-0.5">
@@ -338,21 +343,6 @@ export default function Shared() {
           </div>
         )}
 
-        {/* Feedback-only URL */}
-        {pageState.status === "feedback-only" && (
-          <div className="max-w-lg mx-auto px-4 py-16 text-center space-y-4">
-            <MessageSquarePlus className="h-12 w-12 text-primary mx-auto" />
-            <h2 className="text-xl font-semibold">This is a feedback URL</h2>
-            <p className="text-sm text-muted-foreground">
-              This link contains annotation feedback, not a shared document. Open it in Pilot Shell's Spec view by clicking "Receive Feedback" and pasting this URL.
-            </p>
-            <Button variant="outline" onClick={() => setPageState({ status: "landing" })} className="gap-1.5">
-              <Link2 size={14} />
-              Back to landing
-            </Button>
-          </div>
-        )}
-
         {/* Spec viewer */}
         {pageState.status === "ready" && payload && (
           <div className="flex w-full" style={{ minHeight: "calc(100vh - 5rem)" }}>
@@ -378,7 +368,7 @@ export default function Shared() {
                           {sharedAt && <span>{sharedAt}</span>}
                           <span className="flex items-center gap-1 text-green-600 dark:text-green-400">
                             <Shield size={10} />
-                            Stored ≤ 3 days
+                            Stored ≤ 7 days
                           </span>
                         </div>
                       </div>
@@ -414,8 +404,9 @@ export default function Shared() {
                 onAuthorNameChange={setAuthorName}
                 onRemoveAnnotation={removeAnnotation}
                 onUpdateAnnotation={(id, text) => updateAnnotation(id, { text })}
-                onSendFeedback={handleSendFeedback}
-                isSending={isSending}
+                onSubmitFeedback={handleSubmitFeedback}
+                isSubmitting={isSubmitting}
+                submittedCount={submittedCount}
               />
             </div>
           </div>

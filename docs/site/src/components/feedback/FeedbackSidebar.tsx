@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Send, ChevronRight, ChevronDown, MessageSquarePlus, X, Trash2 } from "lucide-react";
+import { Send, ChevronRight, ChevronDown, MessageSquarePlus, X, Trash2, CheckCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -15,8 +15,10 @@ interface FeedbackSidebarProps {
   onAuthorNameChange: (name: string) => void;
   onRemoveAnnotation: (id: string) => void;
   onUpdateAnnotation: (id: string, text: string) => void;
-  onSendFeedback: () => void;
-  isSending?: boolean;
+  onSubmitFeedback: () => void;
+  isSubmitting?: boolean;
+  /** When set, render the post-submit success state instead of the form. */
+  submittedCount?: number;
 }
 
 export function FeedbackSidebar({
@@ -26,12 +28,33 @@ export function FeedbackSidebar({
   onAuthorNameChange,
   onRemoveAnnotation,
   onUpdateAnnotation,
-  onSendFeedback,
-  isSending = false,
+  onSubmitFeedback,
+  isSubmitting = false,
+  submittedCount,
 }: FeedbackSidebarProps) {
   const [sharerExpanded, setSharerExpanded] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
+
+  // Post-submit success state — replaces the entire sidebar UI once the
+  // teammate has sent their feedback. No copy-URL flow anymore: the Console
+  // poller pulls the annotations automatically.
+  if (typeof submittedCount === "number") {
+    return (
+      <div className="flex flex-col h-full border-l border-border bg-muted/20 items-center justify-center px-6 py-8 text-center space-y-3">
+        <div className="bg-primary/10 rounded-full w-12 h-12 flex items-center justify-center">
+          <CheckCircle className="h-6 w-6 text-primary" />
+        </div>
+        <p className="text-sm font-semibold">Feedback submitted</p>
+        <p className="text-xs text-muted-foreground">
+          {submittedCount} annotation{submittedCount === 1 ? "" : "s"} sent to the spec owner.
+        </p>
+        <p className="text-[10px] text-muted-foreground/60 leading-relaxed">
+          You can close this tab — no link to copy back.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-full border-l border-border bg-muted/20">
@@ -58,18 +81,18 @@ export function FeedbackSidebar({
           />
         </div>
 
-        {/* Send button */}
+        {/* Submit button */}
         <Button
           className="w-full gap-2 h-8 text-xs"
-          disabled={recipientAnnotations.length === 0 || isSending}
-          onClick={onSendFeedback}
+          disabled={recipientAnnotations.length === 0 || isSubmitting}
+          onClick={onSubmitFeedback}
         >
-          {isSending ? (
+          {isSubmitting ? (
             <span className="h-3 w-3 border border-current border-t-transparent rounded-full animate-spin" />
           ) : (
             <Send size={13} />
           )}
-          Send Feedback ({recipientAnnotations.length})
+          Submit Feedback ({recipientAnnotations.length})
         </Button>
       </div>
 

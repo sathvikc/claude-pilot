@@ -17,7 +17,7 @@ model: sonnet
 
 ## ⛔ KEY CONSTRAINTS
 
-1. **Run code review when enabled** — Step 1 launches `changes-review` via `Task(subagent_type="pilot:changes-review")` when `PILOT_CHANGES_REVIEW_ENABLED` is not `"false"` (read in Step 0). To disable, use Console Settings → Reviewers → Changes Review toggle.
+1. **Run code review when enabled** — Step 1 launches `changes-review` via `Task(subagent_type="changes-review")` when `PILOT_CHANGES_REVIEW_ENABLED` is not `"false"` (read in Step 0). To disable, use Console Settings → Reviewers → Changes Review toggle.
 2. **Only changes-review — NEVER spec-review** — Do NOT launch `spec-review` during verification. Do NOT read or reference `findings-spec-review-*.json` files — they are stale artifacts from the planning phase that were already addressed during implementation. If you encounter a spec-review findings file, **ignore it completely**.
 3. **NO stopping** — Everything automatic. Never ask "Should I fix these?"
 4. **Fix ALL findings** — must_fix AND should_fix. No permission needed.

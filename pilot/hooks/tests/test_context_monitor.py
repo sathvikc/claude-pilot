@@ -499,3 +499,82 @@ class TestStandaloneExecution:
         )
         assert "ImportError" not in result.stderr
         assert "ModuleNotFoundError" not in result.stderr
+
+
+class TestRunContextMonitorOrchestrator:
+    """Orchestrator-aware window resolution and pct scaling.
+
+    When /spec-implement is the active orchestrator phase AND its resolved
+    skill model has a smaller context window than the main session, the hook
+    must scale the cached pct by main_window/orchestrator_window before
+    threshold comparison. Otherwise the user gets no Pilot pre-warning before
+    the orchestrator's auto-compact fires silently (the user-reported bug).
+    """
+
+    def test_run_context_monitor_scales_pct_when_orchestrator_window_smaller_than_main_emits_autocompact(
+        self, tmp_path: Path
+    ) -> None:
+        """Main=1M opus, orchestrator=200K sonnet (extendedContextOverrides disables 1M for spec-implement).
+
+        Cached raw_pct=30 in main frame (≈300K tokens / 1M). In the orchestrator's
+        200K frame this is 150% → clamp to 100% → above THRESHOLD_AUTOCOMPACT=75 →
+        must emit 'Auto-compact approaching'.
+
+        Currently (bug): hook compares raw 30 against 65/75 → silent stdout.
+        Expected (fix): orchestrator-aware scaling fires AUTOCOMPACT.
+        """
+        import io
+
+        session_id = "orch-test-autocompact"
+        session_dir = tmp_path / ".pilot" / "sessions" / session_id
+        session_dir.mkdir(parents=True)
+        (session_dir / "context-pct.json").write_text(
+            json.dumps({"pct": 30.0, "ts": time.time(), "context_window_size": 1_000_000})
+        )
+
+        plan_path = tmp_path / "docs" / "plans" / "2026-05-15-orch-fixture.md"
+        plan_path.parent.mkdir(parents=True)
+        plan_path.write_text(
+            "# Orch Fixture Plan\n\nStatus: PENDING\nApproved: Yes\nType: Feature\n\n"
+            "## Summary\n\nFixture for orchestrator-aware test.\n"
+        )
+        (session_dir / "active_plan.json").write_text(json.dumps({"plan_path": str(plan_path), "status": "PENDING"}))
+        (tmp_path / ".pilot" / "config.json").write_text(
+            json.dumps(
+                {
+                    "model": "opus",
+                    "extendedContext": True,
+                    "skills": {"spec-implement": "sonnet"},
+                    "extendedContextOverrides": {"spec-implement": False},
+                }
+            )
+        )
+
+        with (
+            patch.dict(os.environ, {"PILOT_SESSION_ID": session_id}),
+            patch.object(Path, "home", return_value=tmp_path),
+            patch(
+                "context_monitor.get_session_cache_path",
+                return_value=session_dir / "context-cache.json",
+            ),
+        ):
+            captured = io.StringIO()
+            old_stdout = sys.stdout
+            sys.stdout = captured
+            try:
+                exit_code = run_context_monitor()
+            finally:
+                sys.stdout = old_stdout
+
+            output = captured.getvalue()
+
+        assert exit_code == 0
+        assert output, (
+            "Expected the hook to emit a scaled-pct AUTOCOMPACT warning because the "
+            "orchestrator window (200K) is smaller than the main session window (1M) "
+            "and 300K absolute tokens already exceeds the orchestrator's compact budget. "
+            f"Current code emits no warning — stdout: {output!r}"
+        )
+        assert "Auto-compact approaching" in output, (
+            f"Expected 'Auto-compact approaching' in scaled-pct output, got: {output!r}"
+        )
