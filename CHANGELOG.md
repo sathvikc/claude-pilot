@@ -2,6 +2,13 @@
 
 All notable changes to Pilot Shell will be documented in this file.
 
+## [8.10.2] - 2026-05-18
+
+### Bug Fixes
+
+- Multi-user spec review approve/deny, live SSE updates, section parity, durability hardening
+- Stacked layout for share UI in annotation panel, copy via ctrl+c fix
+
 ## [8.10.1] - 2026-05-15
 
 ### Bug Fixes
