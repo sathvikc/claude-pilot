@@ -39,6 +39,16 @@ export interface SharePayload {
   createdAt: number;
 }
 
+/**
+ * GitHub-PR-style top-level review verdict. Submitted from pilot-shell.com
+ * alongside (or independently of) inline annotations on the same feedback batch.
+ */
+export interface Decision {
+  verdict: "approve" | "request_changes";
+  /** Free-text comment, 0–4000 chars (server-enforced). */
+  comment?: string;
+}
+
 /** Payload for sending feedback annotations back (B→A direction) */
 export interface FeedbackPayload {
   /** Annotations created by the recipient */
@@ -49,6 +59,8 @@ export interface FeedbackPayload {
   planPath?: string;
   /** Timestamp when feedback was created */
   createdAt: number;
+  /** Optional top-level review verdict for this submit. */
+  decision?: Decision;
 }
 
 // ─── Multi-user feedback polling (2026-05-15) ─────────────────────────────────
@@ -79,5 +91,11 @@ export type FeedbackBatchResponse = Record<
     cursor: number;
     /** Present only when `share:<id>` does not exist (expired or never created). */
     error?: "not_found";
+    /**
+     * Set true when the server returned a full page of entries; the client
+     * should re-poll immediately rather than wait for the next 60s tick.
+     * Absent or false means the queue was fully drained by this read.
+     */
+    hasMore?: boolean;
   }
 >;

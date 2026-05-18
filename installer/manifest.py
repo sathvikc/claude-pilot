@@ -26,6 +26,24 @@ _PIN_KINDS: tuple[str, ...] = ("hard", "monitor")
 _ID_RE = re.compile(r"^[a-z][a-z0-9-]*$")
 _DEFAULT_MANIFEST_PATH = Path(__file__).parent / "upstreams.yaml"
 
+# Version labels that mark a vendor-managed live endpoint with no version
+# stability guarantee (script content changes on every upstream release).
+# A hard-pinned curl entry against such an endpoint is structurally unsafe —
+# see GH #147. These labels MUST be paired with soft_pin: true.
+_LIVE_VERSION_PREFIXES: tuple[str, ...] = ("live-", "vendor-managed-")
+
+# Known vendor-managed live install endpoints. These URLs return different
+# script bytes on every upstream release with no per-version variant; the
+# label on `version` is irrelevant — only the URL determines stability.
+# Add new entries here as new vendor-managed endpoints are adopted.
+_VENDOR_MANAGED_LIVE_URLS: frozenset[str] = frozenset(
+    {
+        "https://bun.sh/install",
+        "https://claude.ai/install.sh",
+        "https://astral.sh/uv/install.sh",
+    }
+)
+
 
 class ManifestError(ValueError):
     """Raised when the upstream manifest fails schema or cross-entry validation."""
@@ -53,50 +71,44 @@ class UpstreamEntry:
 
     def __post_init__(self) -> None:
         if not _ID_RE.match(self.id):
-            raise ManifestError(
-                f"invalid id {self.id!r}: must match ^[a-z][a-z0-9-]*$"
-            )
+            raise ManifestError(f"invalid id {self.id!r}: must match ^[a-z][a-z0-9-]*$")
         if self.source_type not in _SOURCE_TYPES:
             raise ManifestError(
-                f"invalid source_type {self.source_type!r} for {self.id}: "
-                f"must be one of {_SOURCE_TYPES}"
+                f"invalid source_type {self.source_type!r} for {self.id}: must be one of {_SOURCE_TYPES}"
             )
         if self.scripts_policy not in _SCRIPTS_POLICIES:
-            raise ManifestError(
-                f"invalid scripts_policy {self.scripts_policy!r} for {self.id}"
-            )
+            raise ManifestError(f"invalid scripts_policy {self.scripts_policy!r} for {self.id}")
         if self.pin_kind not in _PIN_KINDS:
-            raise ManifestError(
-                f"invalid pin_kind {self.pin_kind!r} for {self.id}: "
-                f"must be one of {_PIN_KINDS}"
-            )
+            raise ManifestError(f"invalid pin_kind {self.pin_kind!r} for {self.id}: must be one of {_PIN_KINDS}")
         if self.source_type == "brew":
             if not (self.brew_formula and self.brew_formula.strip()):
-                raise ManifestError(
-                    f"brew entry {self.id} requires non-empty brew_formula"
-                )
+                raise ManifestError(f"brew entry {self.id} requires non-empty brew_formula")
             if not (self.brew_tap and self.brew_tap.strip()):
-                raise ManifestError(
-                    f"brew entry {self.id} requires non-empty brew_tap"
-                )
+                raise ManifestError(f"brew entry {self.id} requires non-empty brew_tap")
         if self.source_type == "curl" and not self.sha256:
-            raise ManifestError(
-                f"curl entry {self.id} requires sha256 (commit field is optional metadata)"
-            )
+            raise ManifestError(f"curl entry {self.id} requires sha256 (commit field is optional metadata)")
         if self.source_type == "npm" and self.version.strip().lower() == "latest":
-            raise ManifestError(
-                f"npm entry {self.id} cannot pin to 'latest'"
-            )
-        if self.scripts_policy == "allow" and not (
-            self.scripts_justification and self.scripts_justification.strip()
-        ):
-            raise ManifestError(
-                f"scripts_policy=allow on {self.id} requires non-empty scripts_justification"
-            )
+            raise ManifestError(f"npm entry {self.id} cannot pin to 'latest'")
+        if self.scripts_policy == "allow" and not (self.scripts_justification and self.scripts_justification.strip()):
+            raise ManifestError(f"scripts_policy=allow on {self.id} requires non-empty scripts_justification")
         if self.soft_pin and not (self.soft_pin_reason and self.soft_pin_reason.strip()):
-            raise ManifestError(
-                f"soft_pin=true on {self.id} requires non-empty soft_pin_reason"
-            )
+            raise ManifestError(f"soft_pin=true on {self.id} requires non-empty soft_pin_reason")
+        if self.source_type == "curl" and not self.soft_pin:
+            label_unstable = any(self.version.startswith(p) for p in _LIVE_VERSION_PREFIXES)
+            url_unstable = self.source_url in _VENDOR_MANAGED_LIVE_URLS
+            if label_unstable or url_unstable:
+                reason = (
+                    f"source_url {self.source_url!r} is a known vendor-managed live endpoint"
+                    if url_unstable
+                    else f"version label {self.version!r} marks a non-version-stable pin"
+                )
+                raise ManifestError(
+                    f"curl entry {self.id} is hard-pinned but {reason}. "
+                    f"Vendor-managed live endpoints drift on every upstream "
+                    f"release (see GH #147). Either pin to an immutable "
+                    f"per-version/commit URL, or set soft_pin: true with a "
+                    f"soft_pin_reason."
+                )
 
 
 @dataclass(frozen=True)
@@ -108,9 +120,7 @@ class Manifest:
 def validate(manifest: Manifest) -> None:
     """Run cross-entry validation rules. Raises ManifestError on any violation."""
     if manifest.version != 1:
-        raise ManifestError(
-            f"unsupported manifest version: {manifest.version} (expected 1)"
-        )
+        raise ManifestError(f"unsupported manifest version: {manifest.version} (expected 1)")
     seen: set[str] = set()
     for entry in manifest.entries:
         if entry.id in seen:

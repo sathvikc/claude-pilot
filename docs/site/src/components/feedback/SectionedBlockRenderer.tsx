@@ -28,8 +28,15 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { BlockRenderer } from "./BlockRenderer";
-import { extractObjectiveBlocks, stripLabelPrefix } from "./sectioned-block-helpers";
+import { extractObjectiveBlocks, orderSections, stripLabelPrefix } from "./sectioned-block-helpers";
+import {
+  DISPLAYED_SECTIONS_ORDERED,
+  IMPLEMENTATION_TASKS_HEADING,
+  TASKS_HEADING_BUGFIX,
+} from "@/lib/sharing/displayed-sections";
 import type { Annotation, Block } from "@/lib/annotation/types";
+
+const TASKS_HEADINGS = [IMPLEMENTATION_TASKS_HEADING, TASKS_HEADING_BUGFIX] as const;
 
 /**
  * Section-aware wrapper around BlockRenderer for pilot-shell.com / shared
@@ -258,7 +265,10 @@ export function SectionedBlockRenderer({
   onSelectAnnotation,
   onQuickAnnotate,
 }: SectionedBlockRendererProps) {
-  const sections = useMemo(() => groupByH2(blocks), [blocks]);
+  const sections = useMemo(
+    () => orderSections(groupByH2(blocks), DISPLAYED_SECTIONS_ORDERED, TASKS_HEADINGS),
+    [blocks],
+  );
 
   const [forceOpenBlockId, setForceOpenBlockId] = useState<string | null>(null);
   useEffect(() => {

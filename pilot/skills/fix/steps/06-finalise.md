@@ -89,6 +89,7 @@ Run **only** when the user explicitly picked "Run Codex adversarial review" in 6
 
 3. **Launch the task in background.** Use `task --background --prompt-file` (the companion's own background mode is supported for `task` — unlike `review`/`adversarial-review`).
 
+   ⛔ **Launch via the `Bash` tool, NEVER `ctx_execute`.** The Codex runtime broker socket is not reachable from sandboxed subprocesses; `ctx_execute` launches print a synthetic task ID and silently never register.
    ```
    Bash(
      command="cd $PROJECT_ROOT && node $CODEX_COMPANION task --background --prompt-file \"$PROMPT_FILE\"",
@@ -97,20 +98,31 @@ Run **only** when the user explicitly picked "Run Codex adversarial review" in 6
    )
    ```
 
-   Capture the job ID from stdout (`task-…` token). Then poll for completion:
+   Capture the job ID from stdout (`task-…` token). **Verify registration before polling** — fail-fast guard against synthetic-ID launches:
+
+   ```bash
+   node "$CODEX_COMPANION" status "$JOB_ID" --json 2>/dev/null | grep -q '"status":' \
+     || { echo "Codex launch did not register with broker (synthetic task id?). Aborting Codex; mark this run as no-op."; JOB_ID=""; }
+   ```
+
+   If `$JOB_ID` is empty, skip polling, return to 6.2 with the Codex option removed. Otherwise poll for completion:
 
    ```bash
    JOB_ID="<captured-task-id>"
    for i in $(seq 1 150); do
      STATE=$(node "$CODEX_COMPANION" status "$JOB_ID" --json 2>/dev/null \
-       | uv run --no-project python -c "import json,sys; print((json.load(sys.stdin).get('job') or {}).get('status') or '')")
+       | uv run --no-project python -c "import json,sys
+try: print((json.load(sys.stdin).get('job') or {}).get('status') or 'unknown')
+except Exception: print('parse_error')" 2>/dev/null)
      case "$STATE" in
-       completed) echo "READY"; break ;;
-       failed)    echo "FAILED"; break ;;
+       completed)        echo "READY @ iter=$i"; break ;;
+       failed|parse_error|unknown) echo "FAIL state=$STATE iter=$i"; break ;;
      esac
      sleep 4
    done
    ```
+
+   Treat `parse_error` / `unknown` as failure — they indicate the job vanished or the broker is unreachable, not normal in-progress state.
 
    Run this as `Bash(run_in_background=true, timeout=600000)`. ⛔ **Wait for the completion notification** — do NOT read the result file before the `<task-notification>` with `<status>completed</status>` arrives.
 

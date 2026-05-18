@@ -4,6 +4,29 @@
  */
 import type { Block } from "@/lib/annotation/types";
 
+/**
+ * Filter + sort plan-spec sections to the canonical render order.
+ *
+ * Preamble sections (heading === "") always come first in their original
+ * order. Tasks sections (matching any heading in `tasksHeadings`) always
+ * come last in their original order. Everything else is filtered to
+ * `order.includes(heading)` and sorted by `order.indexOf(heading)`.
+ * Unknown headings are dropped silently.
+ */
+export function orderSections<T extends { heading: string }>(
+  sections: T[],
+  order: readonly string[],
+  tasksHeadings: readonly string[],
+): T[] {
+  const preamble = sections.filter((s) => s.heading === "");
+  const tasks = sections.filter((s) => tasksHeadings.includes(s.heading));
+  const middle = sections
+    .filter((s) => s.heading !== "" && !tasksHeadings.includes(s.heading))
+    .filter((s) => order.includes(s.heading))
+    .sort((a, b) => order.indexOf(a.heading) - order.indexOf(b.heading));
+  return [...preamble, ...middle, ...tasks];
+}
+
 interface FieldGroup {
   label: string;
   blocks: Block[];

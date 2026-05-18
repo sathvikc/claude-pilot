@@ -73,4 +73,31 @@ describe("submitFeedback", () => {
     const result = await submitFeedback("ABCDEFGH", samplePayload);
     expect(result).toEqual({ ok: false, reason: "network" });
   });
+
+  // Durability audit (Task 7): the success state must never be reachable from a
+  // failure path. The submitFeedback contract IS the regression guard.
+  describe("durability contract", () => {
+    it("returns ok: false for every non-2xx status — no false-success paths", async () => {
+      const failureStatuses = [400, 401, 403, 404, 413, 429, 500, 502, 503];
+      for (const status of failureStatuses) {
+        fetchMock.mockResolvedValueOnce(new Response("", { status }));
+        const result = await submitFeedback("ABCDEFGH", samplePayload);
+        expect(result.ok).toBe(false);
+      }
+    });
+
+    it("returns ok: false on AbortController abort", async () => {
+      fetchMock.mockImplementationOnce(async () => {
+        throw new DOMException("aborted", "AbortError");
+      });
+      const result = await submitFeedback("ABCDEFGH", samplePayload);
+      expect(result.ok).toBe(false);
+    });
+
+    it("returns ok: false on a fetch rejection at the network layer", async () => {
+      fetchMock.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+      const result = await submitFeedback("ABCDEFGH", samplePayload);
+      expect(result.ok).toBe(false);
+    });
+  });
 });

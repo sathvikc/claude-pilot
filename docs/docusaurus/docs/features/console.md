@@ -33,7 +33,7 @@ Each view that supports project filtering has an inline **Project Filter** dropd
 | **Changes** | Git diff viewer with staged/unstaged files, branch info, worktree context. Hosts Code Review and Spec Task Correlation (below). |
 | **Usage** | Daily token costs, model routing breakdown (Opus vs Sonnet), and usage trends. |
 | **Help** | Embedded pilot-shell.com documentation — full technical reference without leaving the Console. |
-| **Settings** | Model selection, spec workflow toggles, reviewer toggles, extended context toggle. See [Settings](#settings) below. |
+| **Settings** | Model selection, spec workflow toggles, reviewer toggles, extended context toggle, security scanner toggle. See [Settings](#settings) below. |
 
 ## Plan Annotation
 
@@ -156,6 +156,14 @@ With all three off, `/spec add user authentication` plans, implements, and verif
 No checkpoints means Claude executes the entire workflow without asking. Make sure your prompt is specific enough to avoid misinterpretation. You can always interrupt with Escape.
 :::
 
+### Security
+
+| Toggle | Default | Description |
+|--------|---------|-------------|
+| **Credential Scanner** | On | Scans prompts, file reads, Bash commands, command output, and `git commit` staged diffs for 24 secret patterns (AWS, GitHub, Stripe, OpenAI, Anthropic, JWT, etc.). Also denies any `.env*` file read unconditionally. Bypass per-prompt with `[allow-secret]`. |
+
+The toggle persists to `securityScanner.credentialScanner` in `~/.pilot/config.json` and the launcher exports `PILOT_CREDENTIAL_SCANNER_ENABLED` so the four hook entry points respect it. Restart Pilot after toggling. See the [Security Scanner](./security.md) page for the full pattern list, scan-event matrix, and allow-tag semantics.
+
 ### Config file
 
 All settings are stored in `~/.pilot/config.json`:
@@ -192,6 +200,9 @@ All settings are stored in `~/.pilot/config.json`:
     "branchIsolation": true,
     "askQuestionsDuringPlanning": true,
     "planApproval": true
+  },
+  "securityScanner": {
+    "credentialScanner": true
   }
 }
 ```

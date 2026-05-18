@@ -1,5 +1,5 @@
 export { compress, decompress } from "./compress";
-export type { Annotation, SharePayload, FeedbackPayload } from "./types";
+export type { Annotation, SharePayload, FeedbackPayload, Decision } from "./types";
 export type {
   FeedbackQueueEntry,
   FeedbackBatchRequest,

@@ -38,10 +38,10 @@ const insideItems: InsideItem[] = [
   },
   {
     icon: Terminal,
-    title: "Quality Hooks & Testing",
+    title: "Hooks, Quality & Security",
     description: "Deterministic checks on every edit",
     summary:
-      "15 hooks across 7 lifecycle events. Auto-lint, format, and type-check every file edit. The TDD enforcer warns when implementation lands without a failing test in place first.",
+      "18 hook registrations across 7 lifecycle events. Auto-lint, format, and type-check every file edit. A built-in credential scanner catches 24 secret patterns in prompts, file reads, Bash commands, output, and git commits. The TDD enforcer warns when implementation lands without a failing test in place first.",
     href: "/docs/features/hooks",
   },
   {

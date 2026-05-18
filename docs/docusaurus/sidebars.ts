@@ -41,6 +41,7 @@ const sidebars: SidebarsConfig = {
         "features/context-optimization",
         "features/remote-control",
         "features/hooks",
+        "features/security",
         "features/extensions",
         "features/customization",
         "features/cli",

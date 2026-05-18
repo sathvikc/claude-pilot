@@ -16,7 +16,8 @@ import {
   decompressHashPayload,
   submitFeedback,
 } from "@/lib/sharing";
-import type { SharePayload } from "@/lib/sharing";
+import type { Decision, SharePayload } from "@/lib/sharing";
+import { successStateText } from "@/components/feedback/feedback-sidebar-helpers";
 
 const SHARE_BASE_URL = "https://pilot-shell.com/shared";
 
@@ -68,6 +69,8 @@ export default function Shared() {
   const [authorName, setAuthorName] = useState("Anonymous");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submittedCount, setSubmittedCount] = useState<number | undefined>(undefined);
+  const [decision, setDecision] = useState<Decision | null>(null);
+  const [submittedDecision, setSubmittedDecision] = useState<Decision | null>(null);
   const { toast } = useToast();
 
   const {
@@ -160,7 +163,10 @@ export default function Shared() {
 
   const handleSubmitFeedback = useCallback(async () => {
     const payload = pageState.status === "ready" ? pageState.payload : null;
-    if (!payload || annotationState.annotations.length === 0) return;
+    if (!payload) return;
+    // Allow approval/rejection-only submits (no inline annotations needed)
+    // as long as a decision is selected.
+    if (annotationState.annotations.length === 0 && !decision) return;
     // The share id must come from the URL — only path-id routes get a feedback channel.
     // Legacy fragment URLs (no Redis-side share id) can't submit; toast and bail.
     if (!routeId || !/^[A-Za-z0-9]{8}$/.test(routeId)) {
@@ -178,14 +184,14 @@ export default function Shared() {
         author: authorName.trim() || "Anonymous",
         planPath: payload.planPath,
         createdAt: Date.now(),
+        ...(decision ? { decision } : {}),
       };
       const result = await submitFeedback(routeId, feedbackPayload);
       if (result.ok) {
         setSubmittedCount(annotationState.annotations.length);
-        toast({
-          title: "Feedback submitted",
-          description: `${annotationState.annotations.length} annotation${annotationState.annotations.length === 1 ? "" : "s"} sent to the spec owner.`,
-        });
+        setSubmittedDecision(decision);
+        const success = successStateText(decision, annotationState.annotations.length);
+        toast({ title: success.title, description: success.detail });
       } else if (result.reason === "not_found") {
         toast({
           title: "Share link expired",
@@ -216,7 +222,7 @@ export default function Shared() {
     } finally {
       setIsSubmitting(false);
     }
-  }, [pageState, annotationState.annotations, authorName, routeId, toast]);
+  }, [pageState, annotationState.annotations, authorName, routeId, toast, decision]);
 
   const payload = pageState.status === "ready" ? pageState.payload : null;
   const blocks = payload ? parseMarkdownToBlocks(payload.specContent) : [];
@@ -407,6 +413,9 @@ export default function Shared() {
                 onSubmitFeedback={handleSubmitFeedback}
                 isSubmitting={isSubmitting}
                 submittedCount={submittedCount}
+                decision={decision}
+                onDecisionChange={setDecision}
+                submittedDecision={submittedDecision}
               />
             </div>
           </div>

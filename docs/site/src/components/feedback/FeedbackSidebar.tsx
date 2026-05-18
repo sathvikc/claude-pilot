@@ -1,9 +1,27 @@
 import { useState } from "react";
-import { Send, ChevronRight, ChevronDown, MessageSquarePlus, X, Trash2, CheckCircle } from "lucide-react";
+import {
+  Send,
+  ChevronRight,
+  ChevronDown,
+  MessageSquarePlus,
+  X,
+  Trash2,
+  CheckCircle,
+  AlertCircle,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import type { Annotation } from "@/lib/annotation/types";
+import type { Decision } from "@/lib/sharing";
+import {
+  submitButtonLabel,
+  submitButtonDisabled,
+  successStateText,
+} from "./feedback-sidebar-helpers";
+
+const COMMENT_MAX = 4000;
+const COMMENT_WARN_THRESHOLD = 3500;
 
 interface FeedbackSidebarProps {
   /** Original annotations from the sharer (read-only) */
@@ -19,6 +37,12 @@ interface FeedbackSidebarProps {
   isSubmitting?: boolean;
   /** When set, render the post-submit success state instead of the form. */
   submittedCount?: number;
+  /** Top-level review verdict, or null when no verdict has been picked yet. */
+  decision: Decision | null;
+  /** Update the verdict (null toggles it off). */
+  onDecisionChange: (next: Decision | null) => void;
+  /** Decision that was actually submitted — drives the success state branching. */
+  submittedDecision?: Decision | null;
 }
 
 export function FeedbackSidebar({
@@ -31,30 +55,54 @@ export function FeedbackSidebar({
   onSubmitFeedback,
   isSubmitting = false,
   submittedCount,
+  decision,
+  onDecisionChange,
+  submittedDecision = null,
 }: FeedbackSidebarProps) {
   const [sharerExpanded, setSharerExpanded] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
 
   // Post-submit success state — replaces the entire sidebar UI once the
-  // teammate has sent their feedback. No copy-URL flow anymore: the Console
-  // poller pulls the annotations automatically.
+  // teammate has sent their feedback. Branches on whether a decision was
+  // also submitted.
   if (typeof submittedCount === "number") {
+    const success = successStateText(submittedDecision, submittedCount);
+    const Icon = submittedDecision?.verdict === "request_changes" ? AlertCircle : CheckCircle;
+    const iconColor =
+      submittedDecision?.verdict === "request_changes" ? "text-amber-600" : "text-primary";
     return (
       <div className="flex flex-col h-full border-l border-border bg-muted/20 items-center justify-center px-6 py-8 text-center space-y-3">
         <div className="bg-primary/10 rounded-full w-12 h-12 flex items-center justify-center">
-          <CheckCircle className="h-6 w-6 text-primary" />
+          <Icon className={cn("h-6 w-6", iconColor)} />
         </div>
-        <p className="text-sm font-semibold">Feedback submitted</p>
-        <p className="text-xs text-muted-foreground">
-          {submittedCount} annotation{submittedCount === 1 ? "" : "s"} sent to the spec owner.
-        </p>
+        <p className="text-sm font-semibold">{success.title}</p>
+        <p className="text-xs text-muted-foreground">{success.detail}</p>
         <p className="text-[10px] text-muted-foreground/60 leading-relaxed">
           You can close this tab — no link to copy back.
         </p>
       </div>
     );
   }
+
+  const handleVerdictToggle = (verdict: Decision["verdict"]): void => {
+    if (decision?.verdict === verdict) {
+      onDecisionChange(null);
+    } else {
+      onDecisionChange({ verdict, comment: decision?.comment });
+    }
+  };
+
+  const handleCommentChange = (e: React.ChangeEvent<HTMLTextAreaElement>): void => {
+    if (!decision) return;
+    const next = e.target.value.slice(0, COMMENT_MAX);
+    onDecisionChange({ ...decision, comment: next });
+  };
+
+  const commentLength = decision?.comment?.length ?? 0;
+  const submitLabel = submitButtonLabel(decision, recipientAnnotations.length);
+  const submitDisabled =
+    submitButtonDisabled(decision, recipientAnnotations.length) || isSubmitting;
 
   return (
     <div className="flex flex-col h-full border-l border-border bg-muted/20">
@@ -81,10 +129,62 @@ export function FeedbackSidebar({
           />
         </div>
 
+        {/* GitHub-PR-style top-level verdict selector */}
+        <div className="space-y-1.5">
+          <p className="text-[10px] text-muted-foreground">Your review</p>
+          <div className="flex gap-1.5">
+            <button
+              type="button"
+              onClick={() => handleVerdictToggle("approve")}
+              aria-pressed={decision?.verdict === "approve"}
+              className={cn(
+                "flex-1 inline-flex items-center justify-center gap-1.5 rounded border h-7 text-xs transition-colors",
+                decision?.verdict === "approve"
+                  ? "border-green-600 bg-green-600/10 text-green-700 dark:text-green-400"
+                  : "border-input bg-background hover:bg-muted text-foreground/70",
+              )}
+            >
+              <CheckCircle size={12} />
+              Approve
+            </button>
+            <button
+              type="button"
+              onClick={() => handleVerdictToggle("request_changes")}
+              aria-pressed={decision?.verdict === "request_changes"}
+              className={cn(
+                "flex-1 inline-flex items-center justify-center gap-1.5 rounded border h-7 text-xs transition-colors",
+                decision?.verdict === "request_changes"
+                  ? "border-amber-600 bg-amber-600/10 text-amber-700 dark:text-amber-400"
+                  : "border-input bg-background hover:bg-muted text-foreground/70",
+              )}
+            >
+              <AlertCircle size={12} />
+              Request changes
+            </button>
+          </div>
+          {decision && (
+            <div className="space-y-1">
+              <textarea
+                value={decision.comment ?? ""}
+                onChange={handleCommentChange}
+                placeholder="Optional comment…"
+                rows={2}
+                maxLength={COMMENT_MAX}
+                className="w-full text-xs resize-none rounded border border-input bg-background px-2 py-1.5 placeholder:text-muted-foreground/60 focus:outline-none focus:ring-1 focus:ring-ring"
+              />
+              {commentLength > COMMENT_WARN_THRESHOLD && (
+                <p className="text-[10px] text-amber-600 dark:text-amber-400 text-right">
+                  {COMMENT_MAX - commentLength} characters left
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+
         {/* Submit button */}
         <Button
           className="w-full gap-2 h-8 text-xs"
-          disabled={recipientAnnotations.length === 0 || isSubmitting}
+          disabled={submitDisabled}
           onClick={onSubmitFeedback}
         >
           {isSubmitting ? (
@@ -92,7 +192,7 @@ export function FeedbackSidebar({
           ) : (
             <Send size={13} />
           )}
-          Submit Feedback ({recipientAnnotations.length})
+          {submitLabel}
         </Button>
       </div>
 

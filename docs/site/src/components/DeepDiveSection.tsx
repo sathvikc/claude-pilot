@@ -36,6 +36,7 @@ const hooksPipeline = [
     description: "When the user sends a message",
     hooks: [
       "spec_mode_guard.py blocks invalid /spec usage",
+      "credential_scanner.py scans the prompt for secrets before delivery",
       "Session registration starts in the background",
     ],
     color: "text-emerald-400",
@@ -49,6 +50,7 @@ const hooksPipeline = [
       "tool_redirect.py reroutes unsupported tools to approved alternatives",
       "Plan mode conflicts are blocked before they execute",
       "tool_token_saver.py rewrites Bash commands through RTK",
+      "credential_scanner.py denies .env reads and blocks secrets in Bash commands and git commits",
     ],
     color: "text-amber-400",
     bgColor: "bg-amber-400/10",
@@ -59,6 +61,7 @@ const hooksPipeline = [
     description: "After edits, reads, searches, and task tools",
     hooks: [
       "file_checker.py runs lint, type, and TDD checks on edits",
+      "credential_scanner.py scrubs Bash output that contains secrets",
       "context_monitor.py tracks usage before compaction",
       "Memory observations are captured asynchronously",
     ],
@@ -238,8 +241,8 @@ const DeepDiveSection = () => {
                 Hooks Pipeline
               </h3>
               <p className="text-sm text-muted-foreground">
-                15 hooks across 7 lifecycle events — fire automatically at every
-                stage
+                18 hook registrations across 7 lifecycle events — fire
+                automatically at every stage
               </p>
             </div>
           </div>

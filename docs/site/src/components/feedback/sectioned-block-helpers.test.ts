@@ -9,7 +9,12 @@
  * place them inline.
  */
 import { describe, expect, test } from "vitest";
-import { extractObjectiveBlocks } from "./sectioned-block-helpers";
+import { extractObjectiveBlocks, orderSections } from "./sectioned-block-helpers";
+import {
+  DISPLAYED_SECTIONS_ORDERED,
+  IMPLEMENTATION_TASKS_HEADING,
+  TASKS_HEADING_BUGFIX,
+} from "@/lib/sharing/displayed-sections";
 import type { Block } from "@/lib/annotation/types";
 
 function paragraph(id: string, content: string, order: number): Block {
@@ -63,5 +68,116 @@ describe("extractObjectiveBlocks", () => {
     expect(joined).toContain("First sentence.");
     expect(joined).toContain("Second sentence on the next line.");
     expect(rest.some((b) => b.content.includes("Files"))).toBe(true);
+  });
+});
+
+describe("orderSections", () => {
+  const TASKS_HEADINGS = [IMPLEMENTATION_TASKS_HEADING, TASKS_HEADING_BUGFIX] as const;
+
+  test("preserves canonical order when input already matches", () => {
+    const input = [
+      { heading: "Summary" },
+      { heading: "Approach" },
+      { heading: "Goal Verification" },
+    ];
+    const out = orderSections(input, DISPLAYED_SECTIONS_ORDERED, TASKS_HEADINGS);
+    expect(out.map((s) => s.heading)).toEqual([
+      "Summary",
+      "Approach",
+      "Goal Verification",
+    ]);
+  });
+
+  test("reorders sections into canonical order when input is reversed", () => {
+    const input = [
+      { heading: "Deferred Ideas" },
+      { heading: "Open Questions" },
+      { heading: "E2E Test Scenarios" },
+      { heading: "Goal Verification" },
+      { heading: "Risks and Mitigations" },
+      { heading: "Assumptions" },
+      { heading: "Runtime Environment" },
+      { heading: "Context for Implementer" },
+      { heading: "Approach" },
+      { heading: "Out of Scope" },
+      { heading: "Summary" },
+    ];
+    const out = orderSections(input, DISPLAYED_SECTIONS_ORDERED, TASKS_HEADINGS);
+    expect(out.map((s) => s.heading)).toEqual([
+      "Summary",
+      "Out of Scope",
+      "Approach",
+      "Context for Implementer",
+      "Runtime Environment",
+      "Assumptions",
+      "Risks and Mitigations",
+      "Goal Verification",
+      "E2E Test Scenarios",
+      "Open Questions",
+      "Deferred Ideas",
+    ]);
+  });
+
+  test("drops Progress Tracking and File Structure sections silently", () => {
+    const input = [
+      { heading: "Summary" },
+      { heading: "Progress Tracking" },
+      { heading: "File Structure" },
+      { heading: "Approach" },
+    ];
+    const out = orderSections(input, DISPLAYED_SECTIONS_ORDERED, TASKS_HEADINGS);
+    expect(out.map((s) => s.heading)).toEqual(["Summary", "Approach"]);
+  });
+
+  test("positions Implementation Tasks last regardless of source position", () => {
+    const input = [
+      { heading: "Summary" },
+      { heading: "Implementation Tasks" },
+      { heading: "Approach" },
+      { heading: "Deferred Ideas" },
+    ];
+    const out = orderSections(input, DISPLAYED_SECTIONS_ORDERED, TASKS_HEADINGS);
+    expect(out.map((s) => s.heading)).toEqual([
+      "Summary",
+      "Approach",
+      "Deferred Ideas",
+      "Implementation Tasks",
+    ]);
+  });
+
+  test("positions bugfix Tasks heading last too", () => {
+    const input = [
+      { heading: "Summary" },
+      { heading: "Tasks" },
+      { heading: "Investigation" },
+      { heading: "Behavior Contract" },
+    ];
+    const out = orderSections(input, DISPLAYED_SECTIONS_ORDERED, TASKS_HEADINGS);
+    expect(out.map((s) => s.heading)).toEqual([
+      "Summary",
+      "Investigation",
+      "Behavior Contract",
+      "Tasks",
+    ]);
+  });
+
+  test("preamble sections (empty heading) always come first, in their original order", () => {
+    const input = [
+      { heading: "Approach" },
+      { heading: "" },
+      { heading: "Summary" },
+    ];
+    const out = orderSections(input, DISPLAYED_SECTIONS_ORDERED, TASKS_HEADINGS);
+    expect(out.map((s) => s.heading)).toEqual(["", "Summary", "Approach"]);
+  });
+
+  test("drops unknown headings silently", () => {
+    const input = [
+      { heading: "Summary" },
+      { heading: "Acme Internal Notes" },
+      { heading: "Approach" },
+    ];
+    const out = orderSections(input, DISPLAYED_SECTIONS_ORDERED, TASKS_HEADINGS);
+    expect(out.map((s) => s.heading)).toEqual(["Summary", "Approach"]);
   });
 });

@@ -126,6 +126,81 @@ class TestUpstreamEntryValidation:
         )
         assert entry.soft_pin is True
 
+    def test_curl_live_version_label_requires_soft_pin(self) -> None:
+        """Hard-pinning a 'live-*' / 'vendor-managed-*' label is the GH #147 bug class.
+
+        These labels mark vendor endpoints with no version stability guarantee
+        — every upstream release rewrites the script and drifts the hash. Hard
+        pin + live label is structurally unsafe; require soft_pin so the
+        installer logs a re-pin warning instead of bricking.
+        """
+        with pytest.raises(ManifestError, match="non-version-stable"):
+            UpstreamEntry(**_valid_curl_entry(version="live-2026-05-18"))
+        with pytest.raises(ManifestError, match="non-version-stable"):
+            UpstreamEntry(**_valid_curl_entry(version="vendor-managed-2026-05-18"))
+
+    def test_curl_live_version_label_with_soft_pin_ok(self) -> None:
+        """Soft-pin is the explicit acknowledgement that drift is expected."""
+        entry = UpstreamEntry(
+            **_valid_curl_entry(
+                version="live-2026-05-18",
+                soft_pin=True,
+                soft_pin_reason="vendor-managed endpoint with no version stability",
+            )
+        )
+        assert entry.version == "live-2026-05-18"
+        assert entry.soft_pin is True
+
+    def test_curl_versioned_label_does_not_require_soft_pin(self) -> None:
+        """Real versions / commit pins are immutable upstream — hard-pin is correct."""
+        for ver in ("0.11.14", "v1.2.3", "commit-540da2c"):
+            entry = UpstreamEntry(**_valid_curl_entry(version=ver))
+            assert entry.soft_pin is False, f"version={ver!r} should not require soft_pin"
+
+    def test_known_vendor_managed_urls_require_soft_pin_regardless_of_version(self) -> None:
+        """Bypass closure: a contributor cannot mask a vendor-managed live endpoint
+        with a plausible-looking version string.
+
+        Codex reviewer flagged the version-label-only rule as bypassable — pinning
+        https://bun.sh/install with version: '1.3.14' and a sha256 would slip past
+        the live-/vendor-managed- prefix check. The fix is to identify the
+        endpoint by its URL, not its human-chosen version label.
+        """
+        for unstable_url in (
+            "https://bun.sh/install",
+            "https://claude.ai/install.sh",
+            "https://astral.sh/uv/install.sh",
+        ):
+            with pytest.raises(ManifestError, match="vendor-managed"):
+                UpstreamEntry(
+                    **_valid_curl_entry(
+                        source_url=unstable_url,
+                        version="1.2.3",  # plausible-looking but the URL is what matters
+                    )
+                )
+
+    def test_known_vendor_managed_urls_with_soft_pin_ok(self) -> None:
+        """Soft-pin escape hatch works against the URL-based rule too."""
+        entry = UpstreamEntry(
+            **_valid_curl_entry(
+                source_url="https://bun.sh/install",
+                version="1.2.3",
+                soft_pin=True,
+                soft_pin_reason="vendor-managed endpoint",
+            )
+        )
+        assert entry.soft_pin is True
+
+    def test_versioned_astral_url_not_flagged(self) -> None:
+        """The fix for uv used a per-version URL — that must remain valid."""
+        entry = UpstreamEntry(
+            **_valid_curl_entry(
+                source_url="https://astral.sh/uv/0.11.14/install.sh",
+                version="0.11.14",
+            )
+        )
+        assert entry.soft_pin is False
+
     def test_invalid_source_type(self) -> None:
         with pytest.raises(ManifestError, match="source_type"):
             UpstreamEntry(**_valid_npm_entry(source_type="bogus"))
@@ -231,6 +306,50 @@ class TestGet:
         m = load(path=yaml)
         with pytest.raises(KeyError):
             get("does-not-exist", manifest=m)
+
+
+class TestShippedManifest:
+    """Invariants on the actual installer/upstreams.yaml shipped with Pilot."""
+
+    def test_bun_installer_safe_against_hash_drift(self) -> None:
+        """bun.sh/install is a vendor-managed live endpoint with no per-version URL.
+
+        Regression: same class as GH #147 — without soft_pin, hash will drift on
+        every bun release and brick the installer. claude-code-installer uses
+        soft_pin for the same reason; bun-installer must too.
+        """
+        bun = get("bun-installer", manifest=load())
+        assert bun.source_type == "curl"
+        is_live_endpoint = bun.version.startswith(("live-", "vendor-managed-"))
+        if is_live_endpoint:
+            assert bun.soft_pin is True, (
+                "bun-installer pins a vendor-managed live endpoint but is hard-pinned. "
+                "bun.sh/install rewrites on every release; the hash will drift. "
+                "Set soft_pin: true with a reason (mirror claude-code-installer)."
+            )
+
+    def test_uv_installer_pinned_to_immutable_versioned_url(self) -> None:
+        """uv-installer must pin a per-version URL, not the floating live endpoint.
+
+        Regression: https://github.com/maxritter/pilot-shell/issues/147 — every uv
+        release rewrites https://astral.sh/uv/install.sh, drifting the hash and
+        bricking the installer. astral.sh exposes immutable per-version URLs
+        (https://astral.sh/uv/<X.Y.Z>/install.sh); using one keeps the hard-pin
+        guarantee without manual re-audit on every upstream release.
+        """
+        uv = get("uv-installer", manifest=load())
+        assert uv.source_type == "curl"
+        assert uv.soft_pin is False, (
+            "uv-installer must remain hard-pinned; this invariant relies on a versioned URL, not soft-pin tolerance."
+        )
+        assert uv.source_url != "https://astral.sh/uv/install.sh", (
+            "uv-installer points at the floating live endpoint, which astral "
+            "rewrites on every release. Use https://astral.sh/uv/<version>/install.sh."
+        )
+        assert not uv.version.startswith("live-"), (
+            f"uv-installer version {uv.version!r} still uses the 'live-*' label; "
+            "a versioned URL pins to a real upstream version."
+        )
 
 
 class TestBrewEntries:

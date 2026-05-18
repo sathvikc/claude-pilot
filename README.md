@@ -48,6 +48,7 @@ curl -fsSL https://raw.githubusercontent.com/maxritter/pilot-shell/main/install.
 - **`/prd`** — brainstorm ideas into clear requirements through with optional deep research
 - **Spec collaboration** — share specs with teammates, annotations flow back grouped by author
 - **Quality hooks** — enforce linting, formatting, type checking, and tests as quality gates
+- **Security scanner** — built-in credential scanner blocks dangerous patterns in prompt and files
 - **Context engineering** — preserves decisions and knowledge across sessions
 - **Code intelligence** — semantic search (Semble) + code knowledge graph (CodeGraph)
 - **Token optimization** — 60–90% cost reduction via RTK and context-mode
@@ -562,6 +563,23 @@ Only ship the files and directories you need. A repo with just `rules/` is a val
 
 </details>
 
+### Security Scanner
+
+Built-in credential scanner catches secrets before they leak — into Claude's context or into git history. Shipped as a single hook registered on four events; runs entirely on your machine, fail-closed by default, **ON out of the box**.
+
+| Event | What is scanned | What happens on a match |
+|-------|-----------------|-------------------------|
+| `UserPromptSubmit` | The submitted prompt text | Prompt is blocked before delivery to Claude |
+| `PreToolUse(Read)` | File basename + content (binary-safe). `.env*` files denied unconditionally | Read denied |
+| `PreToolUse(Bash)` | Command text, `$VAR` env values, `cat`/`head`/`tail` targets, `git commit` staged diff + staged blobs | Bash denied |
+| `PostToolUse(Bash)` | Combined `stdout + stderr` (first 1 MB) | Tool result dropped — leak stays out of the transcript |
+
+**24 patterns** ported from [gitleaks](https://github.com/gitleaks/gitleaks) and [TruffleHog](https://github.com/trufflesecurity/trufflehog): AWS, GCP, GitHub PAT, GitLab PAT, npm, Stripe, OpenAI, Anthropic, Slack, Discord, Telegram, Twilio, SendGrid, Mailgun, JWT, PEM/SSH private keys, generic high-entropy secrets, and more. Generic patterns use a Shannon-entropy filter so `API_KEY=test12345` doesn't trip the scanner.
+
+**Bypass per-prompt** with `[allow-secret]` or `[allow-all]` in the next prompt — one-shot, the tag is consumed by the first tool call. Tags inside an assistant message or a Bash command string are NOT honoured (prompt-injection defense).
+
+Toggle from Console → Settings → Security → **Credential Scanner**. The setting persists to `~/.pilot/config.json` (`securityScanner.credentialScanner`) and the launcher exports `PILOT_CREDENTIAL_SCANNER_ENABLED` so the four hook entry points respect it. See the [Security Scanner](https://pilot-shell.com/docs/features/security) page for the full pattern list and rationale.
+
 ### Pilot Bot
 
 Run Claude Code as a persistent 24/7 automation agent with scheduled tasks, background jobs and heartbeat monitoring:
@@ -626,7 +644,8 @@ For full details on every component, see the **[Documentation](https://pilot-she
 | [**Rules & Standards**](https://pilot-shell.com/docs/features/rules) | 11 built-in rules for workflow, testing, verification, debugging, code review, documentation sync, tooling, and context protection + 5 coding standards activated by file type (Python, TypeScript, Go, Frontend, Backend) |
 | [**Context Optimization**](https://pilot-shell.com/docs/features/context-optimization) | Lean context strategies — context-mode sandbox (large outputs never enter context), RTK output compression, conditional rule loading, progressive skill disclosure, lazy MCP tool loading. Compaction resilience for 200K windows |
 | [**Remote Control**](https://pilot-shell.com/docs/features/remote-control) | Control Pilot sessions from your phone, tablet, or any browser — send prompts, monitor progress, and receive notifications remotely |
-| [**Hooks Pipeline**](https://pilot-shell.com/docs/features/hooks) | 15 hooks across 7 events — quality checks on every file edit (ruff, ESLint, go vet), TDD enforcement, token optimization via RTK (60–90% savings), session continuity, memory capture, and session lifecycle management |
+| [**Hooks Pipeline**](https://pilot-shell.com/docs/features/hooks) | 18 hook registrations across 7 events — quality checks on every file edit (ruff, ESLint, go vet), TDD enforcement, token optimization via RTK (60–90% savings), credential scanning, session continuity, memory capture, and session lifecycle management |
+| [**Security Scanner**](https://pilot-shell.com/docs/features/security) | Built-in credential scanner — 24 secret patterns (AWS, GitHub, Stripe, OpenAI, Anthropic, JWT, ...) blocked across prompts, file reads, Bash commands, command output, and `git commit` staged diffs. `.env*` files are denied unconditionally. Bypass per-prompt with `[allow-secret]`. Toggle in Console → Settings → Security |
 | [**Extensions**](https://pilot-shell.com/docs/features/extensions) | Unified view of skills, rules, commands, and agents across global, project, plugin, and remote scopes. Team sharing via git with push, pull, diff, and APM-compatible export |
 | [**Customization**](https://pilot-shell.com/docs/features/customization) | Customize what Pilot auto-installs — tweak built-in skills (spec, prd, etc.), modify rules, register additional hooks, add agents, and adjust auto-applied MCP / Claude settings. Source is a git repo (team-wide) or local directory (personal). Skill overlays (`insert_after` / `insert_before` / `replace` / `disable`) modify core workflows without full-file forks; fragments stay pinned to upstream by hash with drift detection. Team and Enterprise plans |
 | [**Pilot CLI**](https://pilot-shell.com/docs/features/cli) | Session management, headless mode (`-p`) for CI/CD and scripts, worktree isolation, licensing, context monitoring. Run `pilot` or `ccp` to start |

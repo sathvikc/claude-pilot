@@ -120,6 +120,7 @@ pathlib.Path(os.environ["PROMPT_FILE"]).write_text(text)
 
 3. Launch the task in background. **⛔ For `task`, the companion's `--background` flag IS supported (unlike `review`/`adversarial-review` where only Claude Code's `Bash(run_in_background=true)` detaches).** Use the companion's own background mode here — the launch command returns the job ID immediately on stdout. Capture the job ID for collection.
 
+   ⛔ **Launch via the `Bash` tool, NEVER `ctx_execute`.** The Codex runtime broker socket is not reachable from sandboxed subprocesses; `ctx_execute` launches print a synthetic task ID and never register.
    ```
    Bash(
      command="cd $PROJECT_ROOT && node $CODEX_COMPANION task --background --prompt-file \"$PROMPT_FILE\"",
@@ -129,6 +130,15 @@ pathlib.Path(os.environ["PROMPT_FILE"]).write_text(text)
    ```
 
    The stdout looks like: `Codex Task started in the background as task-<id>. Check /codex:status task-<id> for progress.` Extract the `task-…` token and store as `JOB_ID`.
+
+   **Verify registration before polling** — fail-fast guard against synthetic-ID launches:
+
+   ```bash
+   node "$CODEX_COMPANION" status "$JOB_ID" --json 2>/dev/null | grep -q '"status":' \
+     || { echo "Codex launch did not register with broker — JOB_ID is synthetic. Skipping Codex this run."; JOB_ID=""; }
+   ```
+
+   If `$JOB_ID` is empty, skip the Codex polling section and proceed with Claude reviewer only.
 
 **Do NOT wait** — proceed to collect the Claude reviewer results first.
 

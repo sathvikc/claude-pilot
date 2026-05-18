@@ -41,15 +41,18 @@ For each fix: implement → run relevant tests → log "Fixed: [title]"
 JOB_ID="<captured-task-id from Step 1>"
 for i in $(seq 1 250); do
   STATE=$(node "$CODEX_COMPANION" status "$JOB_ID" --json 2>/dev/null \
-    | uv run --no-project python -c "import json,sys; print((json.load(sys.stdin).get('job') or {}).get('status') or '')")
+    | uv run --no-project python -c "import json,sys
+try: print((json.load(sys.stdin).get('job') or {}).get('status') or 'unknown')
+except Exception: print('parse_error')" 2>/dev/null)
   case "$STATE" in
-    completed) echo "READY"; break ;;
-    failed)    echo "FAILED"; break ;;
+    completed)                  echo "READY @ iter=$i"; break ;;
+    failed|parse_error|unknown) echo "FAIL state=$STATE iter=$i"; break ;;
   esac
   sleep 4
 done
 ```
 
+Treat `parse_error`/`unknown` as failure (job vanished or broker unreachable) — do NOT continue spinning.
 Run this as `Bash(run_in_background=true, timeout=600000)`. Code reviews typically take 2–6 minutes; the 10-minute ceiling is the safety margin.
 
 1. **When (and ONLY when) the completion notification arrives**, fetch the findings via the companion's public interface:
