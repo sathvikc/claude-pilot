@@ -4,19 +4,23 @@ import {
   BookOpen,
   Bookmark,
   Brain,
+  CheckCircle2,
   CheckSquare,
   ChevronDown,
+  Circle,
   ClipboardCheck,
   ClipboardList,
   Compass,
   Cpu,
   Crosshair,
+  FileCode2,
   FileText,
   HelpCircle,
   Lightbulb,
   ListTree,
   MonitorCheck,
   MousePointerClick,
+  NotebookPen,
   Route,
   Scale,
   SquareX,
@@ -115,6 +119,17 @@ const SECTION_ICONS: Record<string, LucideIcon> = {
   "Key Decisions": Scale,
 };
 
+// Per-task field icons — matched to the Console SpecTaskCard SubBlock icons.
+// Keys are the canonical labels emitted by parsePlanContent's KNOWN_LABEL_FIELDS.
+const FIELD_ICONS: Record<string, LucideIcon> = {
+  "Definition of Done": CheckSquare,
+  DoD: CheckSquare,
+  Files: FileCode2,
+  "Key Decisions": NotebookPen,
+  "Key Decisions / Notes": NotebookPen,
+  Notes: NotebookPen,
+};
+
 // Plan-header metadata paragraph: `Created: …\nAuthor: …\nStatus: …\n…`.
 // Hidden from the shared view — reviewers don't review progress.
 const PLAN_METADATA_RE = /^(Created|Author|Status|Approved|Iterations|Worktree|Type):/m;
@@ -131,6 +146,20 @@ function isTaskProgressChecklistItem(block: Block): boolean {
     typeof block.checked === "boolean" &&
     /^Task\s+\d+:/.test(block.content)
   );
+}
+
+// Build a map of task-number → completion state by scanning the section's
+// `- [x] Task N: …` prelude checklist. Used to draw the checkbox icon on the
+// task card header — same signal the Console SpecTaskCard reads.
+function extractTaskCompletion(sectionBlocks: Block[]): Map<number, boolean> {
+  const completion = new Map<number, boolean>();
+  for (const block of sectionBlocks) {
+    if (!isTaskProgressChecklistItem(block)) continue;
+    const match = block.content.match(/^Task\s+(\d+):/);
+    if (!match) continue;
+    completion.set(parseInt(match[1], 10), block.checked === true);
+  }
+  return completion;
 }
 
 function groupByH2(blocks: Block[]): H2Group[] {
@@ -258,6 +287,112 @@ function CollapsibleCard({
   );
 }
 
+interface FieldRowProps {
+  label: string;
+  icon: LucideIcon;
+  defaultOpen: boolean;
+  expanded?: boolean;
+  children: React.ReactNode;
+}
+
+/**
+ * Flat task-field row mirroring the Console SpecTaskCard SubBlock: top border,
+ * icon + label + chevron, content drops in below when expanded. Used inside a
+ * TaskCard so the fields read as a single attached list, not a stack of
+ * nested rounded sub-cards.
+ */
+function FieldRow({ label, icon: FieldIcon, defaultOpen, expanded, children }: FieldRowProps) {
+  const [open, setOpen] = useState(defaultOpen);
+  const isOpen = expanded ?? open;
+  return (
+    <div className="border-t border-border/50">
+      <button
+        type="button"
+        onClick={() => setOpen(!isOpen)}
+        className="w-full flex items-center gap-2 px-3 py-2 text-left cursor-pointer hover:bg-muted/50 transition-colors"
+      >
+        <FieldIcon size={13} className="text-primary/70 flex-shrink-0" />
+        <span className="text-xs font-medium flex-1 text-muted-foreground">{label}</span>
+        <ChevronDown
+          size={12}
+          className={cn(
+            "text-muted-foreground/40 transition-transform duration-200",
+            isOpen ? "rotate-180" : "",
+          )}
+        />
+      </button>
+      {isOpen && <div className="px-3 pb-3 pt-1">{children}</div>}
+    </div>
+  );
+}
+
+interface TaskCardProps {
+  number: number;
+  title: string;
+  completed: boolean | null;
+  objective: React.ReactNode | null;
+  expanded: boolean;
+  children: React.ReactNode;
+}
+
+/**
+ * Per-task card matching the Console SpecTaskCard layout:
+ *  - Header (always visible): completion icon + "Task N" + title + objective.
+ *  - Body (expanded only): flat list of FieldRow entries.
+ *
+ * The header isn't a `<button>` because the objective renders interactive
+ * BlockRenderer content (quick-annotate buttons), which would nest buttons.
+ * Instead, the header is a clickable region with role="button" + keyboard
+ * handler, and a dedicated chevron button as the accessible toggle target.
+ */
+function TaskCard({ number, title, completed, objective, expanded, children }: TaskCardProps) {
+  const [open, setOpen] = useState(expanded);
+  const isOpen = expanded || open;
+  const toggle = () => setOpen(!isOpen);
+  return (
+    <div className="rounded-xl border border-border bg-card overflow-hidden">
+      <div
+        role="button"
+        tabIndex={0}
+        aria-expanded={isOpen}
+        onClick={toggle}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            toggle();
+          }
+        }}
+        className="w-full text-left cursor-pointer hover:bg-muted/40 transition-colors"
+      >
+        <div className="flex items-start gap-2.5 p-3">
+          <div className="flex-shrink-0 mt-0.5">
+            {completed ? (
+              <CheckCircle2 size={16} className="text-green-600 dark:text-green-400" />
+            ) : (
+              <Circle size={16} className="text-muted-foreground/40" />
+            )}
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-baseline gap-2">
+              <span className="text-xs font-mono text-muted-foreground/70">Task {number}</span>
+            </div>
+            <div className="text-sm font-semibold mt-0.5 leading-snug">{title}</div>
+            {objective && <div className="mt-1.5 text-sm text-muted-foreground">{objective}</div>}
+          </div>
+          <ChevronDown
+            size={14}
+            className={cn(
+              "text-muted-foreground/40 mt-0.5 flex-shrink-0 transition-transform duration-200",
+              isOpen ? "rotate-180" : "",
+            )}
+          />
+        </div>
+      </div>
+      {isOpen && <>{children}</>}
+    </div>
+  );
+}
+
 export function SectionedBlockRenderer({
   blocks,
   annotations,
@@ -335,76 +470,65 @@ export function SectionedBlockRenderer({
           >
             {isTaskSection ? (
               <div className="space-y-2">
-                {groupByTaskH3(section.blocks).map((task) => {
-                  const taskForceOpen = containsBlockOrHeading(
-                    task.blocks,
-                    task.headingBlock,
-                    forceOpenBlockId,
-                  );
-                  // Prelude blocks (before the first `### Task N:`): drop
-                  // the progress checklist (`- [x] Task N: …`) — the
-                  // per-task cards below already show each task.
-                  if (task.headingBlock === null) {
-                    const preludeBlocks = task.blocks.filter(
-                      (b) => !isTaskProgressChecklistItem(b),
+                {(() => {
+                  const completion = extractTaskCompletion(section.blocks);
+                  return groupByTaskH3(section.blocks).map((task) => {
+                    const taskForceOpen = containsBlockOrHeading(
+                      task.blocks,
+                      task.headingBlock,
+                      forceOpenBlockId,
                     );
-                    if (preludeBlocks.length === 0) return null;
+                    // Prelude blocks (before the first `### Task N:`): drop
+                    // the progress checklist (`- [x] Task N: …`) — the
+                    // per-task cards below already show each task.
+                    if (task.headingBlock === null) {
+                      const preludeBlocks = task.blocks.filter(
+                        (b) => !isTaskProgressChecklistItem(b),
+                      );
+                      if (preludeBlocks.length === 0) return null;
+                      return (
+                        <div key={`prelude-${task.blocks[0]?.id ?? "empty"}`}>
+                          {renderLeaf(preludeBlocks)}
+                        </div>
+                      );
+                    }
+                    const taskHeadingId = task.headingBlock.id;
+                    const { objective, rest } = extractObjectiveBlocks(task.blocks);
+                    const completed = completion.get(task.number) ?? null;
                     return (
-                      <div key={`prelude-${task.blocks[0]?.id ?? "empty"}`}>
-                        {renderLeaf(preludeBlocks)}
-                      </div>
-                    );
-                  }
-                  const taskHeadingId = task.headingBlock.id;
-                  const { objective, rest } = extractObjectiveBlocks(task.blocks);
-                  return (
-                    <CollapsibleCard
-                      key={taskHeadingId}
-                      title={
-                        <div className="flex items-baseline gap-2">
-                          <span className="text-xs font-mono text-muted-foreground/70">
-                            Task {task.number}
-                          </span>
-                          <span>{task.title}</span>
-                        </div>
-                      }
-                      defaultOpen={taskForceOpen}
-                      expanded={taskForceOpen || undefined}
-                    >
-                      {/* The per-task Objective renders inline as the
-                          "what this task does" line — matching the Console
-                          SpecTaskCard layout. No second click required. */}
-                      {objective && objective.length > 0 && (
-                        <div className="mb-3 text-sm text-muted-foreground">
-                          {renderLeaf(objective)}
-                        </div>
-                      )}
-                      <div className="space-y-2">
+                      <TaskCard
+                        key={taskHeadingId}
+                        number={task.number}
+                        title={task.title}
+                        completed={completed}
+                        objective={
+                          objective && objective.length > 0 ? renderLeaf(objective) : null
+                        }
+                        expanded={taskForceOpen}
+                      >
                         {groupByLabel(rest).map((field) => {
                           const fieldForceOpen = containsBlockOrHeading(
                             field.blocks,
                             null,
                             forceOpenBlockId,
                           );
+                          const FieldIcon = FIELD_ICONS[field.label] ?? FileText;
                           return (
-                            <CollapsibleCard
+                            <FieldRow
                               key={`${taskHeadingId}-${field.label}`}
-                              title={
-                                <span className="text-xs font-medium text-muted-foreground">
-                                  {field.label}
-                                </span>
-                              }
+                              label={field.label}
+                              icon={FieldIcon}
                               defaultOpen={fieldForceOpen}
                               expanded={fieldForceOpen || undefined}
                             >
                               {renderLeaf(field.blocks)}
-                            </CollapsibleCard>
+                            </FieldRow>
                           );
                         })}
-                      </div>
-                    </CollapsibleCard>
-                  );
-                })}
+                      </TaskCard>
+                    );
+                  });
+                })()}
               </div>
             ) : (
               renderLeaf(section.blocks)
