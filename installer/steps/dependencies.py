@@ -232,14 +232,11 @@ def _curl_pipe_with_hash_verify(
             return False
         actual = hashlib.sha256(tmp_path.read_bytes()).hexdigest()
         if actual != sha256:
-            msg = (
-                f"sha256 mismatch for {url}: expected {sha256}, got {actual}. "
-                + (
-                    "WARNING: soft-pinned upstream changed; proceeding. "
-                    "Audit and re-pin (update manifest sha256 + last_audited)."
-                    if soft_pin
-                    else "Refusing to execute. Audit upstream and update manifest."
-                )
+            msg = f"sha256 mismatch for {url}: expected {sha256}, got {actual}. " + (
+                "WARNING: soft-pinned upstream changed; proceeding. "
+                "Audit and re-pin (update manifest sha256 + last_audited)."
+                if soft_pin
+                else "Refusing to execute. Audit upstream and update manifest."
             )
             _thread_local.last_retry_stderr = msg
             if not soft_pin:
@@ -256,9 +253,7 @@ def _curl_pipe_with_hash_verify(
             quoted = f"{env_prefix} {quoted}"
         if opts.stdin_devnull:
             quoted = f"{quoted} </dev/null"
-        return _run_bash_with_retry(
-            quoted, cwd=opts.cwd, timeout=opts.timeout, stream=opts.stream
-        )
+        return _run_bash_with_retry(quoted, cwd=opts.cwd, timeout=opts.timeout, stream=opts.stream)
     finally:
         try:
             tmp_path.unlink()
@@ -266,9 +261,7 @@ def _curl_pipe_with_hash_verify(
             pass
 
 
-def _curl_pipe_from_manifest(
-    entry_id: str, options: CurlPipeRunOptions | None = None
-) -> bool:
+def _curl_pipe_from_manifest(entry_id: str, options: CurlPipeRunOptions | None = None) -> bool:
     """Run `_curl_pipe_with_hash_verify` for a manifest curl entry.
 
     Raises ManifestError when the entry has no sha256 — the schema validates
@@ -279,9 +272,7 @@ def _curl_pipe_from_manifest(
 
     entry = manifest_get(entry_id)
     if not entry.sha256:
-        raise ManifestError(
-            f"curl entry {entry.id} has no sha256; refusing to run curl-pipe"
-        )
+        raise ManifestError(f"curl entry {entry.id} has no sha256; refusing to run curl-pipe")
     return _curl_pipe_with_hash_verify(
         entry.source_url,
         entry.sha256,
@@ -307,8 +298,7 @@ def _npm_install_cmd(
     policies = {e.scripts_policy for e in entries}
     if len(policies) > 1:
         raise ValueError(
-            "cannot mix scripts_policy=allow/deny in a single npm install command: "
-            f"{[e.id for e in entries]}"
+            f"cannot mix scripts_policy=allow/deny in a single npm install command: {[e.id for e in entries]}"
         )
     flags: list[str] = []
     if "deny" in policies:
@@ -392,6 +382,25 @@ def _is_in_git_repo(directory: Path) -> bool:
         if parent == current:
             return False
         current = parent
+
+
+def _has_git_commits(directory: Path) -> bool:
+    """Whether the git repo containing `directory` has at least one commit.
+
+    A fresh `git init` directory has `.git/` but no commits — CodeGraph
+    cannot meaningfully index it and surfaces a confusing WASM SQLite
+    failure ("unable to open database file") if attempted.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--verify", "HEAD"],
+            capture_output=True,
+            cwd=directory,
+            timeout=5,
+        )
+        return result.returncode == 0
+    except (subprocess.SubprocessError, OSError):
+        return False
 
 
 def install_codegraph() -> bool:
@@ -486,6 +495,9 @@ def initialize_codegraph(project_dir: Path) -> bool:
     if not _is_in_git_repo(project_dir):
         return False
 
+    if not _has_git_commits(project_dir):
+        return False
+
     codegraph_dir = project_dir / ".codegraph"
 
     if not codegraph_dir.exists():
@@ -512,6 +524,8 @@ def codegraph_needs_work(project_dir: Path) -> bool:
     if not command_exists("codegraph"):
         return False
     if not _is_in_git_repo(project_dir):
+        return False
+    if not _has_git_commits(project_dir):
         return False
     codegraph_dir = project_dir / ".codegraph"
     if not codegraph_dir.exists():
@@ -584,9 +598,7 @@ def install_golangci_lint() -> bool:
     # nonsensical and the symlink fallback in _is_golangci_lint_installed would
     # never see them.
     try:
-        gopath_result = subprocess.run(
-            ["go", "env", "GOPATH"], capture_output=True, text=True, timeout=10
-        )
+        gopath_result = subprocess.run(["go", "env", "GOPATH"], capture_output=True, text=True, timeout=10)
     except (subprocess.SubprocessError, OSError):
         return False
     gopath = gopath_result.stdout.strip()

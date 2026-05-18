@@ -127,9 +127,7 @@ class TestInstallClaudeCode:
         """install_claude_code routes through the manifest-pinned soft-pin curl helper."""
         from installer.steps.dependencies import install_claude_code
 
-        with patch(
-            "installer.steps.dependencies._curl_pipe_from_manifest", return_value=True
-        ) as mock_helper:
+        with patch("installer.steps.dependencies._curl_pipe_from_manifest", return_value=True) as mock_helper:
             result = install_claude_code()
 
         assert result is True
@@ -543,9 +541,7 @@ class TestInstallRtk:
         """install_rtk routes through manifest-pinned curl helper for rtk-installer."""
         from installer.steps.dependencies import install_rtk
 
-        with patch(
-            "installer.steps.dependencies._curl_pipe_from_manifest", return_value=True
-        ) as mock_helper:
+        with patch("installer.steps.dependencies._curl_pipe_from_manifest", return_value=True) as mock_helper:
             result = install_rtk()
 
         assert result is True
@@ -645,9 +641,10 @@ class TestInstallCodegraph:
 class TestInitializeCodegraph:
     """Tests for initialize_codegraph() — init, enable embeddings, index, sync."""
 
+    @patch("installer.steps.dependencies._has_git_commits", return_value=True)
     @patch("installer.steps.dependencies.command_exists", return_value=True)
     @patch("installer.steps.dependencies._is_codegraph_indexed", return_value=True)
-    def test_skips_index_when_already_indexed(self, _mock_indexed, _mock_cmd, tmp_path: Path):
+    def test_skips_index_when_already_indexed(self, _mock_indexed, _mock_cmd, _mock_commits, tmp_path: Path):
         """Skips index and just syncs when already indexed."""
         from installer.steps.dependencies import initialize_codegraph
 
@@ -674,9 +671,10 @@ class TestInitializeCodegraph:
 
         assert result is False
 
+    @patch("installer.steps.dependencies._has_git_commits", return_value=True)
     @patch("installer.steps.dependencies.command_exists", return_value=True)
     @patch("installer.steps.dependencies._is_codegraph_indexed", return_value=False)
-    def test_full_init_sequence(self, _mock_indexed, _mock_cmd, tmp_path: Path):
+    def test_full_init_sequence(self, _mock_indexed, _mock_cmd, _mock_commits, tmp_path: Path):
         """Runs init, enables embeddings, index, sync in sequence."""
         from installer.steps.dependencies import initialize_codegraph
 
@@ -703,9 +701,10 @@ class TestInitializeCodegraph:
         config = json.loads((codegraph_dir / "config.json").read_text())
         assert config["enableEmbeddings"] is True
 
+    @patch("installer.steps.dependencies._has_git_commits", return_value=True)
     @patch("installer.steps.dependencies.command_exists", return_value=True)
     @patch("installer.steps.dependencies._is_codegraph_indexed", return_value=False)
-    def test_index_streams_output(self, _mock_indexed, _mock_cmd, tmp_path: Path):
+    def test_index_streams_output(self, _mock_indexed, _mock_cmd, _mock_commits, tmp_path: Path):
         """Index is called with stream=True for visible progress."""
         from installer.steps.dependencies import initialize_codegraph
 
@@ -733,8 +732,29 @@ class TestInitializeCodegraph:
         assert result is False
 
     @patch("installer.steps.dependencies.command_exists", return_value=True)
+    def test_returns_false_in_repo_without_commits(self, _mock_cmd, tmp_path: Path):
+        """A `git init`'d directory with zero commits is treated like a non-git dir.
+
+        Regression: previously the .git/ check passed but CodeGraph then crashed
+        with "Failed to index: unable to open database file" because the repo
+        had nothing to enumerate.
+        """
+        from installer.steps.dependencies import initialize_codegraph
+
+        subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True, timeout=10)
+
+        with patch("installer.steps.dependencies._run_bash_with_retry") as mock_bash:
+            result = initialize_codegraph(tmp_path)
+
+        assert result is False
+        assert mock_bash.call_count == 0, (
+            f"codegraph commands must not run in a commit-less repo; got: {mock_bash.call_args_list}"
+        )
+
+    @patch("installer.steps.dependencies._has_git_commits", return_value=True)
+    @patch("installer.steps.dependencies.command_exists", return_value=True)
     @patch("installer.steps.dependencies._is_codegraph_indexed", return_value=True)
-    def test_works_in_git_subdirectory(self, _mock_indexed, _mock_cmd, tmp_path: Path):
+    def test_works_in_git_subdirectory(self, _mock_indexed, _mock_cmd, _mock_commits, tmp_path: Path):
         """Works when .git is in a parent directory (monorepo subdirectory)."""
         from installer.steps.dependencies import initialize_codegraph
 
@@ -749,21 +769,26 @@ class TestInitializeCodegraph:
 
         assert result is True
 
+    @patch("installer.steps.dependencies._has_git_commits", return_value=True)
     @patch("installer.steps.dependencies.command_exists", return_value=True)
     @patch("installer.steps.dependencies._is_codegraph_indexed", return_value=False)
-    def test_returns_false_when_init_fails(self, _mock_indexed, _mock_cmd, tmp_path: Path):
+    def test_returns_false_when_init_fails(self, _mock_indexed, _mock_cmd, _mock_commits, tmp_path: Path):
         """Returns False when codegraph init fails."""
         from installer.steps.dependencies import initialize_codegraph
 
         (tmp_path / ".git").mkdir()
-        with patch("installer.steps.dependencies._run_bash_with_retry", return_value=False):
+        with patch("installer.steps.dependencies._run_bash_with_retry", return_value=False) as mock_bash:
             result = initialize_codegraph(tmp_path)
 
         assert result is False
+        assert any("codegraph init" in str(c) for c in mock_bash.call_args_list), (
+            "init must have been attempted to genuinely test the failure path"
+        )
 
+    @patch("installer.steps.dependencies._has_git_commits", return_value=True)
     @patch("installer.steps.dependencies.command_exists", return_value=True)
     @patch("installer.steps.dependencies._is_codegraph_indexed", return_value=False)
-    def test_returns_false_when_index_fails(self, _mock_indexed, _mock_cmd, tmp_path: Path):
+    def test_returns_false_when_index_fails(self, _mock_indexed, _mock_cmd, _mock_commits, tmp_path: Path):
         """Returns False when codegraph index fails."""
         from installer.steps.dependencies import initialize_codegraph
 
@@ -1307,6 +1332,7 @@ class TestPrecacheNpxMcpServers:
 
             mock_run.assert_not_called()
 
+
 class TestMacosArm64Detection:
     """Test macOS Apple Silicon detection."""
 
@@ -1417,9 +1443,7 @@ class TestInstallGolangciLint:
     @patch("installer.steps.dependencies._curl_pipe_from_manifest", return_value=True)
     @patch("installer.steps.dependencies._install_go_via_apt", return_value=True)
     @patch("installer.steps.dependencies.command_exists")
-    def test_install_golangci_lint_installs_go_via_apt_then_lint(
-        self, mock_cmd, mock_apt, mock_helper, mock_sub
-    ):
+    def test_install_golangci_lint_installs_go_via_apt_then_lint(self, mock_cmd, mock_apt, mock_helper, mock_sub):
         """install_golangci_lint resolves GOPATH and runs manifest-pinned curl helper."""
         from installer.steps.dependencies import install_golangci_lint
 
@@ -1450,9 +1474,7 @@ class TestInstallGolangciLint:
         from installer.steps.dependencies import install_golangci_lint
 
         mock_sub.return_value = MagicMock(returncode=0, stdout="/Users/runner/go\n")
-        with patch(
-            "installer.steps.dependencies._curl_pipe_from_manifest", return_value=True
-        ) as mock_helper:
+        with patch("installer.steps.dependencies._curl_pipe_from_manifest", return_value=True) as mock_helper:
             result = install_golangci_lint()
 
         assert result is True
@@ -2243,9 +2265,7 @@ class TestInstallLspPlugins:
     @patch("installer.steps.dependencies._run_bash_with_retry", return_value=True)
     @patch("installer.steps.dependencies.subprocess.run")
     @patch("installer.steps.dependencies.command_exists", return_value=True)
-    def test_fresh_install_writes_manifest_with_all_three(
-        self, _mock_cmd, mock_sub, _mock_bash, tmp_path
-    ):
+    def test_fresh_install_writes_manifest_with_all_three(self, _mock_cmd, mock_sub, _mock_bash, tmp_path):
         """Fresh install: all three plugins absent before → all installed → all manifested."""
         from installer.steps.dependencies import install_lsp_plugins
 
@@ -2265,9 +2285,7 @@ class TestInstallLspPlugins:
     @patch("installer.steps.dependencies._run_bash_with_retry", return_value=True)
     @patch("installer.steps.dependencies.subprocess.run")
     @patch("installer.steps.dependencies.command_exists", return_value=True)
-    def test_pre_installed_plugin_not_in_manifest(
-        self, _mock_cmd, mock_sub, _mock_bash, tmp_path
-    ):
+    def test_pre_installed_plugin_not_in_manifest(self, _mock_cmd, mock_sub, _mock_bash, tmp_path):
         """If basedpyright was already installed before Pilot, it's NOT added to manifest."""
         from installer.steps.dependencies import install_lsp_plugins
 
@@ -2292,9 +2310,7 @@ class TestInstallLspPlugins:
     @patch("installer.steps.dependencies._run_bash_with_retry", return_value=True)
     @patch("installer.steps.dependencies.subprocess.run")
     @patch("installer.steps.dependencies.command_exists", return_value=True)
-    def test_reinstall_preserves_pilot_ownership(
-        self, _mock_cmd, mock_sub, _mock_bash, tmp_path
-    ):
+    def test_reinstall_preserves_pilot_ownership(self, _mock_cmd, mock_sub, _mock_bash, tmp_path):
         """Codex regression: second install must NOT erase Pilot's ownership.
 
         Pilot installs 3 LSP plugins on first run → manifest lists all 3.
@@ -2308,9 +2324,7 @@ class TestInstallLspPlugins:
         mock_sub.return_value = MagicMock(returncode=0, stdout="[]")
         with patch("installer.steps.dependencies.Path.home", return_value=tmp_path):
             assert install_lsp_plugins() is True
-            manifest_after_first = json.loads(
-                (tmp_path / ".pilot" / ".pilot-lsp-plugins.json").read_text()
-            )
+            manifest_after_first = json.loads((tmp_path / ".pilot" / ".pilot-lsp-plugins.json").read_text())
         assert set(manifest_after_first["plugins"]) == {
             "vtsls@claude-code-lsps",
             "basedpyright@claude-code-lsps",
@@ -2320,17 +2334,17 @@ class TestInstallLspPlugins:
         # Second run — same three IDs now show as pre-installed.
         mock_sub.return_value = MagicMock(
             returncode=0,
-            stdout=json.dumps([
-                {"id": "vtsls@claude-code-lsps"},
-                {"id": "basedpyright@claude-code-lsps"},
-                {"id": "gopls@claude-code-lsps"},
-            ]),
+            stdout=json.dumps(
+                [
+                    {"id": "vtsls@claude-code-lsps"},
+                    {"id": "basedpyright@claude-code-lsps"},
+                    {"id": "gopls@claude-code-lsps"},
+                ]
+            ),
         )
         with patch("installer.steps.dependencies.Path.home", return_value=tmp_path):
             assert install_lsp_plugins() is True
-            manifest_after_second = json.loads(
-                (tmp_path / ".pilot" / ".pilot-lsp-plugins.json").read_text()
-            )
+            manifest_after_second = json.loads((tmp_path / ".pilot" / ".pilot-lsp-plugins.json").read_text())
         # Ownership preserved across reinstall — uninstall.sh can still find and remove these.
         assert set(manifest_after_second["plugins"]) == {
             "vtsls@claude-code-lsps",
@@ -2340,9 +2354,7 @@ class TestInstallLspPlugins:
 
     @patch("installer.steps.dependencies.subprocess.run")
     @patch("installer.steps.dependencies.command_exists", return_value=True)
-    def test_one_failure_returns_false_but_others_still_attempted(
-        self, _mock_cmd, mock_sub, tmp_path
-    ):
+    def test_one_failure_returns_false_but_others_still_attempted(self, _mock_cmd, mock_sub, tmp_path):
         """If install of vtsls fails, the function still attempts basedpyright + gopls."""
         from installer.steps.dependencies import install_lsp_plugins
 
@@ -2352,9 +2364,7 @@ class TestInstallLspPlugins:
         # Each plugin requires 2 _run_bash_with_retry calls: marketplace add + install.
         # Pattern: [add(vtsls)=F, add(basedpyright)=T, install(basedpyright)=T, add(gopls)=T, install(gopls)=T]
         bash_results = [False, True, True, True, True]
-        with patch(
-            "installer.steps.dependencies._run_bash_with_retry", side_effect=bash_results
-        ) as mock_bash:
+        with patch("installer.steps.dependencies._run_bash_with_retry", side_effect=bash_results) as mock_bash:
             with patch("installer.steps.dependencies.Path.home", return_value=tmp_path):
                 result = install_lsp_plugins()
 
