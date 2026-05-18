@@ -281,6 +281,11 @@ class Logger {
         appendFileSync(this.logFilePath, logLine + "\n", "utf8");
       } catch (error) {
         process.stderr.write(`[LOGGER] Failed to write to log file: ${error}\n`);
+        // Avoid retrying a failing synchronous write on every log call. This
+        // commonly happens in sandboxed/read-only environments and repeated
+        // appendFileSync exceptions can flood stderr and slow the worker down.
+        // Fall back to stderr for subsequent log lines.
+        this.logFilePath = null;
       }
     } else {
       process.stderr.write(logLine + "\n");
@@ -385,5 +390,4 @@ class Logger {
 }
 
 export const logger = new Logger();
-
 
