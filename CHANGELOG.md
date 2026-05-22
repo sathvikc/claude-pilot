@@ -2,6 +2,12 @@
 
 All notable changes to Pilot Shell will be documented in this file.
 
+## [9.0.1] - 2026-05-22
+
+### Bug Fixes
+
+- Restore terminal before Enter prompt after pilot update; suppress statusline cost/branch on Max plan
+
 ## [9.0.0] - 2026-05-22
 
 ### Features
