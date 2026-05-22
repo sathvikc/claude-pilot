@@ -2,6 +2,12 @@
 
 All notable changes to Pilot Shell will be documented in this file.
 
+## [9.0.3] - 2026-05-22
+
+### Bug Fixes
+
+- Suppress installer confirm prompt during `pilot update`
+
 ## [9.0.2] - 2026-05-22
 
 ### Bug Fixes
