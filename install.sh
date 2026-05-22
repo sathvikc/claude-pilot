@@ -9,13 +9,24 @@ VERSION="${VERSION#v}"
 
 INSTALLER_ARGS=""
 RESTART_PILOT=false
+AUTO_UPDATE=false
 SKIP_VERSION_CHECK=false
 USE_LOCAL_INSTALLER=false
 
 while [ $# -gt 0 ]; do
 	case "$1" in
 	--restart-pilot)
+		# Legacy flag from v8.x and early v9.0.x — implies auto-update and
+		# auto-restart. Newer launchers pass --auto-update instead so we no
+		# longer inherit a raw-mode terminal from the Rich installer.
 		RESTART_PILOT=true
+		AUTO_UPDATE=true
+		shift
+		;;
+	--auto-update)
+		# Skip the local-install confirm prompt without auto-restarting Pilot.
+		# Called by `pilot update` in v9.0.x post-fix.
+		AUTO_UPDATE=true
 		shift
 		;;
 	--skip-version-check)
@@ -460,7 +471,7 @@ echo ""
 if is_in_container; then
 	echo "  Running inside container — skipping system dependencies"
 	echo ""
-elif [ "$RESTART_PILOT" = true ]; then
+elif [ "$AUTO_UPDATE" = true ]; then
 	echo "  Updating local installation..."
 	echo ""
 elif [ "$USE_LOCAL_INSTALLER" = true ]; then
