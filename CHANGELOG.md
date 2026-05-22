@@ -2,6 +2,13 @@
 
 All notable changes to Pilot Shell will be documented in this file.
 
+## [9.0.2] - 2026-05-22
+
+### Bug Fixes
+
+- Cut console observation noise — skip exploration tools, read-only Bash, raise SDK recording bar
+- Use `stty sane` to fully restore terminal before banner prompt
+
 ## [9.0.1] - 2026-05-22
 
 ### Bug Fixes
