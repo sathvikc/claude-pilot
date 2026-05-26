@@ -2,6 +2,12 @@
 
 All notable changes to Pilot Shell will be documented in this file.
 
+## [9.0.6] - 2026-05-26
+
+### Bug Fixes
+
+- Resolve activation endpoint and improve error handling 
+
 ## [9.0.5] - 2026-05-22
 
 ### Bug Fixes
