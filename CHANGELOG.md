@@ -2,6 +2,12 @@
 
 All notable changes to Pilot Shell will be documented in this file.
 
+## [9.1.1] - 2026-05-28
+
+### Bug Fixes
+
+- Populate statusline update-check cache via detached refresh subprocess
+
 ## [9.1.0] - 2026-05-28
 
 ### Features
