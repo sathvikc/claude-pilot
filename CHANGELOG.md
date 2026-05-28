@@ -2,6 +2,12 @@
 
 All notable changes to Pilot Shell will be documented in this file.
 
+## [9.1.3] - 2026-05-28
+
+### Bug Fixes
+
+- Add Opus 4.8 support across statusline, usage pricing, and benchmark
+
 ## [9.1.2] - 2026-05-28
 
 ### Bug Fixes
