@@ -9,7 +9,12 @@ Check whether the plan has a `## Verification Scenario` section (only present fo
 **Resolve browser tool (4-tier):** Check if `mcp__claude-in-chrome__*` tools are available → use Chrome. Otherwise check for `mcp__plugin_chrome-devtools-mcp_chrome-devtools__*` → use Chrome DevTools MCP. Otherwise use playwright-cli (preferred CLI) or agent-browser (lightweight). See `browser-automation.md`.
 
 ```bash
+<!-- CC-ONLY -->
 # Chrome DevTools MCP: load via ToolSearch(query="chrome-devtools-mcp", max_results=30)
+<!-- /CC-ONLY -->
+<!-- CODEX-START
+# Chrome DevTools MCP: use the available Chrome DevTools MCP tools if present; if deferred, load them with the available tool-discovery helper.
+CODEX-END -->
 # playwright-cli:
 playwright-cli -s=$PILOT_SESSION_ID open <url>
 # agent-browser fallback:
@@ -26,7 +31,12 @@ agent-browser --session "$AB_SESSION" open <url>
 3. **PASS:** Scenario confirms fix works — close browser (CLI tools only), proceed to Step 4
 4. **FAIL (attempt 1):** Analyze root cause, implement fix, re-run tests, re-execute scenario
 5. **FAIL (attempt 2):** Implement second fix, re-run tests, re-execute scenario
+<!-- CC-ONLY -->
 6. **FAIL after 2 attempts:** The bug is not fully fixed — set `Status: PENDING`, increment `Iterations`, invoke `Skill(skill='spec-implement', args='<plan-path>')`. Do not proceed to VERIFIED.
+<!-- /CC-ONLY -->
+<!-- CODEX-START
+6. **FAIL after 2 attempts:** The bug is not fully fixed — set `Status: PENDING`, increment `Iterations`, then continue immediately with the `$spec-implement` skill instructions using arguments: `<plan-path>`. Do not proceed to VERIFIED.
+CODEX-END -->
 
 ```bash
 # Chrome DevTools MCP: no explicit close needed

@@ -243,6 +243,7 @@ benchmarks/**
 skill-creator
 spec-annotate
 changes-header
+review-output.json
 apm.yml
 .playwright-*/
 .apm
@@ -250,11 +251,13 @@ apm.yml
 .codegraph
 .vercel
 .codex
+.review
 .mypy_cache
 .mcp.json
 demo
 skills-lock.json
 sx.json
+context-hud
 .env**
 playwright/
 .claude.backup.*

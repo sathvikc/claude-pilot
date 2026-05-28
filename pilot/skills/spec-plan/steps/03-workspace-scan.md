@@ -4,6 +4,23 @@
 
 **⛔ Always runs**, regardless of `PILOT_PLAN_QUESTIONS_ENABLED`. Autonomous mode benefits *more* from grounded defaults, not less — when there is no user to disambiguate, the codebase has to.
 
+<!-- CODEX-START
+
+### Codex 3.1 Replacement: Bounded Scan
+
+For Codex, this replaces the generic 3.1 scan below.
+
+Run at most two orientation calls total:
+
+1. `codegraph_context(task="<task description from user>")` only when the task likely modifies runtime code and the entry points are not already named.
+2. `mcp__semble__search(query="<2-3 key nouns from task>", top_k=5)` only when CodeGraph is weak, the task is cross-cutting, or the task is docs/config/rules-heavy.
+
+If the user names concrete paths, docs, rules, markdown, config, UI copy, or a known diff, read those files directly instead of spending a graph call. If CodeGraph returns irrelevant symbols, treat that as a signal to stop graph exploration, not to retry with more graph tools.
+
+Capture no more than five bullets in the Workspace Scan. The scan is a routing aid, not a research report.
+CODEX-END -->
+
+<!-- CC-ONLY -->
 ### 3.1: Run the scan
 
 1. **CodeGraph orientation** (always):
@@ -14,13 +31,14 @@
 
    Returns entry points, related symbols, and key code locations.
 
-2. **Semble pattern search** (skip if `codegraph_context` already returned ≥3 highly relevant hits AND the task has no clear noun targets — keep total budget under ~2s):
+2. **Semble intent search** (always — catches cross-cutting code, mutation sites, and cross-language connections that CodeGraph's structural graph misses):
 
    ```
    mcp__semble__search(query="<2-3 key nouns from task>")
    ```
 
    Use natural-language intent for conceptual tasks ("how does auth work"); use identifier-like queries when the task names a symbol ("LicenseAuth save_pretrained"). One call, top-k default.
+<!-- /CC-ONLY -->
 
 ### 3.2: Capture structured output (in-context, NOT in the plan file yet)
 

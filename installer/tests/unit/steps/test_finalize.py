@@ -182,8 +182,8 @@ class TestFinalSuccessPanel:
 
                 mock_next_steps.assert_called()
 
-    def test_next_steps_has_two_sections(self):
-        """Next steps panel has Getting Started and Workflows sections."""
+    def test_next_steps_has_three_sections(self):
+        """Next steps panel has Getting Started, Core Workflows, and Additional Workflows sections."""
         from installer.context import InstallContext
         from installer.steps.finalize import FinalizeStep
         from installer.ui import Console
@@ -204,11 +204,27 @@ class TestFinalSuccessPanel:
 
                 sections = mock_next_steps.call_args[0][0]
                 section_titles = [title for title, _ in sections]
-                assert section_titles == ["Getting Started", "Workflows"]
-                # Getting Started has 5 items (incl. Share Specs), Workflows has 6 (incl. /fix and /benchmark)
-                expected_lengths = {"Getting Started": 5, "Workflows": 6}
+                assert section_titles == [
+                    "Getting Started",
+                    "Core Workflows (Claude Code + Codex)",
+                    "Additional Workflows (Claude Code + Codex)",
+                ]
+                expected_lengths = {
+                    "Getting Started": 3,
+                    "Core Workflows (Claude Code + Codex)": 3,
+                    "Additional Workflows (Claude Code + Codex)": 3,
+                }
                 for title, items in sections:
-                    assert len(items) == expected_lengths[title]
-                workflow_labels = [label for label, _ in dict(sections)["Workflows"]]
-                assert "/fix" in workflow_labels
-                assert "/benchmark" in workflow_labels
+                    assert len(items) == expected_lengths[title], (
+                        f"{title}: expected {expected_lengths[title]}, got {len(items)}"
+                    )
+                getting_started = dict(sections)["Getting Started"]
+                assert ("Check for updates", "Run 'pilot update' to update Pilot Shell") in getting_started
+                core_labels = [label for label, _ in dict(sections)["Core Workflows (Claude Code + Codex)"]]
+                assert "/prd · $prd" in core_labels
+                assert "/spec · $spec" in core_labels
+                assert "/fix · $fix" in core_labels
+                additional_labels = [label for label, _ in dict(sections)["Additional Workflows (Claude Code + Codex)"]]
+                assert "/setup-rules · $setup-rules" in additional_labels
+                assert "/create-skill · $create-skill" in additional_labels
+                assert "/benchmark · $benchmark" in additional_labels

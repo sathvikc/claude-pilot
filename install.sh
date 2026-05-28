@@ -209,7 +209,7 @@ confirm_local_install() {
 	echo ""
 	echo "  Local installation will:"
 	echo "    • Add 'pilot' and 'ccp' command to your favorite shell config (~/.bashrc, ~/.zshrc, fish)"
-	echo "    • Configure Claude Code to Pilot best-practices (~/.claude.json, ~/.claude/settings.json)"
+	echo "    • Configure Claude Code (~/.claude.json, ~/.claude/settings.json) and Codex CLI (~/.codex/config.toml) to Pilot best-practices"
 	echo "    • Install additional tool dependencies via Homebrew or NPM on your system"
 	echo ""
 	confirm=""
@@ -435,7 +435,7 @@ run_installer() {
 	fi
 
 	uv run --python 3.12 --no-project \
-		--with rich==14.2.0 --with certifi==2026.4.22 --with PyYAML==6.0.3 \
+		--with rich==15.0.0 --with certifi==2026.5.20 --with PyYAML==6.0.3 \
 		python -m installer install $system_arg $version_arg $local_arg "$@"
 }
 

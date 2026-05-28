@@ -9,7 +9,6 @@ const WorkflowSteps = lazy(() => import("@/components/WorkflowSteps"));
 const WhatsInside = lazy(() => import("@/components/WhatsInside"));
 const SpecCollabSection = lazy(() => import("@/components/SpecCollabSection"));
 const ConsoleSection = lazy(() => import("@/components/ConsoleSection"));
-const DemoSection = lazy(() => import("@/components/DemoSection"));
 const TestimonialsSection = lazy(() => import("@/components/TestimonialsSection"));
 const FAQSection = lazy(() => import("@/components/FAQSection"));
 const Footer = lazy(() => import("@/components/Footer"));
@@ -25,7 +24,7 @@ const Index = () => {
     name: "Pilot Shell",
     url: "https://pilot-shell.com/",
     description:
-      "How real engineers run Claude Code: spec-driven planning, enforced TDD, persistent memory, and quality hooks. Make Claude Code production-ready.",
+      "How real engineers run Claude Code and Codex: spec-driven planning, enforced TDD, persistent memory, and quality hooks. Make your agents production-ready.",
     inLanguage: "en-US",
     publisher: {
       "@type": "Organization",
@@ -60,7 +59,7 @@ const Index = () => {
     "@type": "SoftwareApplication",
     name: "Pilot Shell",
     description:
-      "How real engineers run Claude Code: spec-driven planning, enforced TDD, persistent memory, and quality hooks. Make Claude Code production-ready.",
+      "How real engineers run Claude Code and Codex: spec-driven planning, enforced TDD, persistent memory, and quality hooks. Make your agents production-ready.",
     applicationCategory: "DeveloperApplication",
     applicationSubCategory: "AI Development Tools",
     operatingSystem: "Linux, macOS, Windows",
@@ -83,8 +82,8 @@ const Index = () => {
   return (
     <>
       <SEO
-        title="Pilot Shell — How real engineers run Claude Code"
-        description="How real engineers run Claude Code: spec-driven planning, enforced TDD, persistent memory, and quality hooks for Python, TypeScript, and Go. Make Claude Code production-ready."
+        title="Pilot Shell — How real engineers run Claude Code and Codex"
+        description="How real engineers run Claude Code and Codex: spec-driven planning, enforced TDD, persistent memory, and quality hooks for Python, TypeScript, and Go. Make your agents production-ready."
         structuredData={[
           websiteStructuredData,
           breadcrumbStructuredData,
@@ -101,7 +100,6 @@ const Index = () => {
           <SpecCollabSection />
           <ConsoleSection />
           <TestimonialsSection />
-          <DemoSection />
           <FAQSection />
           <Footer />
         </Suspense>

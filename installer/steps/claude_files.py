@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -16,8 +17,8 @@ from installer.downloads import (
     FileInfo,
     download_file,
     download_files_parallel,
-    get_repo_files,
 )
+from installer.platform_utils import is_claude_installed
 from installer.steps.base import BaseStep
 from installer.steps.config_migration import migrate_model_config
 from installer.steps.settings_merge import (
@@ -110,6 +111,16 @@ _LEGACY_HOOK_COMMAND_MARKERS = (
     "/.claude/pilot/",
 )
 
+_CODEX_ONLY_RE = re.compile(r"<!-- CODEX-START\n.*?CODEX-END -->(?:\n?)", re.DOTALL)
+_CC_ONLY_RE = re.compile(r"<!-- CC-ONLY -->\n?(.*?)<!-- /CC-ONLY -->\n?", re.DOTALL)
+
+
+def adapt_claude_rule_content(content: str) -> str:
+    """Strip Codex-only rule blocks and unwrap Claude-only rule blocks."""
+    content = _CODEX_ONLY_RE.sub("", content)
+    content = _CC_ONLY_RE.sub(lambda m: m.group(1), content)
+    return content
+
 
 def _legacy_hook_signature_baseline(current_hooks: dict[str, Any]) -> dict[str, Any]:
     """Return a synthetic baseline containing only legacy Pilot hook entries.
@@ -147,7 +158,7 @@ def _categorize_file(file_path: str) -> str:
     Destination map:
       - settings    → ~/.claude/settings.json
       - agents      → ~/.claude/agents/        (subagents + codex prompt templates)
-      - hooks       → ~/.claude/hooks/         (Python hook scripts + hooks.json)
+      - hooks       → ~/.pilot/hooks/          (Python hook scripts + hooks.json; agent-neutral)
       - skills      → ~/.claude/skills/
       - rules       → ~/.claude/rules/
       - pilot_home  → ~/.pilot/                (scripts/, ui/, .mcp.json, claude.json, package.json)
@@ -182,38 +193,97 @@ def _clear_directory_safe(path: Path, ui: Any = None, error_msg: str = "") -> No
 
 
 class ClaudeFilesStep(BaseStep):
-    """Step that installs pilot directory files from the repository."""
+    """Installs Claude Code-specific assets to ``~/.claude/``.
+
+    Scope: ``rules`` → ``~/.claude/rules/``, ``agents`` → ``~/.claude/agents/``,
+    ``settings`` → ``~/.claude/settings.json`` (three-way merged), plus the
+    Claude-side post-install merges (hooks-into-settings, app config,
+    ``~/.claude.json`` MCP block, model config migration, customization
+    reapply).
+
+    Gated on ``is_claude_installed()`` — skipped cleanly when Claude Code CLI
+    is not detected on the system.
+
+    This class also owns all the shared download/categorize/install helper
+    methods used by :class:`installer.steps.pilot_files.PilotFilesStep`
+    (Pilot inherits and reuses them). The reduced ``run()`` here handles only
+    the Claude-targeted categories; skills, hooks, and Pilot runtime files
+    are installed by ``PilotFilesStep`` first, which caches the download
+    metadata in ``ctx.config`` so this step can re-use it without a second
+    GitHub round-trip.
+    """
 
     name = "claude_files"
 
+    _CLAUDE_CATEGORIES = ("rules", "agents", "settings")
+
     def check(self, ctx: InstallContext) -> bool:
-        """Check if pilot files are already installed."""
+        """Always run — gating happens inside ``run()`` so we can emit a
+        clear skip message instead of the generic 'Already complete'."""
         return False
 
     def run(self, ctx: InstallContext) -> None:
-        """Install all pilot files from repository."""
+        """Install Claude Code-specific assets when Claude Code is detected."""
         ui = ctx.ui
-        config = self._create_download_config(ctx)
-
-        if ui:
-            ui.status("Installing pilot files...")
-
-        pilot_files = get_repo_files("pilot", config)
-        if not pilot_files:
-            self._handle_no_files(ui, config)
+        if not is_claude_installed():
+            if ui:
+                ui.info("Claude Code CLI not detected — skipping Claude-specific assets")
             return
 
-        categories = self._categorize_files(pilot_files, ctx)
+        categories, config = self._get_cached_pilot_files(ctx, ui)
+        if categories is None or config is None:
+            return
 
-        self._cleanup_old_directories(ctx, config, ui)
+        if ui:
+            ui.status("Installing Claude Code assets...")
 
-        installed_files, file_count, failed_files = self._install_categories(categories, ctx, config, ui)
+        claude_categories = {
+            cat: files for cat, files in categories.items() if cat in self._CLAUDE_CATEGORIES and files
+        }
+        installed_files, file_count, failed_files = self._install_categories(claude_categories, ctx, config, ui)
 
-        ctx.config["installed_files"] = installed_files
+        merged = list(ctx.config.get("installed_files", [])) + installed_files
+        ctx.config["installed_files"] = merged
 
-        self._post_install_processing(ctx, ui)
+        self._merge_hooks_into_settings()
+        self._merge_app_config()
+        self._merge_mcp_servers_into_claude_json(ui)
+        migrate_model_config(create_if_missing=True)
+        self._cleanup_stale_managed_files(ctx)
+        self._save_pilot_manifest(ctx)
+        self._reapply_customization(ui)
 
         self._report_results(ui, file_count, failed_files)
+
+    def _get_cached_pilot_files(
+        self,
+        ctx: InstallContext,
+        ui: Any,
+    ) -> tuple[dict[str, list[FileInfo]] | None, DownloadConfig | None]:
+        """Return categorized files + download config from PilotFilesStep's cache.
+
+        ``PilotFilesStep`` is contracted to run first in ``get_all_steps()`` and
+        populate the cache keys. If the cache is missing we surface that
+        ordering violation loudly via the install UI rather than silently
+        re-downloading (which would mask the regression and double the GitHub
+        round-trip on the failure path).
+        """
+        from installer.steps.pilot_files import (
+            PILOT_FILES_CACHE_CATEGORIES_KEY,
+            PILOT_FILES_CACHE_CONFIG_KEY,
+        )
+
+        categories = ctx.config.get(PILOT_FILES_CACHE_CATEGORIES_KEY)
+        config = ctx.config.get(PILOT_FILES_CACHE_CONFIG_KEY)
+        if categories is not None and config is not None:
+            return categories, config
+
+        if ui:
+            ui.warning(
+                "PilotFilesStep cache missing — ClaudeFilesStep cannot install without it. "
+                "Verify get_all_steps() in installer/cli.py runs PilotFilesStep before ClaudeFilesStep."
+            )
+        return None, None
 
     def _create_download_config(self, ctx: InstallContext) -> DownloadConfig:
         """Create download configuration based on context."""
@@ -308,6 +378,11 @@ class ClaudeFilesStep(BaseStep):
         # ~/.pilot/scripts/ on every iteration.
         _clear_directory_safe(pilot_home_dir / "scripts")
         _clear_directory_safe(pilot_home_dir / "ui")
+        _clear_directory_safe(pilot_home_dir / "hooks")
+        # ~/.pilot/rules/ is the raw-rule staging area read by
+        # CodexFilesStep._install_codex_rules. Cleared with the other
+        # Pilot-managed dirs so renamed/removed rule files don't linger.
+        _clear_directory_safe(pilot_home_dir / "rules")
 
         manifest_path = home_claude_dir / PILOT_MANIFEST_FILE
         if not manifest_path.exists():
@@ -317,11 +392,11 @@ class ClaudeFilesStep(BaseStep):
         cleanup_managed_files(home_claude_dir / "skills", manifest_path, "skills/")
         cleanup_managed_files(home_claude_dir / "rules", manifest_path, "rules/")
         cleanup_managed_files(home_claude_dir / "agents", manifest_path, "agents/")
-        # ~/.claude/hooks/ is a SHARED directory — Claude Code's native hook
-        # script location. Users may drop their own scripts there. Manifest-based
-        # cleanup removes only Pilot-managed files (recorded in
-        # .pilot-manifest.json), preserving anything else.
+        # Pilot hook scripts now live under ~/.pilot/hooks/ (agent-neutral).
+        # Legacy installs may still have Pilot scripts in ~/.claude/hooks/ —
+        # clean those up via manifest, then clean the new location too.
         cleanup_managed_files(home_claude_dir / "hooks", manifest_path, "hooks/")
+        cleanup_managed_files(pilot_home_dir / "hooks", manifest_path, "pilot_hooks/")
 
     def _cleanup_legacy_standards_skills(self, plugin_dir: Path) -> None:
         """Remove old standards-* skill directories from plugin skills folder.
@@ -474,6 +549,13 @@ class ClaudeFilesStep(BaseStep):
 
             for file_info, dest_path, success in zip(file_infos, dest_paths, results):
                 if success:
+                    if category == "rules":
+                        try:
+                            raw_content = dest_path.read_text(encoding="utf-8")
+                            dest_path.write_text(adapt_claude_rule_content(raw_content), encoding="utf-8")
+                        except OSError:
+                            failed.append(file_info.path)
+                            continue
                     installed.append(str(dest_path))
                 else:
                     failed.append(file_info.path)
@@ -527,7 +609,7 @@ class ClaudeFilesStep(BaseStep):
             return home_claude_dir / "agents" / rel_path
         elif category == "hooks":
             rel_path = Path(file_path).relative_to("pilot/hooks")
-            return home_claude_dir / "hooks" / rel_path
+            return pilot_home_dir / "hooks" / rel_path
         elif category == "pilot_home":
             rel_path = Path(file_path).relative_to("pilot")
             return pilot_home_dir / rel_path
@@ -535,19 +617,6 @@ class ClaudeFilesStep(BaseStep):
             return home_claude_dir / SETTINGS_FILE
         else:
             return ctx.project_dir / file_path
-
-    def _post_install_processing(self, ctx: InstallContext, ui: Any) -> None:
-        """Run post-installation processing tasks."""
-        self._make_scripts_executable(Path.home() / ".pilot" / "scripts")
-
-        self._merge_hooks_into_settings()
-        self._merge_app_config()
-        self._merge_mcp_servers_into_claude_json(ui)
-        migrate_model_config(create_if_missing=True)
-        self._cleanup_stale_managed_files(ctx)
-        self._build_skill_md_files(ctx, ui)
-        self._save_pilot_manifest(ctx)
-        self._reapply_customization(ui)
 
     def _save_pilot_manifest(self, ctx: InstallContext) -> None:
         """Save manifest of Pilot-managed files in skills/, rules/, agents/, hooks/.
@@ -564,7 +633,7 @@ class ClaudeFilesStep(BaseStep):
         skills_dir = home_claude_dir / "skills"
         rules_dir = home_claude_dir / "rules"
         agents_dir = home_claude_dir / "agents"
-        hooks_dir = home_claude_dir / "hooks"
+        pilot_hooks_dir = Path.home() / ".pilot" / "hooks"
         managed_files: set[str] = set()
 
         for filepath_str in installed:
@@ -576,8 +645,8 @@ class ClaudeFilesStep(BaseStep):
                     managed_files.add("rules/" + str(filepath.relative_to(rules_dir)))
                 elif filepath.is_relative_to(agents_dir):
                     managed_files.add("agents/" + str(filepath.relative_to(agents_dir)))
-                elif filepath.is_relative_to(hooks_dir):
-                    managed_files.add("hooks/" + str(filepath.relative_to(hooks_dir)))
+                elif filepath.is_relative_to(pilot_hooks_dir):
+                    managed_files.add("pilot_hooks/" + str(filepath.relative_to(pilot_hooks_dir)))
             except (ValueError, TypeError):
                 continue
 
@@ -912,8 +981,8 @@ class ClaudeFilesStep(BaseStep):
     def _merge_hooks_into_settings(self) -> None:
         """Merge Pilot's hooks bundle into ~/.claude/settings.json.
 
-        Reads the installed hooks.json (now at ~/.claude/hooks/hooks.json with
-        absolute $HOME/.claude/hooks/ and $HOME/.pilot/scripts/ paths — bash
+        Reads the installed hooks.json (at ~/.pilot/hooks/hooks.json with
+        absolute $HOME/.pilot/hooks/ and $HOME/.pilot/scripts/ paths — bash
         expands $HOME natively when Claude Code shells out, so no install-time
         path patching is needed). Merges the `hooks` dict into
         ~/.claude/settings.json using `merge_pilot_hooks`, which preserves
@@ -921,7 +990,8 @@ class ClaudeFilesStep(BaseStep):
         `.pilot-hooks-baseline.json`.
         """
         claude_dir = get_claude_config_dir()
-        hooks_json_path = claude_dir / "hooks" / "hooks.json"
+        pilot_home_dir = Path.home() / ".pilot"
+        hooks_json_path = pilot_home_dir / "hooks" / "hooks.json"
         if not hooks_json_path.exists():
             return
 

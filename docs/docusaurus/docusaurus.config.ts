@@ -4,7 +4,7 @@ import type * as Preset from "@docusaurus/preset-classic";
 
 const config: Config = {
   title: "Pilot Shell",
-  tagline: "How real engineers run Claude Code — spec-driven plans, enforced tests, persistent knowledge",
+  tagline: "How real engineers run Claude Code and Codex — spec-driven plans, enforced tests, persistent knowledge",
   favicon: "img/favicon.png",
 
   url: "https://pilot-shell.com",
@@ -48,15 +48,14 @@ const config: Config = {
         docs: {
           routeBasePath: "docs",
           sidebarPath: "./sidebars.ts",
-          editUrl:
-            "https://github.com/maxritter/pilot-shell/tree/main/docs/docusaurus/",
+          editUrl: "https://github.com/maxritter/pilot-shell/tree/main/docs/docusaurus/",
         },
         blog: {
           routeBasePath: "blog",
           path: "./blog",
           blogTitle: "Pilot Shell Blog",
           blogDescription:
-            "Insights on Claude Code, AI engineering, and the Pilot Shell platform — guides, tools, and model comparisons.",
+            "Insights on Claude Code, Codex CLI, AI engineering, and the Pilot Shell platform — guides, tools, and model comparisons.",
           blogSidebarTitle: "Recent posts",
           blogSidebarCount: "ALL",
           postsPerPage: 12,
@@ -65,7 +64,7 @@ const config: Config = {
             type: ["rss", "atom"],
             title: "Pilot Shell Blog",
             description:
-              "Latest posts from the Pilot Shell blog — Claude Code engineering, AI tools, and model deep-dives.",
+              "Latest posts from the Pilot Shell blog — Claude Code and Codex CLI engineering, AI tools, and model deep-dives.",
             copyright: `Copyright © ${new Date().getFullYear()} Pilot Shell.`,
           },
         },
@@ -84,7 +83,11 @@ const config: Config = {
   themeConfig: {
     image: "https://pilot-shell.com/logo.png",
     metadata: [
-      { name: "keywords", content: "how real engineers run Claude Code, Claude Code engineering platform, Claude Code, Claude Code platform, Claude Code framework, spec-driven development, Pilot Shell, TDD enforcement, AI coding agent, MCP servers, Claude Code best practices" },
+      {
+        name: "keywords",
+        content:
+          "how real engineers run Claude Code and Codex, Claude Code, Codex CLI, OpenAI Codex, Claude Code engineering platform, Codex engineering platform, Claude Code framework, Codex framework, spec-driven development, Pilot Shell, TDD enforcement, AI coding agent, GPT-5, GPT-5.5, MCP servers, Claude Code best practices, Codex best practices",
+      },
       { name: "twitter:card", content: "summary_large_image" },
       { name: "twitter:site", content: "@maxritter" },
       { property: "og:type", content: "website" },
@@ -149,9 +152,7 @@ const config: Config = {
         },
         {
           title: "More",
-          items: [
-            { label: "Home", href: "https://pilot-shell.com" },
-          ],
+          items: [{ label: "Home", href: "https://pilot-shell.com" }],
         },
       ],
       copyright: `Copyright ${new Date().getFullYear()} Pilot Shell. Built with Docusaurus.`,

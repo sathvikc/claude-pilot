@@ -1,6 +1,6 @@
 """SessionStart(compact) hook - restore Pilot context after compaction.
 
-Fires after Claude Code compaction completes to re-inject Pilot-specific context
+Fires after Claude Code or Codex compaction completes to re-inject Pilot-specific context
 (active plan, task state) that may have been compressed during compaction.
 """
 
@@ -84,7 +84,7 @@ def _format_context_message(plan_data: dict | None, fallback_state: dict | None)
 def run_post_compact_restore() -> int:
     """Run SessionStart(compact) hook to restore context after compaction.
 
-    Returns exit code: 0 (output to stdout visible in context).
+    Returns exit code: 0 with a SessionStart JSON payload on stdout.
     """
     hook_data = read_hook_stdin()
     session_id = hook_data.get("session_id", os.environ.get("PILOT_SESSION_ID", "default"))
@@ -94,7 +94,22 @@ def run_post_compact_restore() -> int:
     fallback_state = _read_fallback_state(session_id)
 
     message = _format_context_message(plan_data, fallback_state)
-    print(message)
+    platform = os.environ.get("CLAUDE_PROJECT_PLATFORM") or hook_data.get("platform") or ""
+    if str(platform).lower() == "codex":
+        # Codex hooks consume additionalContext on stderr instead of the
+        # Claude Code SessionStart hookSpecificOutput envelope.
+        print(message, file=sys.stderr)
+    else:
+        print(
+            json.dumps(
+                {
+                    "hookSpecificOutput": {
+                        "hookEventName": "SessionStart",
+                        "additionalContext": message,
+                    }
+                }
+            )
+        )
 
     return 0
 

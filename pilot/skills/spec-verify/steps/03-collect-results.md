@@ -1,7 +1,10 @@
 ## Step 3: Collect Review Results & Re-Verify
 
+<!-- CC-ONLY -->
 **⛔ If `PILOT_CHANGES_REVIEW_ENABLED` is `"false"` (from Step 0 — Step 1 was skipped),** skip this step entirely and proceed to Step 4 (Phase B). There are no findings to collect.
+<!-- /CC-ONLY -->
 
+<!-- CC-ONLY -->
 **When enabled — mandatory. Never skip** — even if you're confident, context is high, or tests pass.
 
 **⛔ NEVER use `TaskOutput`** to retrieve results — it dumps the full agent transcript into context, wasting thousands of tokens.
@@ -100,3 +103,34 @@ rm -f "/tmp/codex-changes-review-${PILOT_SESSION_ID:-default}-<plan-slug>.md"
 **Skip** when fixes were localized (terminology, error handling, test updates, minor bugs). Run tests + lint to confirm, proceed to Phase B.
 
 **Re-verify** when fixes required new functionality, changed APIs, or significant new code paths: re-launch changes-review, fix new findings. Max 2 iterations before adding remaining issues to plan.
+<!-- /CC-ONLY -->
+<!-- CODEX-START
+**⛔ If `PILOT_CHANGES_REVIEW_ENABLED` is `"false"` (from Step 0 — Step 1 was skipped),** skip this step entirely and proceed to Step 4 (Phase B).
+
+**When enabled — mandatory. Never skip.** Read the `changes-review` agent id captured in Step 1 from working notes or the session file:
+
+```bash
+AGENT_ID_FILE="$HOME/.pilot/sessions/${PILOT_SESSION_ID:-default}/changes-review-agent-id-<plan-slug>.txt"
+```
+
+If `CHANGES_REVIEW_AGENT_ID` is missing and the file exists, read the file and use its trimmed contents. If both are missing or empty, re-launch `changes-review` once using the Step 1 prompt, persist the new id to the file, then continue. Do not silently skip review while `PILOT_CHANGES_REVIEW_ENABLED` is enabled.
+
+Wait for the final result:
+
+```python
+result = multi_agent_v1.wait_agent(targets=[CHANGES_REVIEW_AGENT_ID], timeout_ms=600000)
+```
+
+Parse the agent's final message as JSON. If parsing fails, treat the raw final message as one `suggestion` finding and continue; do not re-launch on parse failure.
+
+Validate `plan_file` matches the current plan. If it does not, discard the stale result and self-review the diff before proceeding.
+
+Severity mapping:
+- `must_fix` → fix immediately
+- `should_fix` → fix immediately
+- `suggestion` → implement if quick
+
+For each fix: implement → run relevant tests → log `Fixed: [title]`.
+
+After all findings are handled, re-run the relevant automated checks from Step 2 before proceeding to Step 4.
+CODEX-END -->

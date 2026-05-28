@@ -79,9 +79,12 @@ const InstallSection = () => {
               <div className="text-sm">
                 <p className="text-muted-foreground text-xs">
                   <code className="text-primary bg-primary/10 px-1.5 py-0.5 rounded">
-                    pilot
+                    claude
                   </code>{" "}
-                  launch{" → "}
+                  or{" "}
+                  <code className="text-primary bg-primary/10 px-1.5 py-0.5 rounded">
+                    codex
+                  </code>{" → "}
                   <code className="text-primary bg-primary/10 px-1.5 py-0.5 rounded">
                     /setup-rules
                   </code>{" "}
@@ -123,7 +126,7 @@ const InstallSection = () => {
             loop
             playsInline
             preload="none"
-            aria-label="Pilot Shell in action — spec-driven development with Claude Code"
+            aria-label="Pilot Shell in action — spec-driven development with Claude Code and Codex"
           >
             <source src="/demo.webm" type="video/webm" />
             <source src="/demo.mp4" type="video/mp4" />

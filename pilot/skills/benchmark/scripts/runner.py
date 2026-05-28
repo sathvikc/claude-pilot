@@ -2,13 +2,15 @@
 """Unified benchmark runner — orchestrates with/without comparison runs.
 
 Handles two target types:
-    skill  — installs the target skill under `with/.claude/skills/<name>/`
-    rules  — copies rule file(s) into `with/.claude/rules/`
+    skill  — installs the target skill under `.claude/skills/<name>/` for
+             Claude or `.agents/skills/<name>/` for Codex
+    rules  — copies rule file(s) into `.claude/rules/` for Claude or composes
+             root `AGENTS.md` for Codex
 
-Both configs materialize an explicit `.claude/` directory under /tmp/pilot-bench-*/
-so Claude Code's project-root discovery stops there and never walks UP into a
-parent repo's `.claude/`. Each `claude -p` subprocess writes a stream-json
-transcript; the final `result` event supplies duration_ms + usage (token counts).
+Both configs materialize an explicit agent config surface under /tmp/pilot-bench-*/
+so project discovery stops there and never walks UP into a parent repo. Each
+`claude -p` subprocess writes a stream-json transcript; the final `result` event
+supplies duration_ms + usage (token counts).
 Missing those required fields → run is marked FAILED rather than silently zeroed.
 """
 
@@ -65,6 +67,8 @@ class RunConfig:
     timeout: int
     grader_timeout: int
     skip_permissions: bool = False
+    agent: str = "claude"
+    grader_agent: str = "claude"
 
 
 @dataclass(frozen=True, slots=True)
@@ -82,6 +86,26 @@ REQUIRED_RESULT_FIELDS = ("duration_ms", "usage")
 TEMP_DIRS: list[Path] = []
 
 SANDBOX_PLACEHOLDER = "{sandbox}"
+CODEX_DEFAULT_MODEL = "codex-default"
+
+
+def _resolve_run_models(
+    *,
+    agent: str,
+    grader_agent: str,
+    model_arg: str | None,
+    grader_model_arg: str | None,
+    target: TargetConfig,
+) -> tuple[str, str]:
+    """Resolve executor and grader models without leaking agent-specific sentinels."""
+    executor_model = model_arg or (CODEX_DEFAULT_MODEL if agent == "codex" else resolve_executor_model(target))
+    if grader_model_arg:
+        return executor_model, grader_model_arg
+    if grader_agent == agent:
+        return executor_model, executor_model
+    if grader_agent == "codex":
+        return executor_model, CODEX_DEFAULT_MODEL
+    return executor_model, resolve_executor_model(target)
 
 
 def substitute_sandbox(prompt: str, sandbox_path: Path) -> str:
@@ -235,6 +259,13 @@ def _copy_md_stripping_conditional(src: Path, dest: Path) -> None:
         shutil.copy2(src, dest)
 
 
+def _read_md_stripping_conditional(src: Path) -> str:
+    """Read markdown, removing conditional-loading fields when present."""
+    content = src.read_text()
+    stripped, removed = strip_conditional_loading_frontmatter(content)
+    return stripped if removed else content
+
+
 def _strip_skill_frontmatter_in_place(skill_dir: Path) -> None:
     """After copytree, strip conditional-loading fields from SKILL.md /
     orchestrator.md so the skill activates for every prompt during the run."""
@@ -286,8 +317,49 @@ def detect_conditional_loading(target: TargetConfig) -> list[tuple[Path, list[st
     return findings
 
 
-def prepare_config_dir(target: TargetConfig, config_kind: str, tmp_root: Path) -> Path:
-    """Create an ephemeral project dir with `.claude/` populated for the config.
+def _prepare_codex_config_dir(target: TargetConfig, config_kind: str, tmp_root: Path) -> Path:
+    """Create an ephemeral Codex project dir for the config."""
+    dest = tmp_root / config_kind
+    dest.mkdir(parents=True, exist_ok=True)
+    agents_md = dest / "AGENTS.md"
+    agents_md.write_text("# Benchmark Baseline\n\n")
+
+    if config_kind == "without":
+        return dest
+
+    target_type = target.get("type", "skill")
+    raw_path = target.get("path")
+    if not raw_path:
+        raise ValueError("target.path is required when config_kind is 'with'")
+    source_path = Path(raw_path).expanduser().resolve()
+    _validate_target_path(source_path)
+    if not source_path.exists():
+        raise FileNotFoundError(f"target.path does not exist: {source_path}")
+
+    if target_type == "skill":
+        skill_name = target.get("name") or source_path.name
+        skills_dir = dest / ".agents" / "skills" / skill_name
+        shutil.copytree(source_path, skills_dir)
+        _strip_skill_frontmatter_in_place(skills_dir)
+    elif target_type == "rules":
+        sources = [source_path] if source_path.is_file() else sorted(source_path.rglob("*.md"))
+        blocks = ["# Benchmark Rules", ""]
+        for md in sources:
+            blocks.extend([f"## {md.stem}", "", _read_md_stripping_conditional(md).strip(), ""])
+        agents_md.write_text("\n".join(blocks).rstrip() + "\n")
+    else:
+        raise ValueError(f"unsupported target type: {target_type}")
+
+    return dest
+
+
+def prepare_config_dir(
+    target: TargetConfig,
+    config_kind: str,
+    tmp_root: Path,
+    agent: str = "claude",
+) -> Path:
+    """Create an ephemeral project dir with agent-specific config populated.
 
     `config_kind` is "with" or "without".
     Returns the path to the project directory the subprocess will use as cwd.
@@ -297,6 +369,9 @@ def prepare_config_dir(target: TargetConfig, config_kind: str, tmp_root: Path) -
     unconditionally during the benchmark (otherwise the rule may be dormant in
     both configs and the delta collapses to zero).
     """
+    if agent == "codex":
+        return _prepare_codex_config_dir(target, config_kind, tmp_root)
+
     dest = tmp_root / config_kind
     dest.mkdir(parents=True, exist_ok=True)
     claude_dir = dest / ".claude"
@@ -333,9 +408,10 @@ def prepare_config_dir(target: TargetConfig, config_kind: str, tmp_root: Path) -
     return dest
 
 
-def _make_subprocess_env() -> dict[str, str]:
-    """Strip CLAUDECODE so nested `claude -p` calls don't hit the nesting guard."""
-    return {k: v for k, v in os.environ.items() if k != "CLAUDECODE"}
+def _make_subprocess_env(agent: str = "claude") -> dict[str, str]:
+    """Strip nesting guards so nested agent calls don't hit guard checks."""
+    skip = {"CLAUDECODE"} if agent == "claude" else {"CODEX_SANDBOX_TYPE"}
+    return {k: v for k, v in os.environ.items() if k not in skip}
 
 
 def _write_failed_marker(run_dir: Path, reason: str, details: str = "") -> None:
@@ -353,7 +429,29 @@ def _write_failed_marker(run_dir: Path, reason: str, details: str = "") -> None:
     )
 
 
-def execute_run(
+def execute_run(  # noqa: PLR0913
+    *,
+    prompt: str,
+    config_dir: Path,
+    run_dir: Path,
+    model: str,
+    timeout: int,
+    skip_permissions: bool = False,
+    agent: str = "claude",
+) -> ExecuteResult:
+    """Run an agent once in config_dir. Saves transcript + timing.json or failed.json."""
+    if agent == "codex":
+        return _execute_run_codex(
+            prompt=prompt, config_dir=config_dir, run_dir=run_dir,
+            model=model, timeout=timeout, skip_permissions=skip_permissions,
+        )
+    return _execute_run_claude(
+        prompt=prompt, config_dir=config_dir, run_dir=run_dir,
+        model=model, timeout=timeout, skip_permissions=skip_permissions,
+    )
+
+
+def _execute_run_claude(
     *,
     prompt: str,
     config_dir: Path,
@@ -362,7 +460,7 @@ def execute_run(
     timeout: int,
     skip_permissions: bool = False,
 ) -> ExecuteResult:
-    """Run `claude -p` once in config_dir. Saves transcript + timing.json or failed.json."""
+    """Run `claude -p` once in config_dir."""
     run_dir.mkdir(parents=True, exist_ok=True)
     outputs = run_dir / "outputs"
     outputs.mkdir(exist_ok=True)
@@ -383,7 +481,7 @@ def execute_run(
             cmd,
             input=prompt,
             cwd=str(config_dir),
-            env=_make_subprocess_env(),
+            env=_make_subprocess_env("claude"),
             capture_output=True,
             text=True,
             timeout=timeout,
@@ -418,6 +516,7 @@ def execute_run(
         return ExecuteFailure(success=False, reason="malformed-result")
 
     timing: dict[str, object] = {
+        "agent": "claude",
         "duration_ms": parsed["duration_ms"],
         "duration_api_ms": parsed["duration_api_ms"],
         "total_duration_seconds": round(parsed["duration_ms"] / 1000.0, 3),
@@ -440,23 +539,102 @@ def execute_run(
     )
 
 
-def _run_grader(
+def _execute_run_codex(
+    *,
+    prompt: str,
+    config_dir: Path,
+    run_dir: Path,
+    model: str,
+    timeout: int,
+    skip_permissions: bool = False,
+) -> ExecuteResult:
+    """Run `codex exec` once in config_dir."""
+    run_dir.mkdir(parents=True, exist_ok=True)
+    outputs = run_dir / "outputs"
+    outputs.mkdir(exist_ok=True)
+
+    import time
+
+    cmd = ["codex", "exec", "--skip-git-repo-check"]
+    if model and model != CODEX_DEFAULT_MODEL:
+        cmd.extend(["--model", model])
+    if skip_permissions:
+        cmd.extend(["-c", 'approval_policy="never"', "-c", 'sandbox_mode="danger-full-access"'])
+
+    start_ns = time.monotonic_ns()
+    try:
+        completed = subprocess.run(
+            cmd,
+            input=prompt,
+            cwd=str(config_dir),
+            env=_make_subprocess_env("codex"),
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        _write_failed_marker(run_dir, reason="timeout", details=f"after {timeout}s")
+        return ExecuteFailure(success=False, reason="timeout")
+    except FileNotFoundError:
+        _write_failed_marker(run_dir, reason="codex-cli-not-found")
+        return ExecuteFailure(success=False, reason="codex-cli-not-found")
+
+    elapsed_ms = (time.monotonic_ns() - start_ns) // 1_000_000
+
+    if completed.returncode != 0:
+        _write_failed_marker(
+            run_dir, reason="codex-exec-failed",
+            details=f"exit={completed.returncode}; stderr: {(completed.stderr or '')[:300]}",
+        )
+        return ExecuteFailure(success=False, reason="codex-exec-failed")
+
+    stdout = completed.stdout or ""
+    _ = (outputs / "transcript.txt").write_text(stdout)
+    if completed.stderr:
+        _ = (outputs / "stderr.log").write_text(completed.stderr)
+    _ = (outputs / "output.txt").write_text(stdout)
+
+    timing: dict[str, object] = {
+        "agent": "codex",
+        "duration_ms": elapsed_ms,
+        "duration_api_ms": 0,
+        "total_duration_seconds": round(elapsed_ms / 1000.0, 3),
+        "total_tokens": 0,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "total_cost_usd": 0,
+        "session_id": "",
+        "note": "token counts not available from codex exec",
+    }
+    _ = (run_dir / "timing.json").write_text(json.dumps(timing, indent=2))
+
+    return ExecuteSuccess(
+        success=True,
+        duration_ms=elapsed_ms,
+        total_tokens=0,
+        run_dir=str(run_dir),
+    )
+
+
+def _run_grader(  # noqa: PLR0913
     run_dir: Path,
     assertions: list[str],
     target_type: str,
     model: str,
     timeout: int,
     skip_permissions: bool = False,
+    agent: str = "claude",
 ) -> GraderResult:
-    """Spawn the grader via `claude -p` with the grader.md prompt.
-
-    Grader writes `grading.json` into run_dir. Returns a summary dict.
-    """
+    """Spawn the grader agent. Writes `grading.json` into run_dir."""
     grader_prompt_path = Path(__file__).resolve().parent.parent / "agents" / "grader.md"
     grader_instructions = grader_prompt_path.read_text()
 
     outputs_dir = run_dir / "outputs"
-    transcript = outputs_dir / "transcript.jsonl"
+    transcript_name = "transcript.jsonl" if agent == "claude" else "transcript.txt"
+    transcript = outputs_dir / transcript_name
     expectations_block = "\n".join(f"- {a}" for a in assertions)
     prompt = (
         f"{grader_instructions}\n\n"
@@ -469,14 +647,21 @@ def _run_grader(
         f"Write your JSON verdict to: {run_dir / 'grading.json'}"
     )
 
-    grader_cmd = ["claude", "-p", "--output-format", "text", "--model", model]
-    if skip_permissions:
-        grader_cmd.append("--dangerously-skip-permissions")
+    if agent == "codex":
+        grader_cmd = ["codex", "exec", "--skip-git-repo-check"]
+        if model and model != CODEX_DEFAULT_MODEL:
+            grader_cmd.extend(["--model", model])
+        if skip_permissions:
+            grader_cmd.extend(["-c", 'approval_policy="never"', "-c", 'sandbox_mode="danger-full-access"'])
+    else:
+        grader_cmd = ["claude", "-p", "--output-format", "text", "--model", model]
+        if skip_permissions:
+            grader_cmd.append("--dangerously-skip-permissions")
     try:
         _ = subprocess.run(
             grader_cmd,
             input=prompt,
-            env=_make_subprocess_env(),
+            env=_make_subprocess_env(agent),
             capture_output=True,
             text=True,
             timeout=timeout,
@@ -538,7 +723,7 @@ def _run_single_run(
     tmp_root = Path(tempfile.mkdtemp(prefix="pilot-bench-", dir="/tmp"))
     TEMP_DIRS.append(tmp_root)
     try:
-        cfg_dir = prepare_config_dir(target, config_kind, tmp_root)
+        cfg_dir = prepare_config_dir(target, config_kind, tmp_root, agent=run_cfg.agent)
         resolved_prompt = substitute_sandbox(eval_prompt, cfg_dir)
         result = execute_run(
             prompt=resolved_prompt,
@@ -547,6 +732,7 @@ def _run_single_run(
             model=run_cfg.model,
             timeout=run_cfg.timeout,
             skip_permissions=run_cfg.skip_permissions,
+            agent=run_cfg.agent,
         )
         if isinstance(result, ExecuteSuccess):
             _ = _run_grader(
@@ -556,6 +742,7 @@ def _run_single_run(
                 model=run_cfg.grader_model,
                 timeout=run_cfg.grader_timeout,
                 skip_permissions=run_cfg.skip_permissions,
+                agent=run_cfg.grader_agent,
             )
             if reporter is not None:
                 reporter.on_completed(
@@ -578,18 +765,18 @@ def _run_single_run(
             TEMP_DIRS.remove(tmp_root)
 
 
-def _announce_contamination(target: TargetConfig, isolate_global: bool) -> list[Path]:
+def _announce_contamination(target: TargetConfig, isolate_global: bool, agent: str) -> list[Path]:
     """Log contamination status and return the paths that should be hidden.
 
     Returns an empty list when isolation is disabled (but still warns the user
     about detected-but-not-hidden duplicates so silent contamination is impossible).
     """
-    suspects = detect_global_contamination(target)
+    suspects = detect_global_contamination(target, agent=agent)
     if not suspects:
         return []
     if isolate_global:
         print(
-            f"  🛡  auto-isolating {len(suspects)} global counterpart(s) of the target in ~/.claude/ "
+            f"  🛡  auto-isolating {len(suspects)} global counterpart(s) of the target "
             "so the `without` config is truly without it:",
             file=sys.stderr,
         )
@@ -662,7 +849,7 @@ def run_benchmark(
 
     _warn_prompt_contamination(evals)
     _announce_conditional_loading(target)
-    to_hide = _announce_contamination(target, isolate_global)
+    to_hide = _announce_contamination(target, isolate_global, run_cfg.agent)
 
     plan = PlanHeader(
         config_path=str(config_path),
@@ -745,10 +932,10 @@ def main() -> None:
         "--model",
         default=None,
         help=(
-            "Executor model. Default: target skill's frontmatter `model:` if present, "
+            "Executor model. Claude default: target skill's frontmatter `model:` if present, "
             f"otherwise {DEFAULT_FALLBACK_MODEL} for rules and for Pilot-shipped skills "
             "(spec-plan, fix, prd, …) which no longer carry frontmatter model. "
-            "Pass --model opus explicitly to benchmark them on Opus instead."
+            "Codex default: omit --model and use the active Codex model."
         ),
     )
     parser.add_argument(
@@ -768,15 +955,14 @@ def main() -> None:
         "--skip-permissions",
         action="store_true",
         default=False,
-        help="Pass --dangerously-skip-permissions to all claude -p calls. Required for automated "
-        "runs (no interactive terminal). Grants the executor and grader permission to use any tool "
-        "without prompting — only enable when running in a trusted, isolated environment.",
+        help="Grant full permissions to all executor and grader subprocess calls. Required for "
+        "automated runs (no interactive terminal). Only enable in a trusted, isolated environment.",
     )
     parser.add_argument(
         "--no-isolate-global",
         action="store_true",
         default=False,
-        help="Do not hide ~/.claude/ counterparts of the target during the run. "
+        help="Do not hide global counterparts of the target during the run. "
         "Default: auto-hide. Use when you want to measure the target IN ADDITION to "
         "globally-loaded guidance (realistic 'day-to-day' measurement).",
     )
@@ -786,6 +972,18 @@ def main() -> None:
         default=False,
         help="Recover any .pilot-bench-hidden-* files left behind by a crashed prior "
         "run and exit. No benchmark is executed.",
+    )
+    parser.add_argument(
+        "--agent",
+        default="claude",
+        choices=["claude", "codex"],
+        help="Agent CLI to use for execution: claude (default) or codex",
+    )
+    parser.add_argument(
+        "--grader-agent",
+        default=None,
+        choices=["claude", "codex"],
+        help="Agent CLI for grading (default: same as --agent)",
     )
     parser.add_argument("--version", action="store_true", help="Print version and exit")
     args = parser.parse_args()
@@ -817,8 +1015,15 @@ def main() -> None:
         ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H-%M-%SZ")
         output_dir = Path("benchmarks") / name / "runs" / ts
 
-    executor_model: str = args.model or resolve_executor_model(target)
-    grader_model: str = args.grader_model or executor_model
+    agent: str = args.agent
+    grader_agent: str = args.grader_agent or agent
+    executor_model, grader_model = _resolve_run_models(
+        agent=agent,
+        grader_agent=grader_agent,
+        model_arg=args.model,
+        grader_model_arg=args.grader_model,
+        target=target,
+    )
 
     run_cfg = RunConfig(
         runs=args.runs,
@@ -827,6 +1032,8 @@ def main() -> None:
         timeout=args.timeout,
         grader_timeout=args.grader_timeout,
         skip_permissions=args.skip_permissions,
+        agent=agent,
+        grader_agent=grader_agent,
     )
     code = run_benchmark(
         config_path=args.config,

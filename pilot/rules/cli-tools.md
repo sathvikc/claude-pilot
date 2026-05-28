@@ -9,7 +9,7 @@
 | Session | `pilot check-context --json`, `pilot register-plan <path> <status>` |
 | Worktree | `pilot worktree detect\|create\|diff\|sync\|cleanup\|status --json <slug>` (slug = plan filename without date prefix and `.md`; `create` auto-stashes) |
 | License | `pilot activate <key>`, `pilot deactivate`, `pilot status`, `pilot verify`, `pilot trial --check\|--start` |
-| Updates | `pilot update [--yes] [--json] [--skip-claude]` (alias: `pilot upgrade`) — updates both Claude Code and Pilot Shell. User-initiated; don't invoke on the user's behalf without explicit ask. |
+| Updates | `pilot update [--yes] [--json]` (alias: `pilot upgrade`) — updates Pilot Shell. User-initiated; don't invoke on the user's behalf without explicit ask. |
 | Other | `pilot greet`, `pilot statusline` |
 
 **Do NOT exist:** ~~`pilot pipe`~~, ~~`pilot init`~~.
@@ -28,15 +28,15 @@ rtk proxy <cmd>       # Bypass filtering (debugging)
 rtk --version         # Verify install
 ```
 
-All other commands are auto-rewritten by the Claude Code hook (e.g., `git status` → `rtk git status`, transparent).
+All other commands are auto-rewritten by the Pilot shell hook when that hook is active (e.g., `git status` → `rtk git status`, transparent).
 
 ⚠️ **Name collision:** if `rtk gain` errors, you may have `reachingforthejack/rtk` (Rust Type Kit) on PATH instead.
 
 ---
 
-### Semble — Code Search (CLI + MCP)
+### Semble — Code Search (CLI + MCP) — CO-PRIMARY
 
-**Intent-based code search.** For symbol/structure queries, prefer CodeGraph (`mcp-servers.md`); for grep-style exact text, prefer Grep. Semble sits between them — hybrid (BM25 + Model2Vec semantic embeddings), code-aware chunking, ~1.5ms queries, ranks by relevance.
+**Intent-based code search — co-primary with CodeGraph.** CodeGraph for structural queries (callers, callees, impact, symbol enumeration); Semble for intent queries (concept discovery, cross-cutting features, mutation sites, debugging, cross-language search). Grep for exact text in known files. Hybrid (BM25 + Model2Vec semantic embeddings), code-aware chunking, ~1.5ms queries, ranks by relevance.
 
 Installed via `uv tool install semble` (also available as an MCP server — see `mcp-servers.md`). Verify with `semble --help`.
 

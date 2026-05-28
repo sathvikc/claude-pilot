@@ -103,27 +103,29 @@ class FinalizeStep(BaseStep):
 
         getting_started.extend(
             [
-                ("Launch Pilot Shell", "Run 'pilot' in your project folder instead of 'claude'"),
-                ("Pilot Shell Console", f"Open the UI in your browser at: http://{get_console_display()}"),
-                ("Share Specs", "Share specs from the Console, teammate feedback flows back"),
-                ("Pilot Bot", "Run 'pilot bot' for 24/7 automation with scheduled tasks"),
-                ("Claude Chrome", "Install and enable for better browser automation"),
+                ("Start a session", "Run 'claude' or 'codex' directly — Pilot Shell loads automatically"),
+                ("Check for updates", "Run 'pilot update' to update Pilot Shell"),
+                ("Pilot Shell Console", f"Open the local web UI at http://{get_console_display()}"),
             ]
         )
 
-        workflows: list[tuple[str, str]] = [
-            ("/spec", "Plan, implement & verify features end-to-end with TDD"),
-            ("/fix", "Investigate, RED test, fix, audit — bugfix workflow"),
-            ("/prd", "Brainstorm ideas into PRDs with optional research before /spec"),
-            ("/setup-rules", "Create modular and concise rules for your project codebase"),
-            ("/create-skill", "Create well-structured reusable skills for your workflows"),
-            ("/benchmark", "Quantitative before/after evals for rules, skills, and workflows"),
+        core_workflows: list[tuple[str, str]] = [
+            ("/prd · $prd", "Brainstorm ideas into PRDs with optional research before /spec"),
+            ("/spec · $spec", "Plan, implement & verify features end-to-end with TDD"),
+            ("/fix · $fix", "Investigate, RED test, fix, audit — bugfix workflow"),
+        ]
+
+        additional_workflows: list[tuple[str, str]] = [
+            ("/setup-rules · $setup-rules", "Create modular and concise rules for your project codebase"),
+            ("/create-skill · $create-skill", "Create well-structured reusable skills for your workflows"),
+            ("/benchmark · $benchmark", "Quantitative before/after evals for rules, skills, and workflows"),
         ]
 
         ui.next_steps(
             [
                 ("Getting Started", getting_started),
-                ("Workflows", workflows),
+                ("Core Workflows (Claude Code + Codex)", core_workflows),
+                ("Additional Workflows (Claude Code + Codex)", additional_workflows),
             ]
         )
 

@@ -37,6 +37,13 @@ class TestDependenciesStep:
             )
             assert step.check(ctx) is False
 
+    @patch("installer.steps.dependencies.initialize_codegraph", return_value=True)
+    @patch("installer.steps.dependencies.codegraph_needs_work", return_value=False)
+    @patch("installer.steps.dependencies.install_playwright_cli", return_value=True)
+    @patch("installer.steps.dependencies.install_lsp_plugins", return_value=True)
+    @patch("installer.steps.dependencies.install_codex_plugin", return_value=True)
+    @patch("installer.steps.dependencies.install_better_sqlite3", return_value=True)
+    @patch("installer.steps.dependencies.install_codegraph", return_value=True)
     @patch("installer.steps.dependencies.install_rtk", return_value=True)
     @patch("installer.steps.dependencies.install_semble", return_value=True)
     @patch("installer.steps.dependencies.install_agent_browser", return_value=True)
@@ -52,10 +59,8 @@ class TestDependenciesStep:
     @patch("installer.steps.dependencies.install_python_tools")
     @patch("installer.steps.dependencies.install_uv")
     @patch("installer.steps.dependencies.install_nodejs")
-    @patch("installer.steps.dependencies.install_claude_code", return_value=True)
     def test_dependencies_run_installs_core(
         self,
-        mock_claude_code,
         mock_nodejs,
         mock_uv,
         mock_python_tools,
@@ -68,16 +73,22 @@ class TestDependenciesStep:
         _mock_prettier,
         _mock_golangci_lint,
         _mock_pbt_tools,
-        _mock_playwright,
+        _mock_agent_browser,
         _mock_semble,
         _mock_rtk,
+        _mock_codegraph,
+        _mock_better_sqlite3,
+        _mock_codex_plugin,
+        _mock_lsp_plugins,
+        _mock_playwright,
+        _mock_codegraph_needs_work,
+        _mock_init_codegraph,
     ):
         """DependenciesStep installs all dependencies including Python tools."""
         from installer.context import InstallContext
         from installer.steps.dependencies import DependenciesStep
         from installer.ui import Console
 
-        mock_claude_code.return_value = True
         mock_nodejs.return_value = True
         mock_uv.return_value = True
         mock_python_tools.return_value = True
@@ -93,56 +104,34 @@ class TestDependenciesStep:
 
             step.run(ctx)
 
-            mock_claude_code.assert_called_once()
             mock_nodejs.assert_called_once()
             mock_uv.assert_called_once()
             mock_python_tools.assert_called_once()
             mock_plugin_deps.assert_called_once()
             _mock_semble.assert_called_once()
             _mock_rtk.assert_called_once()
+            _mock_codegraph.assert_called_once()
+            _mock_better_sqlite3.assert_called_once()
+            _mock_codex_plugin.assert_called_once()
+            _mock_lsp_plugins.assert_called_once()
+            _mock_playwright.assert_called_once()
+            _mock_pbt_tools.assert_called_once()
+            _mock_agent_browser.assert_called_once()
 
 
-class TestInstallClaudeCode:
-    """Test Claude Code installation."""
+class TestAgentInstallRemoved:
+    """The installer no longer installs Claude Code or Codex CLI itself.
 
-    def test_install_claude_code_exists(self):
-        """install_claude_code function exists."""
-        from installer.steps.dependencies import install_claude_code
+    README prerequisites require users to install agents via their native installers
+    before running this installer. Regression guard: the dispatcher must not regain
+    an install function for either agent.
+    """
 
-        assert callable(install_claude_code)
+    def test_install_claude_code_no_longer_exists(self):
+        """install_claude_code is removed — users install Claude Code themselves."""
+        import installer.steps.dependencies as deps
 
-    @patch("installer.steps.dependencies.command_exists", return_value=True)
-    def test_install_claude_code_skips_if_already_installed(self, _mock_cmd):
-        """install_claude_code returns True without installing when claude is in PATH."""
-        from installer.steps.dependencies import install_claude_code
-
-        with patch("installer.steps.dependencies._run_bash_with_retry") as mock_run:
-            result = install_claude_code()
-
-        assert result is True
-        mock_run.assert_not_called()
-
-    @patch("installer.steps.dependencies.command_exists", return_value=False)
-    def test_install_claude_code_runs_native_installer(self, _mock_cmd):
-        """install_claude_code routes through the manifest-pinned soft-pin curl helper."""
-        from installer.steps.dependencies import install_claude_code
-
-        with patch("installer.steps.dependencies._curl_pipe_from_manifest", return_value=True) as mock_helper:
-            result = install_claude_code()
-
-        assert result is True
-        mock_helper.assert_called_once()
-        assert mock_helper.call_args[0][0] == "claude-code-installer"
-
-    @patch("installer.steps.dependencies._curl_pipe_from_manifest", return_value=False)
-    @patch("installer.steps.dependencies.command_exists", return_value=False)
-    def test_install_claude_code_returns_false_on_failure(self, _mock_cmd, _mock_helper):
-        """install_claude_code returns False when the manifest-pinned curl install fails."""
-        from installer.steps.dependencies import install_claude_code
-
-        result = install_claude_code()
-
-        assert result is False
+        assert not hasattr(deps, "install_claude_code")
 
 
 class TestDependencyInstallFunctions:
@@ -527,13 +516,16 @@ class TestInstallRtk:
 
         assert callable(install_rtk)
 
+    @patch("installer.steps.dependencies._symlink_to_pilot_bin")
+    @patch("installer.steps.dependencies._curl_pipe_from_manifest", return_value=True)
     @patch("installer.steps.dependencies.command_exists", return_value=True)
-    def test_install_rtk_skips_when_already_installed(self, _mock_cmd):
-        """install_rtk returns True without curl when rtk already exists (e.g., via brew)."""
+    def test_install_rtk_upgrades_when_already_installed(self, _mock_cmd, mock_curl, _mock_symlink):
+        """install_rtk always runs curl installer to upgrade even when rtk exists."""
         from installer.steps.dependencies import install_rtk
 
         result = install_rtk()
         assert result is True
+        mock_curl.assert_called_once()
 
     @patch("installer.steps.dependencies._symlink_to_pilot_bin")
     @patch("installer.steps.dependencies.command_exists", return_value=False)
@@ -560,6 +552,62 @@ class TestInstallRtk:
             result = install_rtk()
 
         assert result is False
+
+
+class TestInitRtk:
+    """_init_rtk runs agent-specific init only for the agents the user has installed.
+
+    Agent detection delegates to ``installer.platform_utils.is_claude_installed`` /
+    ``is_codex_installed`` (PATH + native-installer fallback paths) — same helpers
+    used by ``cmd_install`` and ``ClaudeFilesStep``, so the gating is consistent
+    across the install flow.
+    """
+
+    def _runs(self, mock_run):
+        return [tuple(call.args[0]) for call in mock_run.call_args_list]
+
+    @patch("installer.steps.dependencies.subprocess.run")
+    @patch("installer.steps.dependencies.shutil.which", return_value="/fake/rtk")
+    @patch("installer.steps.dependencies.is_codex_installed", return_value=True)
+    @patch("installer.steps.dependencies.is_claude_installed", return_value=False)
+    def test_init_rtk_skips_claude_init_when_claude_absent(self, _claude, _codex, _which, mock_run):
+        """Codex-only systems must NOT receive rtk init for Claude."""
+        from installer.steps.dependencies import _init_rtk
+
+        _init_rtk()
+        runs = self._runs(mock_run)
+        assert all("--auto-patch" not in args for args in runs), (
+            f"Claude rtk init must be skipped when claude is absent; got: {runs}"
+        )
+        assert any("--codex" in args for args in runs)
+
+    @patch("installer.steps.dependencies.subprocess.run")
+    @patch("installer.steps.dependencies.shutil.which", return_value="/fake/rtk")
+    @patch("installer.steps.dependencies.is_codex_installed", return_value=False)
+    @patch("installer.steps.dependencies.is_claude_installed", return_value=True)
+    def test_init_rtk_skips_codex_init_when_codex_absent(self, _claude, _codex, _which, mock_run):
+        """Claude-only systems must NOT receive rtk init for Codex (existing behavior)."""
+        from installer.steps.dependencies import _init_rtk
+
+        _init_rtk()
+        runs = self._runs(mock_run)
+        assert any("--auto-patch" in args for args in runs)
+        assert all("--codex" not in args for args in runs), (
+            f"Codex rtk init must be skipped when codex is absent; got: {runs}"
+        )
+
+    @patch("installer.steps.dependencies.subprocess.run")
+    @patch("installer.steps.dependencies.shutil.which", return_value="/fake/rtk")
+    @patch("installer.steps.dependencies.is_codex_installed", return_value=True)
+    @patch("installer.steps.dependencies.is_claude_installed", return_value=True)
+    def test_init_rtk_runs_both_when_both_agents_present(self, _claude, _codex, _which, mock_run):
+        """Both-agents systems get both rtk inits."""
+        from installer.steps.dependencies import _init_rtk
+
+        _init_rtk()
+        runs = self._runs(mock_run)
+        assert any("--auto-patch" in args for args in runs)
+        assert any("--codex" in args for args in runs)
 
 
 class TestInstallCodegraph:
@@ -850,8 +898,6 @@ class TestSymlinkToPilotBin:
         fake_bin.parent.mkdir(parents=True)
         fake_bin.write_text("#!/bin/sh\n")
         fake_bin.chmod(0o755)
-
-        pilot_bin = tmp_path / "pilot_bin"
 
         with (
             patch("installer.steps.dependencies.shutil.which", return_value=str(fake_bin)),
@@ -1363,16 +1409,16 @@ class TestInstallPrettier:
 
         assert callable(install_prettier)
 
+    @patch("installer.steps.dependencies._run_bash_with_retry", return_value=True)
     @patch("installer.steps.dependencies.command_exists", return_value=True)
-    def test_install_prettier_skips_if_already_installed(self, _mock_cmd):
-        """install_prettier returns True without installing when prettier is in PATH."""
+    def test_install_prettier_upgrades_when_already_installed(self, _mock_cmd, mock_run):
+        """install_prettier always runs npm install to upgrade to manifest version."""
         from installer.steps.dependencies import install_prettier
 
-        with patch("installer.steps.dependencies._run_bash_with_retry") as mock_run:
-            result = install_prettier()
+        result = install_prettier()
 
         assert result is True
-        mock_run.assert_not_called()
+        mock_run.assert_called_once()
 
     @patch("installer.steps.dependencies._run_bash_with_retry", return_value=True)
     @patch("installer.steps.dependencies.command_exists", return_value=False)
@@ -1410,16 +1456,18 @@ class TestInstallGolangciLint:
 
         assert callable(install_golangci_lint)
 
+    @patch("installer.steps.dependencies._curl_pipe_from_manifest", return_value=True)
+    @patch("installer.steps.dependencies.subprocess.run")
     @patch("installer.steps.dependencies.command_exists", return_value=True)
-    def test_install_golangci_lint_skips_if_already_installed(self, mock_cmd):
-        """install_golangci_lint returns True without installing when already in PATH."""
+    def test_install_golangci_lint_upgrades_when_already_installed(self, _mock_cmd, mock_subproc, mock_curl):
+        """install_golangci_lint always runs installer to upgrade to manifest version."""
         from installer.steps.dependencies import install_golangci_lint
 
-        with patch("installer.steps.dependencies._run_bash_with_retry") as mock_run:
-            result = install_golangci_lint()
+        mock_subproc.return_value = MagicMock(returncode=0, stdout="/go")
+        result = install_golangci_lint()
 
         assert result is True
-        mock_run.assert_not_called()
+        mock_curl.assert_called_once()
 
     @patch("installer.steps.dependencies._install_go_via_apt", return_value=False)
     @patch("installer.steps.dependencies.command_exists", return_value=False)
@@ -1529,14 +1577,18 @@ class TestInstallPbtTools:
         assert UV_TOOL_INSTALL_TIMEOUT in timeouts
         assert GLOBAL_NPM_INSTALL_TIMEOUT in timeouts
 
+    @patch("installer.steps.dependencies._run_bash_with_retry", return_value=True)
     @patch("installer.steps.dependencies.command_exists", return_value=True)
-    def test_install_pbt_tools_returns_true_when_all_present(self, _mock_cmd):
-        """install_pbt_tools returns True when all binaries already exist."""
+    def test_install_pbt_tools_upgrades_even_when_commands_exist(self, _mock_cmd, mock_run):
+        """install_pbt_tools always runs upgrades to honor the installer contract."""
         from installer.steps.dependencies import install_pbt_tools
 
         result = install_pbt_tools()
 
         assert result is True
+        calls = [str(c) for c in mock_run.call_args_list]
+        assert any("hypothesis" in c for c in calls)
+        assert any("fast-check" in c for c in calls)
 
     @patch("installer.steps.dependencies.subprocess.run")
     @patch("installer.steps.dependencies._run_bash_with_retry", return_value=False)
@@ -1970,7 +2022,7 @@ class TestDependenciesCleanup:
     @patch("installer.steps.dependencies.start_sudo_keepalive")
     @patch("installer.steps.dependencies.ensure_sudo_credentials", return_value=True)
     @patch("installer.steps.dependencies.needs_sudo", return_value=True)
-    @patch("installer.steps.dependencies.install_claude_code", side_effect=RuntimeError("boom"))
+    @patch("installer.steps.dependencies.install_nodejs", side_effect=RuntimeError("boom"))
     def test_run_resets_sudo_state_on_exception(
         self,
         _mock_install,
@@ -2022,10 +2074,8 @@ class TestDependenciesCleanup:
     @patch("installer.steps.dependencies.install_python_tools", return_value=True)
     @patch("installer.steps.dependencies.install_uv", return_value=True)
     @patch("installer.steps.dependencies.install_nodejs", return_value=True)
-    @patch("installer.steps.dependencies.install_claude_code", return_value=True)
     def test_run_reauths_after_spinner_closes_and_continues(
         self,
-        _mock_claude,
         _mock_node,
         _mock_uv,
         _mock_python,
@@ -2092,6 +2142,9 @@ class TestDependenciesCleanup:
 
             def info(self, message: str) -> None:
                 self.events.append(("info", message))
+
+            def substep(self, name: str) -> None:
+                self.events.append(("substep", name))
 
         ui = RecordingUI()
         step = DependenciesStep()

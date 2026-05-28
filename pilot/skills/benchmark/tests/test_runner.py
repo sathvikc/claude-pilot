@@ -9,10 +9,12 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from scripts.runner import (
+    CODEX_DEFAULT_MODEL,
     REQUIRED_RESULT_FIELDS,
     SANDBOX_PLACEHOLDER,
     RunConfig,
     _make_subprocess_env,
+    _resolve_run_models,
     _run_grader,
     _safe_prefixes,
     _validate_target_path,
@@ -25,6 +27,7 @@ from scripts.runner import (
     validate_prompt_isolation,
 )
 from scripts.utils import (
+    DEFAULT_FALLBACK_MODEL,
     ExecuteFailure,
     ExecuteSuccess,
     GraderFailure,
@@ -181,6 +184,43 @@ class TestPrepareConfigDir:
         result = prepare_config_dir(target, "with", dest_root)
         installed = result / ".claude" / "skills" / "my-skill" / "SKILL.md"
         assert installed.exists()
+
+    def test_codex_without_config_creates_empty_agents_md(self, tmp_path: Path) -> None:
+        target: TargetConfig = {"type": "skill", "path": "/x"}
+        result = prepare_config_dir(target, "without", tmp_path, agent="codex")
+        assert result == tmp_path / "without"
+        assert (result / "AGENTS.md").exists()
+        assert not (result / ".agents" / "skills").exists()
+
+    def test_codex_with_config_copies_skill_to_agents_dir(self, tmp_path: Path) -> None:
+        skill_src = tmp_path / "src" / "my-skill"
+        skill_src.mkdir(parents=True)
+        _ = (skill_src / "SKILL.md").write_text("---\nname: my-skill\n---\n")
+        target: TargetConfig = {"type": "skill", "path": str(skill_src), "name": "my-skill"}
+        dest_root = tmp_path / "dest"
+        dest_root.mkdir()
+        result = prepare_config_dir(target, "with", dest_root, agent="codex")
+        installed = result / ".agents" / "skills" / "my-skill" / "SKILL.md"
+        assert installed.exists()
+        assert not (result / ".claude").exists()
+
+    def test_codex_with_rules_target_writes_root_agents_md(self, tmp_path: Path) -> None:
+        rules_src = tmp_path / "src" / "rules"
+        rules_src.mkdir(parents=True)
+        _ = (rules_src / "a.md").write_text("---\npaths:\n  - '**/*.py'\n---\nrule A")
+        _ = (rules_src / "b.md").write_text("rule B")
+        target: TargetConfig = {"type": "rules", "path": str(rules_src), "name": "rules"}
+        dest_root = tmp_path / "dest"
+        dest_root.mkdir()
+        result = prepare_config_dir(target, "with", dest_root, agent="codex")
+        agents_md = result / "AGENTS.md"
+        content = agents_md.read_text()
+        assert agents_md.exists()
+        assert "# Benchmark Rules" in content
+        assert "rule A" in content
+        assert "rule B" in content
+        assert "paths:" not in content
+        assert not (result / ".claude" / "rules").exists()
 
     def test_with_rules_target_copies_md_files(self, tmp_path: Path) -> None:
         rules_src = tmp_path / "src" / "rules"
@@ -493,6 +533,201 @@ class TestRunConfig:
     def test_default_skip_permissions_false(self) -> None:
         cfg = RunConfig(runs=1, model="m", grader_model="m", timeout=1, grader_timeout=1)
         assert cfg.skip_permissions is False
+
+    def test_default_agent_is_claude(self) -> None:
+        cfg = RunConfig(runs=1, model="m", grader_model="m", timeout=1, grader_timeout=1)
+        assert cfg.agent == "claude"
+
+    def test_agent_codex(self) -> None:
+        cfg = RunConfig(runs=1, model="m", grader_model="m", timeout=1, grader_timeout=1, agent="codex")
+        assert cfg.agent == "codex"
+
+
+class TestResolveRunModels:
+    def test_codex_executor_with_claude_grader_does_not_pass_codex_default_to_claude(self) -> None:
+        executor_model, grader_model = _resolve_run_models(
+            agent="codex",
+            grader_agent="claude",
+            model_arg=None,
+            grader_model_arg=None,
+            target={"type": "rules"},
+        )
+
+        assert executor_model == CODEX_DEFAULT_MODEL
+        assert grader_model == DEFAULT_FALLBACK_MODEL
+
+    def test_claude_executor_with_codex_grader_uses_codex_default(self) -> None:
+        executor_model, grader_model = _resolve_run_models(
+            agent="claude",
+            grader_agent="codex",
+            model_arg=None,
+            grader_model_arg=None,
+            target={"type": "rules"},
+        )
+
+        assert executor_model == DEFAULT_FALLBACK_MODEL
+        assert grader_model == CODEX_DEFAULT_MODEL
+
+    def test_same_agent_grader_inherits_executor_model(self) -> None:
+        executor_model, grader_model = _resolve_run_models(
+            agent="codex",
+            grader_agent="codex",
+            model_arg="gpt-5.5",
+            grader_model_arg=None,
+            target={"type": "rules"},
+        )
+
+        assert executor_model == "gpt-5.5"
+        assert grader_model == "gpt-5.5"
+
+
+class TestExecuteRunCodex:
+    def test_codex_agent_invokes_codex_exec(self, tmp_path: Path) -> None:
+        config_dir = tmp_path / "cfg"
+        run_dir = tmp_path / "out"
+        config_dir.mkdir()
+        completed = MagicMock(stdout="output text", stderr="", returncode=0)
+        with patch("scripts.runner.subprocess.run", return_value=completed) as mock_run:
+            result = execute_run(
+                prompt="test prompt",
+                config_dir=config_dir,
+                run_dir=run_dir,
+                model="gpt-5.5",
+                timeout=10,
+                agent="codex",
+            )
+        cmd_arg = mock_run.call_args.args[0]
+        assert cmd_arg[0] == "codex"
+        assert "exec" in cmd_arg
+        assert "--skip-git-repo-check" in cmd_arg
+        assert isinstance(result, ExecuteSuccess)
+
+    def test_codex_agent_omits_model_flag_for_codex_default(self, tmp_path: Path) -> None:
+        config_dir = tmp_path / "cfg"
+        run_dir = tmp_path / "out"
+        config_dir.mkdir()
+        completed = MagicMock(stdout="output text", stderr="", returncode=0)
+        with patch("scripts.runner.subprocess.run", return_value=completed) as mock_run:
+            result = execute_run(
+                prompt="test prompt",
+                config_dir=config_dir,
+                run_dir=run_dir,
+                model="codex-default",
+                timeout=10,
+                agent="codex",
+            )
+        cmd_arg = mock_run.call_args.args[0]
+        assert "--model" not in cmd_arg
+        assert isinstance(result, ExecuteSuccess)
+
+    def test_codex_agent_timing_json_has_agent_field(self, tmp_path: Path) -> None:
+        config_dir = tmp_path / "cfg"
+        run_dir = tmp_path / "out"
+        config_dir.mkdir()
+        completed = MagicMock(stdout="output text", stderr="", returncode=0)
+        with patch("scripts.runner.subprocess.run", return_value=completed):
+            execute_run(
+                prompt="test",
+                config_dir=config_dir,
+                run_dir=run_dir,
+                model="gpt-5.5",
+                timeout=10,
+                agent="codex",
+            )
+        timing = json.loads((run_dir / "timing.json").read_text())
+        assert timing["agent"] == "codex"
+        assert "note" in timing
+
+    def test_codex_nonzero_exit_returns_failure(self, tmp_path: Path) -> None:
+        config_dir = tmp_path / "cfg"
+        run_dir = tmp_path / "out"
+        config_dir.mkdir()
+        completed = MagicMock(stdout="", stderr="error output", returncode=1)
+        with patch("scripts.runner.subprocess.run", return_value=completed):
+            result = execute_run(
+                prompt="test",
+                config_dir=config_dir,
+                run_dir=run_dir,
+                model="gpt-5.5",
+                timeout=10,
+                agent="codex",
+            )
+        assert isinstance(result, ExecuteFailure)
+        assert result.reason == "codex-exec-failed"
+        assert (run_dir / "failed.json").exists()
+
+    def test_codex_missing_returns_failure(self, tmp_path: Path) -> None:
+        config_dir = tmp_path / "cfg"
+        run_dir = tmp_path / "out"
+        config_dir.mkdir()
+        with patch("scripts.runner.subprocess.run", side_effect=FileNotFoundError()):
+            result = execute_run(
+                prompt="test",
+                config_dir=config_dir,
+                run_dir=run_dir,
+                model="gpt-5.5",
+                timeout=1,
+                agent="codex",
+            )
+        assert isinstance(result, ExecuteFailure)
+        assert result.reason == "codex-cli-not-found"
+
+
+class TestRunGraderCodex:
+    @pytest.fixture(autouse=True)
+    def _stub_grader_prompt(self, tmp_path: Path):
+        agents_dir = Path(__file__).resolve().parent.parent / "agents"
+        grader_md = agents_dir / "grader.md"
+        created = False
+        if not grader_md.exists():
+            agents_dir.mkdir(parents=True, exist_ok=True)
+            _ = grader_md.write_text("test grader instructions")
+            created = True
+        yield
+        if created:
+            grader_md.unlink(missing_ok=True)
+
+    def test_codex_grader_invokes_codex_exec(self, tmp_path: Path) -> None:
+        run_dir = tmp_path / "run"
+        run_dir.mkdir()
+        _ = (run_dir / "grading.json").write_text(
+            json.dumps({"summary": {"pass_rate": 1.0, "passed": 1, "failed": 0, "total": 1}})
+        )
+        with patch("scripts.runner.subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(stdout="", stderr="", returncode=0)
+            result = _run_grader(
+                run_dir=run_dir,
+                assertions=["a"],
+                target_type="skill",
+                model="gpt-5.5",
+                timeout=1,
+                agent="codex",
+            )
+        cmd_arg = mock_run.call_args.args[0]
+        assert cmd_arg[0] == "codex"
+        assert "exec" in cmd_arg
+        assert "--skip-git-repo-check" in cmd_arg
+        assert isinstance(result, GraderSuccess)
+
+    def test_codex_grader_omits_model_flag_for_codex_default(self, tmp_path: Path) -> None:
+        run_dir = tmp_path / "run"
+        run_dir.mkdir()
+        _ = (run_dir / "grading.json").write_text(
+            json.dumps({"summary": {"pass_rate": 1.0, "passed": 1, "failed": 0, "total": 1}})
+        )
+        with patch("scripts.runner.subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(stdout="", stderr="", returncode=0)
+            result = _run_grader(
+                run_dir=run_dir,
+                assertions=["a"],
+                target_type="skill",
+                model="codex-default",
+                timeout=1,
+                agent="codex",
+            )
+        cmd_arg = mock_run.call_args.args[0]
+        assert "--model" not in cmd_arg
+        assert isinstance(result, GraderSuccess)
 
 
 # ----------------------------------------------------------------------------
