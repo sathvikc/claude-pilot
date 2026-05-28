@@ -2,6 +2,12 @@
 
 All notable changes to Pilot Shell will be documented in this file.
 
+## [9.1.2] - 2026-05-28
+
+### Bug Fixes
+
+- Suppress stale update notification once user has upgraded past cached pilot_latest
+
 ## [9.1.1] - 2026-05-28
 
 ### Bug Fixes
