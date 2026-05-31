@@ -105,13 +105,7 @@ const PricingSection = () => {
             </div>
 
             <div className="mb-6">
-              <div className="flex items-center gap-2 mb-1">
-                <span className="text-sm text-muted-foreground line-through">$14/mo</span>
-                <span className="text-xs font-medium text-emerald-400 bg-emerald-400/10 px-2 py-0.5 rounded-full">
-                  Save 36%
-                </span>
-              </div>
-              <span className="text-4xl font-bold text-foreground">$9</span>
+              <span className="text-4xl font-bold text-foreground">$14</span>
               <span className="text-muted-foreground">/month</span>
             </div>
 
@@ -185,13 +179,7 @@ const PricingSection = () => {
             </div>
 
             <div className="mb-6">
-              <div className="flex items-center gap-2 mb-1">
-                <span className="text-sm text-muted-foreground line-through">$35/seat/mo</span>
-                <span className="text-xs font-medium text-emerald-400 bg-emerald-400/10 px-2 py-0.5 rounded-full">
-                  Save 46%
-                </span>
-              </div>
-              <span className="text-4xl font-bold text-foreground">$19</span>
+              <span className="text-4xl font-bold text-foreground">$35</span>
               <span className="text-muted-foreground">/seat/month</span>
             </div>
 
