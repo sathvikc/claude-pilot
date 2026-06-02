@@ -1,51 +1,196 @@
 #!/usr/bin/env bash
-# Pre-commit hook: console dead-code gate (knip) + Trivy security scan.
-# Install: ln -sf ../../.github/hooks/pre-commit .git/hooks/pre-commit
+# Pre-commit hook: runs the fast CI checks in PARALLEL, scoped to staged files.
 #
-# Requires: trivy (brew install trivy / apt-get install trivy); bun for the
-#           console knip check (auto-skipped when the console is untouched).
-# Skip: SKIP_TRIVY=1 and/or SKIP_KNIP=1 git commit ...
+# Mirrors the fan-out of .github/workflows/release-dev.yml so a green pre-commit
+# closely predicts green CI, while running every check concurrently (wall time ≈
+# the slowest check, not the sum). Each check is scoped to what you actually
+# staged — Python checks skip when no Python changed, console checks skip when
+# the console is untouched:
+#
+#   • lint          ruff + vulture + deadcode + import-linter   (Python staged)
+#   • python-tests  pytest: installer / launcher / hooks / benchmark   (Python staged)
+#   • console       tsc typecheck + knip dead-code               (console TS staged)
+#   • console-tests bun test                                     (console TS staged)
+#   • trivy         vuln + secret scan                           (always)
+#
+# Each check runs in its own background subshell; output is captured and only
+# failing checks' logs are printed, followed by a timed summary. CI remains the
+# hard gate — missing local tools are skipped with a warning, never blocking.
+#
+# Install: ln -sf ../../.github/hooks/pre-commit .git/hooks/pre-commit
+# Requires: uv (Python tools), bun (console deps), trivy (security scan).
+# Bypass:
+#   SKIP_PRECOMMIT=1   skip everything (or: git commit --no-verify)
+#   SKIP_TESTS=1       skip the slow suites (pytest + bun test), keep lint/types/scan
+#   SKIP_TRIVY=1       skip the security scan
+#   SKIP_KNIP=1        skip the console dead-code check (typecheck still runs)
 
-set -euo pipefail
+set -uo pipefail
 
-# --- Console dead-code gate (knip) -------------------------------------------
-# Runs only when staged changes touch the console workspace (TS sources or
-# dependency/knip config). Degrades gracefully when the toolchain is missing;
-# CI (release.yml / release-dev.yml) is the hard gate.
-if [ "${SKIP_KNIP:-0}" != "1" ]; then
-  console_changes="$(git diff --cached --name-only --diff-filter=ACMR -- console/ \
-    | grep -E '\.tsx?$|^console/(package|knip)\.json$' || true)"
-  if [ -n "$console_changes" ]; then
-    if ! command -v bun &>/dev/null || [ ! -x console/node_modules/.bin/knip-bun ]; then
-      echo "⚠ bun/knip unavailable — skipping console dead-code check (cd console && bun install)"
-    else
-      echo "Running knip (console dead-code check)..."
-      if ! ( cd console && bun run knip ); then
-        echo "✖ knip found dead code / unused deps/exports in console/. Fix them, or bypass with SKIP_KNIP=1." >&2
-        exit 1
-      fi
-      echo "Dead-code check passed."
+if [ "${SKIP_PRECOMMIT:-0}" = "1" ]; then
+  echo "⚠ SKIP_PRECOMMIT=1 — skipping all pre-commit checks."
+  exit 0
+fi
+
+cd "$(git rev-parse --show-toplevel)"
+
+# --- What did we stage? ------------------------------------------------------
+# Scope each check to its package. Per-package test scoping is safe: lint-imports
+# enforces that launcher / installer / pilot-hooks never import each other, so a
+# change in one cannot break another's tests. A pyproject.toml change (shared
+# deps/config) re-runs every suite. CI still runs the full matrix.
+staged="$(git diff --cached --name-only --diff-filter=ACMR)"
+py_changed=0
+console_changed=0
+pytest_suites=""
+add_suite() { case " $pytest_suites " in *" $1 "*) ;; *) pytest_suites="$pytest_suites $1" ;; esac; }
+while IFS= read -r f; do
+  [ -n "$f" ] || continue
+  case "$f" in
+    launcher/*.py)               py_changed=1; add_suite launcher/tests/unit ;;
+    installer/*.py)              py_changed=1; add_suite installer/tests/unit ;;
+    pilot/hooks/*.py)            py_changed=1; add_suite pilot/hooks/tests ;;
+    pilot/skills/benchmark/*.py) py_changed=1; add_suite pilot/skills/benchmark/tests ;;
+    pyproject.toml)
+      py_changed=1
+      add_suite installer/tests/unit; add_suite launcher/tests/unit
+      add_suite pilot/hooks/tests;    add_suite pilot/skills/benchmark/tests ;;
+    console/*.ts|console/*.tsx|console/package.json|console/knip.json|console/tsconfig*.json)
+      console_changed=1 ;;
+  esac
+done <<< "$staged"
+
+TMP="$(mktemp -d)"
+trap 'rm -rf "$TMP"' EXIT
+
+# --- Tiny parallel-job registry (bash 3.2 compatible — no associative arrays) -
+job_names=()
+job_pids=()
+job_logs=()
+job_durs=()
+launch() { # launch "<display name>" <command…>
+  local name="$1"; shift
+  local idx="${#job_names[@]}"
+  local log="$TMP/job_${idx}.log" dur="$TMP/job_${idx}.dur"
+  ( start="$(date +%s)"; "$@"; rc=$?; echo $(( $(date +%s) - start )) >"$dur"; exit "$rc" ) >"$log" 2>&1 &
+  job_names+=("$name"); job_pids+=("$!"); job_logs+=("$log"); job_durs+=("$dur")
+}
+
+have() { command -v "$1" >/dev/null 2>&1; }
+
+# --- Check definitions (each is one CI-equivalent job; steps run fail-fast) ---
+job_lint() {
+  uv run ruff check launcher installer pilot/hooks || return 1
+  uv run vulture || return 1
+  uv run deadcode launcher installer || return 1
+  uv run lint-imports || return 1
+}
+job_pytest() { # job_pytest <suite-path>
+  uv run pytest "$1" -q
+}
+job_console() {
+  cd console || return 1
+  bun run typecheck || return 1
+  [ "${SKIP_KNIP:-0}" = "1" ] || bun run knip || return 1
+}
+job_console_tests() {
+  cd console && bun test
+}
+job_trivy() {
+  # skip-dirs mirrors release-dev.yml's Trivy job (vendored deps under
+  # docs/*/node_modules and console are CI-skipped) plus the local-only
+  # .pnpm-store cache, so the hook's verdict matches CI.
+  trivy fs . \
+    --scanners vuln,secret \
+    --severity CRITICAL,HIGH \
+    --exit-code 1 \
+    --ignore-unfixed \
+    --skip-dirs .venv,node_modules,console/node_modules,launcher,docs/site/api,console,docs/site/node_modules,docs/docusaurus/node_modules,.pnpm-store \
+    --ignorefile .trivyignore \
+    --quiet
+}
+
+# --- Schedule the relevant checks --------------------------------------------
+if [ "$py_changed" = "1" ]; then
+  if have uv; then
+    launch "lint (ruff/vulture/deadcode/imports)" job_lint
+    if [ "${SKIP_TESTS:-0}" != "1" ]; then
+      for s in $pytest_suites; do
+        case "$s" in
+          launcher/*)                lbl=launcher ;;
+          installer/*)               lbl=installer ;;
+          pilot/hooks/*)             lbl=hooks ;;
+          pilot/skills/benchmark/*)  lbl=benchmark ;;
+          *)                         lbl="$s" ;;
+        esac
+        launch "tests: $lbl (pytest)" job_pytest "$s"
+      done
     fi
+  else
+    echo "⚠ uv not found — skipping Python lint + tests (CI is the gate)."
   fi
 fi
 
-if [ "${SKIP_TRIVY:-0}" = "1" ]; then
+if [ "$console_changed" = "1" ]; then
+  if have bun && [ -d console/node_modules ]; then
+    launch "console (typecheck+knip)" job_console
+    [ "${SKIP_TESTS:-0}" = "1" ] || launch "console-tests (bun test)" job_console_tests
+  else
+    echo "⚠ bun/console deps unavailable — skipping console checks (cd console && bun install)."
+  fi
+fi
+
+if [ "${SKIP_TRIVY:-0}" != "1" ]; then
+  if have trivy; then
+    launch "trivy (vuln+secret)" job_trivy
+  else
+    echo "⚠ trivy not installed — skipping security scan (brew install trivy)."
+  fi
+fi
+
+if [ "${#job_names[@]}" -eq 0 ]; then
+  echo "Pre-commit: no relevant checks for the staged files — nothing to run."
   exit 0
 fi
 
-if ! command -v trivy &>/dev/null; then
-  echo "⚠ trivy not installed — skipping security scan (brew install trivy)"
-  exit 0
+echo "Pre-commit: running ${#job_names[@]} check(s) in parallel…"
+overall_start="$(date +%s)"
+
+# --- Wait + collect exit codes -----------------------------------------------
+job_rcs=()
+for i in "${!job_names[@]}"; do
+  if wait "${job_pids[$i]}"; then job_rcs+=("0"); else job_rcs+=("$?"); fi
+done
+
+# --- Print failing logs, then a timed summary --------------------------------
+failed=0
+for i in "${!job_names[@]}"; do
+  if [ "${job_rcs[$i]}" != "0" ]; then
+    failed=1
+    echo ""
+    echo "──────── ✖ ${job_names[$i]} ────────"
+    cat "${job_logs[$i]}"
+  fi
+done
+
+echo ""
+echo "──────── pre-commit summary ($(( $(date +%s) - overall_start ))s wall) ────────"
+for i in "${!job_names[@]}"; do
+  dur="$(cat "${job_durs[$i]}" 2>/dev/null || echo '?')"
+  if [ "${job_rcs[$i]}" = "0" ]; then
+    echo "  ✔ ${job_names[$i]} (${dur}s)"
+  else
+    echo "  ✖ ${job_names[$i]} (${dur}s) — exit ${job_rcs[$i]}"
+  fi
+done
+
+if [ "$failed" -ne 0 ]; then
+  echo "" >&2
+  echo "✖ Pre-commit failed. Fix the above, or bypass with SKIP_PRECOMMIT=1 / git commit --no-verify" >&2
+  echo "  (granular: SKIP_TESTS=1, SKIP_TRIVY=1, SKIP_KNIP=1)." >&2
+  exit 1
 fi
 
-echo "Running Trivy security scan..."
-trivy fs . \
-  --scanners vuln,secret \
-  --severity CRITICAL,HIGH \
-  --exit-code 1 \
-  --ignore-unfixed \
-  --skip-dirs .venv,node_modules,console/node_modules,launcher,docs/site/api \
-  --ignorefile .trivyignore \
-  --quiet
-
-echo "Security scan passed."
+echo ""
+echo "✔ All pre-commit checks passed."
+exit 0

@@ -320,8 +320,11 @@ def _handle_license_flow(
     else:
         days = _start_trial(console, project_dir, local_mode, local_repo_dir)
         if days is None:
+            # _start_trial already printed the specific reason (already-used,
+            # timeout, etc.); just bridge to the prompt instead of re-announcing
+            # a contradictory generic failure.
             console.print()
-            console.warning("Could not start trial. Enter a license key to continue.")
+            console.print("  Please enter a license key to continue.")
             console.print()
             if not _prompt_license_key(console, project_dir):
                 return 1

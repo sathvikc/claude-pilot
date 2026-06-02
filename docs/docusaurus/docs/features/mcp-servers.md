@@ -167,6 +167,6 @@ mcp__semble__find_related(file_path="src/auth.ts", line=42, repo="/abs/path")
 | `search` | Natural-language or symbol search with hybrid (default), `semantic`, or `bm25` modes |
 | `find_related` | Find code semantically similar to a specific `file:line` — discovers parallel implementations and call sites |
 
-**Token efficiency.** Semble returns only the matched chunks — Semble's own benchmark shows ~98% fewer tokens than `grep + read` at 94% recall. Per-call savings are recorded to `~/.semble/savings.jsonl` and combined with RTK output-compression savings in the Pilot statusline and Console "Usage" tab.
+**Token efficiency.** Semble returns only the matched chunks — Semble's own benchmark shows ~98% fewer tokens than `grep + read` at 94% recall. Per-call savings are recorded to `~/.semble/savings.jsonl`. RTK output-compression savings are shown in the Console "Usage" tab (as a share of would-be I/O tokens, per day/week/month).
 
 **Also available as a CLI** (`semble search`, `semble find-related`, `semble savings`) — see the rules doc for the full reference.

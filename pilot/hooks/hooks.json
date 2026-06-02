@@ -21,6 +21,12 @@
             "command": "uv run --no-project python \"$HOME/.pilot/hooks/codex_skill_sync.py\"",
             "async": true,
             "timeout": 30
+          },
+          {
+            "type": "command",
+            "command": "uv run --no-project python \"$HOME/.pilot/hooks/cc_skill_sync.py\"",
+            "async": true,
+            "timeout": 30
           }
         ]
       },

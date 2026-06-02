@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import sys
 from contextlib import contextmanager
 from typing import Any, Iterator, TextIO
@@ -277,13 +278,40 @@ class Console:
         self._console.print(prompt, end="")
 
         try:
-            tty = self._get_input_stream()
-            response = tty.readline().strip()
+            if sys.stdin.isatty():
+                # Normal terminals (and debugpy/IDE integrated terminals that keep
+                # stdin a TTY): the builtin handles line editing and CR/LF for us.
+                response = input().strip()
+            else:
+                # stdin is not a TTY -- either 'curl | bash' (stdin is the script
+                # pipe) or a proxied stdin (e.g. the VSCode/debugpy launcher). Read
+                # the controlling terminal directly, accepting CR, LF or CRLF as the
+                # line terminator so Enter submits even without ICRNL translation.
+                response = self._read_interactive_line().strip()
         except (EOFError, KeyboardInterrupt, OSError):
             self._console.print()
             return default
 
         return response if response else default
+
+    def _read_interactive_line(self) -> str:
+        """Read one line from the controlling terminal, byte by byte.
+
+        A plain readline() in text mode holds a trailing CR pending (universal-
+        newline CR/CRLF disambiguation), so a lone '\\r' -- which is what Enter
+        produces under the VSCode/debugpy launcher's terminal (no ICRNL CR->NL
+        translation) -- never returns and the raw CR echoes as '^M'. Reading raw
+        bytes and stopping on the first CR or LF avoids that.
+        """
+        stream = self._get_input_stream()
+        fd = stream.fileno()
+        buf = bytearray()
+        while True:
+            chunk = os.read(fd, 1)
+            if not chunk or chunk in (b"\n", b"\r"):  # EOF or end of line
+                break
+            buf += chunk
+        return buf.decode("utf-8", "replace")
 
     def print(self, message: str = "") -> None:
         """Print a plain message."""

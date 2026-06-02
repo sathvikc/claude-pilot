@@ -22,7 +22,12 @@ import json
 import os
 import re
 import subprocess
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from _lib.util import pilot_owned_skill_names  # noqa: E402
 
 _SUPPORTED_SKILLS = frozenset(
     {
@@ -79,6 +84,7 @@ def _get_codex_config_dir() -> Path:
             raise ValueError(f"CODEX_HOME must be an absolute path, got: {env_dir}")
         return path
     return Path.home() / ".codex"
+
 
 _CC_ONLY_RE = re.compile(r"<!-- CC-ONLY -->\n?.*?<!-- /CC-ONLY -->\n?", re.DOTALL)
 _CODEX_BLOCK_RE = re.compile(r"<!-- CODEX-START\n(.*?)CODEX-END -->(?:\n?)", re.DOTALL)
@@ -262,8 +268,12 @@ def _adapt_review_agent_instructions(body: str) -> str:
     )
     adapted = adapted.replace("### 4. Write Output", "### 4. Return Output")
     adapted = adapted.replace("### 5. Write Output", "### 5. Return Output")
-    adapted = adapted.replace("**Write JSON to `output_path` as your FINAL action.**", "**Return JSON as your final response.**")
-    adapted = adapted.replace("Write JSON to `output_path` as your FINAL action.", "Return JSON as your final response.")
+    adapted = adapted.replace(
+        "**Write JSON to `output_path` as your FINAL action.**", "**Return JSON as your final response.**"
+    )
+    adapted = adapted.replace(
+        "Write JSON to `output_path` as your FINAL action.", "Return JSON as your final response."
+    )
     adapted = adapted.replace("The orchestrator provides:", "The parent prompt provides:")
     adapted = adapted.replace(", `output_path`", "")
     adapted = adapted.replace("`output_path`, ", "")
@@ -290,10 +300,24 @@ def _is_pilot_managed_codex_review_agent(agent_file: Path) -> bool:
     return "pilot-shell managed Codex review agent" in content or "Pilot-managed Codex review agent" in content
 
 
+def _scoped_pilot_skill_names() -> frozenset[str]:
+    """Pilot skill allowlist, narrowed to manifest-tracked skills when available.
+
+    When ``~/.claude/.pilot-manifest.json`` lists installed skills, only skills
+    Pilot actually installed are eligible for removal — a user skill that happens
+    to share a Pilot name (e.g. their own ``fix``) is preserved. When the manifest
+    is absent/unreadable, fall back to the static allowlist (legacy behavior).
+    """
+    owned = pilot_owned_skill_names(Path.home() / ".claude")
+    if owned:
+        return frozenset(_PILOT_SKILL_NAMES & owned)
+    return _PILOT_SKILL_NAMES
+
+
 def _remove_codex_skills() -> int:
     agents_dir = Path.home() / ".agents" / "skills"
     removed = 0
-    for skill_name in _PILOT_SKILL_NAMES:
+    for skill_name in _scoped_pilot_skill_names():
         skill_md = agents_dir / skill_name / "SKILL.md"
         if skill_md.is_file():
             skill_md.unlink()
@@ -405,10 +429,7 @@ def _sync_codex_env_vars() -> int:
 
     env_lines = [f'{k} = "{v}"' for k, v in sorted(env_vars.items())]
     managed_block = (
-        f"\n{_ENV_MARKER_START}\n"
-        "[shell_environment_policy.set]\n"
-        + "\n".join(env_lines)
-        + f"\n{_ENV_MARKER_END}\n"
+        f"\n{_ENV_MARKER_START}\n[shell_environment_policy.set]\n" + "\n".join(env_lines) + f"\n{_ENV_MARKER_END}\n"
     )
 
     try:

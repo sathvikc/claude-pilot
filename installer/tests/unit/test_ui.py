@@ -55,3 +55,49 @@ class TestConsoleNonInteractive:
         console = Console(non_interactive=True)
         result = console.input("Enter value:", default="default_value")
         assert result == "default_value"
+
+
+class TestConsoleInteractiveInput:
+    """Console.input() reading from the controlling terminal (non-TTY stdin)."""
+
+    def test_input_submits_when_enter_is_bare_carriage_return(self, monkeypatch):
+        """Enter delivered as a lone CR (no LF) must submit the line.
+
+        Regression (6283848b): the readline()-based prompt held a trailing CR
+        pending (universal-newline CR/CRLF disambiguation), so under the VSCode/
+        debugpy launcher Enter ('\\r') never returned -- the user saw '^M' and
+        input hung. Keeping the write end open simulates a real terminal that
+        does not send EOF; the read must still complete on the bare CR.
+        """
+        import os
+        import sys
+        import threading
+
+        from installer.ui import Console
+
+        class _FakeStdin:
+            def isatty(self) -> bool:
+                return False
+
+        monkeypatch.setattr(sys, "stdin", _FakeStdin())
+
+        read_fd, write_fd = os.pipe()
+        os.write(write_fd, b"LICENSE-KEY-XYZ\r")
+
+        console = Console()
+        monkeypatch.setattr(console, "_get_input_stream", lambda: os.fdopen(read_fd, "r"))
+
+        result: dict[str, str] = {}
+
+        def _read() -> None:
+            result["value"] = console.input("Enter your license key")
+
+        worker = threading.Thread(target=_read, daemon=True)
+        worker.start()
+        worker.join(timeout=5.0)
+
+        try:
+            assert not worker.is_alive(), "input() hung waiting for a newline after a bare CR"
+            assert result["value"] == "LICENSE-KEY-XYZ"
+        finally:
+            os.close(write_fd)  # unblock any hung reader so the daemon thread can exit

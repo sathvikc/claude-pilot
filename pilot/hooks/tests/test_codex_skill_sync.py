@@ -124,9 +124,14 @@ class TestBuildCodexSkill:
         assert result is not None
         assert "Codex has no callable phase-dispatch tool" in result
         assert "continue immediately with the `$spec-plan` skill instructions" in result
-        assert "sub-agents (spec-review, changes-review), and the Codex companion reviewer are not available" not in result
+        assert (
+            "sub-agents (spec-review, changes-review), and the Codex companion reviewer are not available" not in result
+        )
         assert "Native `spec-review` and `changes-review` run as managed Codex custom agents" in result
-        assert "The current running session may not expose newly generated skills or agent types until the next install or SessionStart sync" in result
+        assert (
+            "The current running session may not expose newly generated skills or agent types until the next install or SessionStart sync"
+            in result
+        )
         assert "Skill(skill=" not in result
         assert "Skill('" not in result
 
@@ -164,7 +169,19 @@ class TestBuildCodexSkill:
 
     @pytest.mark.parametrize(
         "skill_name",
-        ["spec", "spec-plan", "spec-bugfix-plan", "spec-implement", "spec-verify", "spec-bugfix-verify", "prd", "fix", "benchmark", "setup-rules", "create-skill"],
+        [
+            "spec",
+            "spec-plan",
+            "spec-bugfix-plan",
+            "spec-implement",
+            "spec-verify",
+            "spec-bugfix-verify",
+            "prd",
+            "fix",
+            "benchmark",
+            "setup-rules",
+            "create-skill",
+        ],
     )
     def test_real_codex_skills_do_not_expose_claude_tool_calls(self, skill_name: str) -> None:
         result = _build_codex_skill(Path("pilot/skills") / skill_name)
@@ -195,7 +212,10 @@ class TestBuildCodexSkill:
             "plain-text numbered options tool",
         ):
             assert forbidden not in result
-        assert re.search(r"(^|[^A-Za-z0-9_`])/(spec|fix|prd|setup-rules|create-skill|benchmark)([^A-Za-z0-9_/]|$)", result) is None
+        assert (
+            re.search(r"(^|[^A-Za-z0-9_`])/(spec|fix|prd|setup-rules|create-skill|benchmark)([^A-Za-z0-9_/]|$)", result)
+            is None
+        )
 
 
 class TestSyncCodexSkills:
@@ -286,13 +306,34 @@ class TestRemoveCodexSkills:
             removed = _remove_codex_skills()
         assert removed == 0
 
+    def test_manifest_scoping_preserves_user_skill_with_pilot_name(self, tmp_path: Path) -> None:
+        # A user named their own skill "fix" (a Pilot name) — but it is NOT in
+        # the install manifest, so it must survive license enforcement.
+        agents = tmp_path / ".agents" / "skills"
+        (agents / "spec").mkdir(parents=True)
+        (agents / "spec" / "SKILL.md").write_text("pilot spec")
+        (agents / "fix").mkdir(parents=True)
+        (agents / "fix" / "SKILL.md").write_text("user fix")
+        claude_dir = tmp_path / ".claude"
+        claude_dir.mkdir()
+        (claude_dir / ".pilot-manifest.json").write_text(json.dumps({"files": ["skills/spec/manifest.json"]}))
+
+        with patch("codex_skill_sync.Path.home", return_value=tmp_path):
+            removed = _remove_codex_skills()
+
+        assert removed == 1
+        assert not (agents / "spec" / "SKILL.md").exists()
+        assert (agents / "fix" / "SKILL.md").exists()  # user skill preserved
+
 
 class TestRemoveCodexReviewAgents:
     def test_removes_managed_review_agent_files_only(self, tmp_path: Path) -> None:
         agents_dir = tmp_path / ".codex" / "agents"
         agents_dir.mkdir(parents=True)
         (agents_dir / "spec-review.toml").write_text('# pilot-shell managed Codex review agent\nname = "spec-review"\n')
-        (agents_dir / "changes-review.toml").write_text('# pilot-shell managed Codex review agent\nname = "changes-review"\n')
+        (agents_dir / "changes-review.toml").write_text(
+            '# pilot-shell managed Codex review agent\nname = "changes-review"\n'
+        )
         (agents_dir / "user-agent.toml").write_text('name = "user-agent"\n')
 
         with patch("codex_skill_sync.Path.home", return_value=tmp_path):
@@ -318,7 +359,9 @@ class TestRemoveCodexReviewAgents:
         codex_home = tmp_path / "custom-codex"
         agents_dir = codex_home / "agents"
         agents_dir.mkdir(parents=True)
-        (agents_dir / "changes-review.toml").write_text('# pilot-shell managed Codex review agent\nname = "changes-review"\n')
+        (agents_dir / "changes-review.toml").write_text(
+            '# pilot-shell managed Codex review agent\nname = "changes-review"\n'
+        )
 
         with (
             patch("codex_skill_sync.Path.home", return_value=tmp_path),
@@ -355,7 +398,9 @@ class TestCheckLicense:
                 mock_run.return_value.stdout = '{"valid": false}'
                 assert _check_license() is False
 
-    def test_main_invalid_license_removes_skills_and_review_agents(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    def test_main_invalid_license_removes_skills_and_review_agents(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
         codex_bin = tmp_path / ".codex" / "bin" / "codex"
         codex_bin.parent.mkdir(parents=True)
         codex_bin.write_text("#!/bin/sh\n")
@@ -364,7 +409,9 @@ class TestCheckLicense:
         (skill_dir / "SKILL.md").write_text("old skill")
         codex_agents_dir = tmp_path / ".codex" / "agents"
         codex_agents_dir.mkdir(parents=True)
-        (codex_agents_dir / "spec-review.toml").write_text('# pilot-shell managed Codex review agent\nname = "spec-review"\n')
+        (codex_agents_dir / "spec-review.toml").write_text(
+            '# pilot-shell managed Codex review agent\nname = "spec-review"\n'
+        )
 
         with (
             patch("codex_skill_sync.Path.home", return_value=tmp_path),
@@ -382,13 +429,17 @@ class TestSyncCodexEnvVars:
     def test_writes_env_vars_from_config(self, tmp_path: Path) -> None:
         config = tmp_path / ".pilot" / "config.json"
         config.parent.mkdir(parents=True)
-        config.write_text(json.dumps({
-            "specWorkflow": {
-                "planApproval": False,
-                "branchIsolation": True,
-                "askQuestionsDuringPlanning": True,
-            }
-        }))
+        config.write_text(
+            json.dumps(
+                {
+                    "specWorkflow": {
+                        "planApproval": False,
+                        "branchIsolation": True,
+                        "askQuestionsDuringPlanning": True,
+                    }
+                }
+            )
+        )
         codex_config = tmp_path / ".codex" / "config.toml"
         codex_config.parent.mkdir(parents=True)
         codex_config.write_text('approval_policy = "never"\n')

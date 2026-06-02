@@ -565,3 +565,35 @@ def build_objective_reinjection(plan_path: Path) -> str:
     parts.append("")
 
     return "\n".join(parts)
+
+
+# Install manifest written by installer/steps/settings_merge.py:save_manifest —
+# a JSON object {"files": [<paths relative to ~/.claude>]}. Vendored read-only
+# here (hooks must not import the installer package). Keep the filename in sync
+# with installer/steps/claude_files.py:PILOT_MANIFEST_FILE.
+PILOT_CLAUDE_MANIFEST_FILE = ".pilot-manifest.json"
+
+
+def pilot_owned_skill_names(claude_dir: Path | None = None) -> set[str]:
+    """Return the names of skills Pilot installed, per ~/.claude/.pilot-manifest.json.
+
+    A skill is Pilot-owned iff its source manifest ``skills/<name>/manifest.json``
+    is tracked in the install manifest. User-created skills are never listed, so
+    callers can safely gate/remove only the returned names.
+
+    Returns an empty set when the manifest is missing or unreadable — callers
+    MUST treat "unknown" as "touch nothing" so a corrupt/absent manifest never
+    causes user skills to be deleted.
+    """
+    base = claude_dir if claude_dir is not None else Path.home() / ".claude"
+    try:
+        data = json.loads((base / PILOT_CLAUDE_MANIFEST_FILE).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError, ValueError):
+        return set()
+    files = data.get("files", []) if isinstance(data, dict) else []
+    names: set[str] = set()
+    for rel in files:
+        parts = str(rel).split("/")
+        if len(parts) == 3 and parts[0] == "skills" and parts[2] == "manifest.json":
+            names.add(parts[1])
+    return names
