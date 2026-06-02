@@ -24,10 +24,10 @@ entries:
     name: "@colbymchenry/codegraph"
     source_type: npm
     source_url: "@colbymchenry/codegraph"
-    version: "0.9.6"
+    version: "0.9.8"
     # Highest-risk entry in this manifest per PRD: single-author npm package
     # with no public source repository declared. Manual audit only.
-    last_audited: "2026-05-27"
+    last_audited: "2026-06-01"
 
   - id: better-sqlite3
     name: better-sqlite3
