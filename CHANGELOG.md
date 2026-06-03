@@ -2,6 +2,12 @@
 
 All notable changes to Pilot Shell will be documented in this file.
 
+## [9.3.0] - 2026-06-03
+
+### Features
+
+- Automate model switching via opusplan and make Pilot admin-only
+
 ## [9.2.4] - 2026-06-02
 
 ### Bug Fixes
