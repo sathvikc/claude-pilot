@@ -57,9 +57,11 @@ EXCLUDED_DIRS = [
     "/.venv/",
     "/venv/",
     "/__pycache__/",
-    "/bin/",
-    "/obj/",
 ]
+
+# .NET build output — skipped only for .NET source, since other ecosystems
+# legitimately keep hand-written source under bin/ (entry-point scripts, etc.).
+DOTNET_BUILD_DIRS = ["/bin/", "/obj/"]
 
 
 def should_skip(file_path: str) -> bool:
@@ -75,6 +77,9 @@ def should_skip(file_path: str) -> bool:
     for excluded_dir in EXCLUDED_DIRS:
         if excluded_dir in file_path:
             return True
+
+    if path.suffix in (".cs", ".razor") and any(d in file_path for d in DOTNET_BUILD_DIRS):
+        return True
 
     return False
 
@@ -169,13 +174,11 @@ def _find_dotnet_test_dirs(start: Path) -> list[Path]:
             for child in current.iterdir():
                 if not child.is_dir() or child in seen:
                     continue
-                child_lower = child.name.lower()
-                if (
-                    child_lower.endswith(".tests")
-                    or child_lower.endswith(".test")
-                    or child_lower.endswith("tests")
-                    or child_lower.endswith("test")
-                ):
+                name = child.name
+                # .NET test projects: dotted convention (MyApp.Tests) or a PascalCase
+                # boundary (IntegrationTests). Requiring the dot or a capital 'T' avoids
+                # matching words that merely end in "test" (latest, contest, greatest).
+                if name.lower().endswith((".tests", ".test")) or name.endswith(("Tests", "Test")):
                     dirs.append(child)
                     seen.add(child)
         except OSError:
@@ -473,6 +476,10 @@ _CS_TYPE_KEYWORDS = re.compile(r"\b(interface|enum|record|class|struct)\b")
 # A type header's own primary-constructor parameter list, so `record Foo(...) { props }`
 # and `class Foo(...)` are not misread as a method/constructor body.
 _CS_PRIMARY_CTOR = re.compile(r"\b(?:record|class|struct|interface)\s+\w+(?:\s*<[^>]*>)?\s*\([^)]*\)")
+# An initializer's constructor/factory call (`= new(...)`, `= new T<U>(...)`, `= Make(...)`),
+# so an object/collection initializer brace (`= new() { ... }`) is not misread as a
+# method/ctor body by the ')' '{' check below.
+_CS_INITIALIZER_CALL = re.compile(r"=\s*(?:new\b\s*)?[\w.]*(?:\s*<[^>]*>)?\s*\([^)]*\)")
 
 
 def is_dotnet_logic_free(impl_path: str) -> bool:
@@ -512,12 +519,14 @@ def is_dotnet_logic_free(impl_path: str) -> bool:
     if re.search(r"\b(?:get|set|init)\b\s*\{", code):
         return False
 
-    # Method / constructor / control body: a ')' immediately followed by '{',
-    # after stripping the type header's primary-constructor parameter list.
-    # Note: field/property initializers (`= new()`, `= Factory()`) are deliberately
-    # NOT treated as own-logic — only method/accessor/ctor bodies are. Treating `= …(`
-    # as logic would false-enforce on idiomatic DTOs with collection initializers.
-    if re.search(r"\)\s*\{", _CS_PRIMARY_CTOR.sub(" ", code)):
+    # Method / constructor / control body: a ')' immediately followed by '{', after
+    # stripping the type header's primary-constructor list AND any initializer call.
+    # Field/property initializers (`= new() { ... }`, `= Factory()`) are deliberately
+    # NOT treated as own-logic — only method/accessor/ctor bodies are. Without the
+    # initializer strip, an idiomatic DTO with a braced collection/object initializer
+    # (`= new() { 1, 2 }`) would false-match ')' '{' and be wrongly enforced.
+    body_code = _CS_INITIALIZER_CALL.sub(" ", _CS_PRIMARY_CTOR.sub(" ", code))
+    if re.search(r"\)\s*\{", body_code):
         return False
 
     return True

@@ -23,6 +23,7 @@ from _checkers.tdd import (
     has_go_test_file,
     has_python_test_file,
     has_related_failing_test,
+    has_test_importing_module_dotnet,
     has_typescript_test_file,
     is_dotnet_logic_free,
     is_test_file,
@@ -70,6 +71,8 @@ def _tdd_check(tool_name: str, tool_input: dict, file_path: str) -> str:
 
     if file_path.endswith((".cs", ".razor")):
         if has_dotnet_test_file(file_path):
+            return ""
+        if has_test_importing_module_dotnet(file_path):
             return ""
         if is_dotnet_logic_free(file_path):
             return ""

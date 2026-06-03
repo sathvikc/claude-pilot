@@ -310,3 +310,18 @@ class TestDotnetTddSuppression:
         razor = tmp_path / "Counter.razor"
         razor.write_text("<h1>Counter</h1>\n")
         assert "TDD Reminder" in self._check(str(razor))
+
+    def test_integration_test_importing_module_suppresses_reminder(self, tmp_path):
+        """A nearby test that references the module counts as coverage (parsimony),
+        even without a sibling *Tests.cs — the live hook must honour it."""
+        src = tmp_path / "src"
+        src.mkdir()
+        impl = src / "Order.cs"
+        impl.write_text("namespace App;\npublic class Order\n{\n    public int Total() { return 1; }\n}\n")
+        tests = tmp_path / "tests"
+        tests.mkdir()
+        (tests / "CheckoutFlowTests.cs").write_text(
+            "using Xunit;\nnamespace T;\n"
+            "public class CheckoutFlowTests\n{\n    [Fact] public void Pays() { var o = new Order(); }\n}\n"
+        )
+        assert self._check(str(impl)) == ""

@@ -74,6 +74,9 @@ class TestCheckDotnet:
         assert len(commands) == 1, commands
         fmt = commands[0]
         assert "format" in fmt
+        # Fast path: whitespace subcommand in folder mode skips the MSBuild project load.
+        assert "whitespace" in fmt
+        assert "--folder" in fmt
         assert "--include" in fmt
         # The path passed to --include is the edited file relative to the project root.
         include_idx = fmt.index("--include")
@@ -100,6 +103,58 @@ class TestCheckDotnet:
 
         assert exit_code == 0
         assert "format" in reason.lower()
+        # The run is scoped to one file via --include, so issues are reported as
+        # whitespace issues, never as a count of "files needing formatting".
+        assert "files need formatting" not in reason
+
+    def test_file_in_test_project_dir_is_skipped(self, tmp_path: Path) -> None:
+        """A file under a MyApp.Tests/ project dir is skipped without running any tool."""
+        proj = tmp_path / "MyApp.Tests"
+        proj.mkdir()
+        (proj / "App.csproj").write_text("<Project />\n")
+        cs = proj / "Foo.cs"
+        cs.write_text("namespace T; public class Foo { }\n")
+
+        with patch("_checkers.dotnet.subprocess.run") as mock_run:
+            exit_code, reason = check_dotnet(cs)
+
+        assert exit_code == 0
+        assert reason == ""
+        mock_run.assert_not_called()
+
+    def test_file_in_testdata_dir_is_not_skipped(self, tmp_path: Path) -> None:
+        """A sibling like MyApp.TestData/ is NOT a test project — its files are still checked."""
+        proj = tmp_path / "MyApp.TestData"
+        proj.mkdir()
+        (proj / "App.csproj").write_text("<Project />\n")
+        cs = proj / "Foo.cs"
+        cs.write_text("namespace T; public class Foo { }\n")
+
+        clean = MagicMock(returncode=0, stdout="", stderr="")
+        with (
+            patch("_checkers.dotnet.check_file_length", return_value=""),
+            patch("_checkers.dotnet.shutil.which", side_effect=_which),
+            patch("_checkers.dotnet.subprocess.run", return_value=clean) as mock_run,
+        ):
+            check_dotnet(cs)
+
+        mock_run.assert_called_once()
+
+    def test_subprocess_oserror_is_handled(self, tmp_path: Path) -> None:
+        """A subprocess failure (e.g. dotnet vanished) is swallowed — no crash, no false reason."""
+        (tmp_path / "App.csproj").write_text("<Project />\n")
+        cs = tmp_path / "Foo.cs"
+        cs.write_text("namespace App; public class Foo { }\n")
+
+        with (
+            patch("_checkers.dotnet.check_file_length", return_value=""),
+            patch("_checkers.dotnet.shutil.which", side_effect=_which),
+            patch("_checkers.dotnet.subprocess.run", side_effect=OSError("boom")),
+        ):
+            exit_code, reason = check_dotnet(cs)
+
+        assert exit_code == 0
+        assert reason == ""
 
     def test_clean_format_produces_no_reason(self, tmp_path: Path) -> None:
         """A clean format run yields no reason."""

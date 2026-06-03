@@ -8,6 +8,7 @@ import tempfile
 from pathlib import Path
 
 from _checkers.tdd import (
+    _find_dotnet_test_dirs,
     _find_test_dirs,
     _pascal_to_kebab,
     _search_test_dirs,
@@ -44,6 +45,14 @@ class TestShouldSkip:
         assert should_skip("/project/src/app.py") is False
         assert should_skip("/project/src/app.ts") is False
         assert should_skip("/project/main.go") is False
+
+    def test_skips_dotnet_build_output_only_for_cs(self):
+        assert should_skip("/project/obj/Debug/net8.0/App.AssemblyInfo.cs") is True
+        assert should_skip("/project/bin/Release/net8.0/Foo.g.cs") is True
+
+    def test_does_not_skip_non_dotnet_bin_source(self):
+        assert should_skip("/project/bin/cli.py") is False
+        assert should_skip("/project/src/bin/run.ts") is False
 
 
 class TestIsTestFile:
@@ -619,6 +628,37 @@ class TestIsDotnetLogicFree:
         path = self._write(tmp_path, "Bag.cs", body)
         assert is_dotnet_logic_free(path) is True
 
+    def test_poco_with_braced_initializer_is_logic_free(self, tmp_path: Path):
+        """Braced collection/object initializers (`= new() { ... }`) are not own-logic.
+
+        The `)` `{` of `new() {` must not be misread as a method body — these are the
+        most common DTO initializer idioms and must stay logic-free.
+        """
+        body = (
+            "namespace App;\n"
+            "public class Bag\n"
+            "{\n"
+            "    public List<int> Xs { get; set; } = new() { 1, 2, 3 };\n"
+            "    public List<int> Ys = new List<int>() { 4 };\n"
+            "    public Inner I { get; } = new() { A = 1 };\n"
+            "}\n"
+        )
+        path = self._write(tmp_path, "Bag.cs", body)
+        assert is_dotnet_logic_free(path) is True
+
+    def test_method_constructing_braced_initializer_still_enforces(self, tmp_path: Path):
+        """A method body remains logic even when it assigns a braced initializer."""
+        body = (
+            "namespace App;\n"
+            "public class Init\n"
+            "{\n"
+            "    public List<int> Items { get; set; }\n"
+            "    public void Setup() { Items = new() { 1 }; }\n"
+            "}\n"
+        )
+        path = self._write(tmp_path, "Init.cs", body)
+        assert is_dotnet_logic_free(path) is False
+
     def test_xml_doc_comment_with_example_code_is_still_logic_free(self, tmp_path: Path):
         """Comment stripping: example code in /// must not force enforcement on a pure DTO."""
         body = (
@@ -710,3 +750,18 @@ class TestIsDotnetLogicFree:
         """A .cs file with only usings/attributes (no type) is ambiguous — enforce."""
         path = self._write(tmp_path, "AssemblyInfo.cs", "using System;\n[assembly: System.Reflection.AssemblyVersion(\"1.0\")]\n")
         assert is_dotnet_logic_free(path) is False
+
+
+class TestFindDotnetTestDirs:
+    """Test-project detection must match .NET conventions without matching lookalike words."""
+
+    def test_matches_test_projects_but_not_words_ending_in_test(self, tmp_path: Path):
+        for name in ("MyApp.Tests", "MyApp.Test", "IntegrationTests", "FooTest", "tests", "latest", "contest", "greatest"):
+            (tmp_path / name).mkdir()
+        src = tmp_path / "src"
+        src.mkdir()
+
+        found = {p.name for p in _find_dotnet_test_dirs(src)}
+
+        assert {"MyApp.Tests", "MyApp.Test", "IntegrationTests", "FooTest", "tests"} <= found
+        assert found & {"latest", "contest", "greatest"} == set()

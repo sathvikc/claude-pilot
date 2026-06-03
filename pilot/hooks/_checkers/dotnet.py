@@ -34,24 +34,14 @@ def find_project_root(file_path: Path) -> Path | None:
     return None
 
 
-def _find_nearest_csproj(file_path: Path) -> Path | None:
-    """Find the nearest .csproj file by walking up from file_path."""
-    current = file_path.parent
-    for _ in range(20):
-        csproj_files = list(current.glob("*.csproj"))
-        if csproj_files:
-            return csproj_files[0]
-        if current.parent == current:
-            break
-        current = current.parent
-    return None
-
-
 def check_dotnet(file_path: Path) -> tuple[int, str]:
     """Check .NET file with a single-file `dotnet format`. Returns (0, reason)."""
-    if file_path.stem.endswith("Tests") or file_path.stem.endswith("Test"):
+    stem = file_path.stem
+    if stem.endswith("Tests") or stem.endswith("Test"):
         return 0, ""
-    if ".Tests" in str(file_path) or ".Test" in str(file_path):
+    # Skip files inside a .NET test project (dir convention: MyApp.Tests / MyApp.Test).
+    # A path-segment match avoids over-skipping siblings like MyApp.TestData.
+    if any(part.endswith((".Tests", ".Test")) for part in file_path.parts):
         return 0, ""
 
     length_warning = check_file_length(file_path)
@@ -64,17 +54,13 @@ def check_dotnet(file_path: Path) -> tuple[int, str]:
     if not dotnet_bin:
         return 0, length_warning
 
-    csproj = _find_nearest_csproj(file_path)
-
-    results: dict[str, tuple] = {}
-    has_issues = False
-
-    has_issues, results = _run_dotnet_format(dotnet_bin, csproj, project_root, file_path, has_issues, results)
+    has_issues, results = _run_dotnet_format(dotnet_bin, project_root, file_path)
 
     if has_issues:
         parts = []
         for tool_name, (count, _) in results.items():
-            parts.append(f"{count} {tool_name}")
+            label = "issue" if count == 1 else "issues"
+            parts.append(f"{count} {tool_name} {label}")
         reason = f"Dotnet: {', '.join(parts)} in {file_path.name}"
         details = _format_dotnet_issues(file_path, results)
         if details:
@@ -88,17 +74,22 @@ def check_dotnet(file_path: Path) -> tuple[int, str]:
 
 def _run_dotnet_format(
     dotnet_bin: str,
-    csproj: Path | None,
     project_root: Path,
     file_path: Path,
-    has_issues: bool,
-    results: dict[str, tuple],
 ) -> tuple[bool, dict[str, tuple]]:
-    """Run dotnet format --verify-no-changes scoped to the edited file and collect results."""
+    """Run `dotnet format whitespace --folder` scoped to the edited file and collect results."""
+    has_issues = False
+    results: dict[str, tuple] = {}
     try:
-        cmd = [dotnet_bin, "format", "--verify-no-changes", "--no-restore", "--verbosity", "q"]
-        if csproj:
-            cmd.append(str(csproj))
+        # `whitespace --folder` skips the MSBuild project load, restore, and analyzer
+        # compilation (the dominant per-edit cost) while still applying .editorconfig
+        # whitespace rules. Style/analyzer feedback is deferred to the LSP and
+        # `dotnet build` / `dotnet test`.
+        cmd = [
+            dotnet_bin, "format", "whitespace",
+            str(project_root), "--folder",
+            "--verify-no-changes", "--verbosity", "q",
+        ]
 
         try:
             include_path = file_path.relative_to(project_root)
@@ -134,8 +125,8 @@ def _run_dotnet_format(
                 results["format"] = (1, ["Code formatting issues detected"])
     except subprocess.TimeoutExpired:
         debug_log("Format check timed out")
-    except Exception:
-        pass
+    except (OSError, subprocess.SubprocessError) as exc:
+        debug_log(f"Format check failed to run: {exc}")
     return has_issues, results
 
 
@@ -150,8 +141,8 @@ def _format_dotnet_issues(file_path: Path, results: dict[str, tuple]) -> str:
 
     if "format" in results:
         count, format_lines = results["format"]
-        plural = "file" if count == 1 else "files"
-        lines.append(f"Format: {count} {plural} need formatting (run `dotnet format`)")
+        plural = "issue" if count == 1 else "issues"
+        lines.append(f"Format: {count} whitespace {plural} (run `dotnet format`)")
         for line in format_lines[:10]:
             lines.append(f"  {line}")
         if count > 10:
