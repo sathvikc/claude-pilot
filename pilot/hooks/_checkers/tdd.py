@@ -5,6 +5,7 @@ Provides reusable TDD check functions used by file_checker.py hook.
 
 from __future__ import annotations
 
+import functools
 import json
 import re
 import sys
@@ -157,8 +158,27 @@ def _find_test_dirs(start: Path) -> list[Path]:
     return dirs
 
 
+def is_dotnet_test_project_name(name: str) -> bool:
+    """True if a directory name follows a .NET test-project convention.
+
+    Matches the dotted convention (``MyApp.Tests``) or a PascalCase boundary
+    (``IntegrationTests``, ``FooTest``). Requiring the dot or a capital 'T'
+    avoids matching words that merely end in "test" (latest, contest, greatest).
+    Shared by the format checker's skip and test-dir discovery so the two agree.
+    """
+    return name.lower().endswith((".tests", ".test")) or name.endswith(("Tests", "Test"))
+
+
+@functools.lru_cache(maxsize=128)
 def _find_dotnet_test_dirs(start: Path) -> list[Path]:
-    """Walk up from start to find common .NET test directories/projects."""
+    """Walk up from start to find common .NET test directories/projects.
+
+    Memoized: both callers per edit (``has_dotnet_test_file`` and
+    ``has_test_importing_module_dotnet``) pass the same start dir, so the second
+    lookup is a cache hit instead of a second full iterdir walk. The hook runs as
+    a short-lived process, so the cache only dedupes within a single run (no
+    cross-edit staleness). Callers must not mutate the returned list.
+    """
     dirs: list[Path] = []
     current = start
     seen: set[Path] = set()
@@ -174,11 +194,7 @@ def _find_dotnet_test_dirs(start: Path) -> list[Path]:
             for child in current.iterdir():
                 if not child.is_dir() or child in seen:
                     continue
-                name = child.name
-                # .NET test projects: dotted convention (MyApp.Tests) or a PascalCase
-                # boundary (IntegrationTests). Requiring the dot or a capital 'T' avoids
-                # matching words that merely end in "test" (latest, contest, greatest).
-                if name.lower().endswith((".tests", ".test")) or name.endswith(("Tests", "Test")):
+                if is_dotnet_test_project_name(child.name):
                     dirs.append(child)
                     seen.add(child)
         except OSError:

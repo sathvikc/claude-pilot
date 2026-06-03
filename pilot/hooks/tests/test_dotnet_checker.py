@@ -173,3 +173,72 @@ class TestCheckDotnet:
 
         assert exit_code == 0
         assert reason == ""
+
+    def test_generated_file_under_obj_is_skipped(self, tmp_path: Path) -> None:
+        """A generated .cs under obj/ is skipped without formatting (matches the TDD skip)."""
+        (tmp_path / "App.csproj").write_text("<Project />\n")
+        gen = tmp_path / "obj" / "Debug" / "net8.0"
+        gen.mkdir(parents=True)
+        cs = gen / "App.AssemblyInfo.cs"
+        cs.write_text('[assembly: System.Reflection.AssemblyVersion("1.0")]\n')
+
+        with patch("_checkers.dotnet.subprocess.run") as mock_run:
+            exit_code, reason = check_dotnet(cs)
+
+        assert exit_code == 0
+        assert reason == ""
+        mock_run.assert_not_called()
+
+    def test_file_in_non_dotted_test_project_is_skipped(self, tmp_path: Path) -> None:
+        """A file under IntegrationTests/ is skipped — the skip now matches test-dir discovery."""
+        proj = tmp_path / "IntegrationTests"
+        proj.mkdir()
+        (proj / "App.csproj").write_text("<Project />\n")
+        cs = proj / "Helpers.cs"
+        cs.write_text("namespace T; public class Helpers { }\n")
+
+        with patch("_checkers.dotnet.subprocess.run") as mock_run:
+            exit_code, reason = check_dotnet(cs)
+
+        assert exit_code == 0
+        assert reason == ""
+        mock_run.assert_not_called()
+
+    def test_razor_skips_format_but_keeps_length_check(self, tmp_path: Path) -> None:
+        """`.razor` never spawns dotnet format (no-op in folder mode) but still gets a length check."""
+        (tmp_path / "App.csproj").write_text("<Project />\n")
+        razor = tmp_path / "Counter.razor"
+        razor.write_text("<h1>Counter</h1>\n")
+
+        with (
+            patch("_checkers.dotnet.check_file_length", return_value="too long"),
+            patch("_checkers.dotnet.shutil.which", side_effect=_which),
+            patch("_checkers.dotnet.subprocess.run") as mock_run,
+        ):
+            exit_code, reason = check_dotnet(razor)
+
+        assert exit_code == 0
+        assert reason == "too long"
+        mock_run.assert_not_called()
+
+    def test_tool_error_exit_is_not_reported_as_issues(self, tmp_path: Path) -> None:
+        """A real dotnet format failure (exit 1, not 2) is swallowed — its error text is not mislabeled."""
+        (tmp_path / "App.csproj").write_text("<Project />\n")
+        cs = tmp_path / "Foo.cs"
+        cs.write_text("namespace App; public class Foo { }\n")
+
+        tool_error = MagicMock(
+            returncode=1,
+            stdout="",
+            stderr="Unhandled exception: could not load .editorconfig\n",
+        )
+
+        with (
+            patch("_checkers.dotnet.check_file_length", return_value=""),
+            patch("_checkers.dotnet.shutil.which", side_effect=_which),
+            patch("_checkers.dotnet.subprocess.run", return_value=tool_error),
+        ):
+            exit_code, reason = check_dotnet(cs)
+
+        assert exit_code == 0
+        assert reason == ""

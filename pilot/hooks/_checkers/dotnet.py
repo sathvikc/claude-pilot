@@ -10,8 +10,15 @@ from pathlib import Path
 
 from _lib.util import BLUE, NC, check_file_length
 
+from _checkers.tdd import is_dotnet_test_project_name, should_skip
+
 DOTNET_EXTENSIONS = {".cs", ".razor"}
 DEBUG = os.environ.get("HOOK_DEBUG", "").lower() == "true"
+
+# `dotnet format --verify-no-changes` returns this (CheckFailedExitCode) when a
+# file needs formatting; 1 (UnhandledException) and 3 (MSBuild-not-found) mean
+# the tool itself failed. See dotnet/sdk FormatCommandCommon.cs.
+_FORMAT_CHANGES_NEEDED = 2
 
 
 def debug_log(message: str) -> None:
@@ -36,15 +43,27 @@ def find_project_root(file_path: Path) -> Path | None:
 
 def check_dotnet(file_path: Path) -> tuple[int, str]:
     """Check .NET file with a single-file `dotnet format`. Returns (0, reason)."""
+    # Skip build output / generated / vendored dirs (bin, obj, generated, …) —
+    # shares the TDD checker's skip list so the format and TDD paths agree.
+    if should_skip(str(file_path)):
+        return 0, ""
+
     stem = file_path.stem
     if stem.endswith("Tests") or stem.endswith("Test"):
         return 0, ""
-    # Skip files inside a .NET test project (dir convention: MyApp.Tests / MyApp.Test).
-    # A path-segment match avoids over-skipping siblings like MyApp.TestData.
-    if any(part.endswith((".Tests", ".Test")) for part in file_path.parts):
+    # Skip files inside a .NET test project (MyApp.Tests, IntegrationTests, …).
+    # Same predicate as _find_dotnet_test_dirs so skip and discovery agree; a
+    # path-segment match avoids over-skipping siblings like MyApp.TestData.
+    if any(is_dotnet_test_project_name(part) for part in file_path.parts):
         return 0, ""
 
     length_warning = check_file_length(file_path)
+
+    # `dotnet format whitespace` (folder mode) only loads C# documents — a
+    # `.razor` --include matches nothing, so skip the subprocess entirely and
+    # keep just the length check for components.
+    if file_path.suffix != ".cs":
+        return 0, length_warning
 
     project_root = find_project_root(file_path)
     if not project_root:
@@ -86,9 +105,14 @@ def _run_dotnet_format(
         # whitespace rules. Style/analyzer feedback is deferred to the LSP and
         # `dotnet build` / `dotnet test`.
         cmd = [
-            dotnet_bin, "format", "whitespace",
-            str(project_root), "--folder",
-            "--verify-no-changes", "--verbosity", "q",
+            dotnet_bin,
+            "format",
+            "whitespace",
+            str(project_root),
+            "--folder",
+            "--verify-no-changes",
+            "--verbosity",
+            "q",
         ]
 
         try:
@@ -108,7 +132,10 @@ def _run_dotnet_format(
         )
         debug_log(f"Format exit code: {result.returncode}")
 
-        if result.returncode != 0:
+        # Exit 2 = files need formatting. Any other non-zero code is a real tool
+        # failure (1 = unhandled exception, 3 = MSBuild not found); swallow it
+        # like a timeout instead of mislabeling its error text as whitespace issues.
+        if result.returncode == _FORMAT_CHANGES_NEEDED:
             output = result.stdout + result.stderr
             # Collect filenames that need formatting
             format_lines = [
@@ -120,9 +147,11 @@ def _run_dotnet_format(
                 has_issues = True
                 results["format"] = (len(format_lines), format_lines)
             else:
-                # Non-zero exit but no specific lines — still report
+                # Changes needed but no specific lines (quiet verbosity) — still report.
                 has_issues = True
                 results["format"] = (1, ["Code formatting issues detected"])
+        elif result.returncode != 0:
+            debug_log(f"dotnet format failed (exit {result.returncode}); not reporting as issues")
     except subprocess.TimeoutExpired:
         debug_log("Format check timed out")
     except (OSError, subprocess.SubprocessError) as exc:
