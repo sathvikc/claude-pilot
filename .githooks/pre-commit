@@ -63,7 +63,7 @@ if [ -n "$LAUNCHER_CHANGED" ] || [ -n "$INSTALLER_CHANGED" ]; then
 fi
 
 # --- 2. Console unit tests ---
-CONSOLE_CHANGED=$(git diff --cached --name-only -- 'console/src/' 'console/scripts/' 'console/package.json' 'console/tsconfig.json' 'console/vite.config.ts' | head -1)
+CONSOLE_CHANGED=$(git diff --cached --name-only -- 'console/src/' 'console/tests/' 'console/scripts/' 'console/package.json' 'console/tsconfig.json' 'console/vite.config.ts' | head -1)
 
 if [ -n "$CONSOLE_CHANGED" ]; then
   # Verify node_modules exist
@@ -72,14 +72,48 @@ if [ -n "$CONSOLE_CHANGED" ]; then
     exit 1
   fi
 
+  # --- 2a. Mock-hygiene gate: forbid process-global builtin module mocks ---
+  # bun runs every test file in ONE process; mock.module("fs", ...) leaks into
+  # all later files and only blows up under CI's (Linux) file order - the
+  # existsSync pollution class behind run 27408667519. Use spyOn(realModule,
+  # "fn") + mock.restore() in afterAll instead.
+  STAGED_CONSOLE_TESTS=$(git diff --cached --name-only --diff-filter=ACMR -- 'console/tests/*.ts' 'console/tests/**/*.ts')
+  if [ -n "$STAGED_CONSOLE_TESTS" ]; then
+    MOCK_VIOLATIONS=""
+    while IFS= read -r f; do
+      [ -n "$f" ] || continue
+      # Scan the worktree file, NOT `git show :$f` - console sources are
+      # git-crypt'd, so staged blobs are ciphertext and grep would never match.
+      hits=$(grep -nE 'mock\.module\(["'"'"'](node:)?(fs|child_process|os|path)["'"'"']' "$f" 2>/dev/null | grep -vE '^[0-9]+:[[:space:]]*(//|\*)' || true)
+      [ -n "$hits" ] && MOCK_VIOLATIONS="${MOCK_VIOLATIONS}${f}:
+${hits}
+"
+    done <<< "$STAGED_CONSOLE_TESTS"
+    if [ -n "$MOCK_VIOLATIONS" ]; then
+      echo "[pre-commit] ERROR: process-global builtin module mock(s) staged:"
+      printf '%s' "$MOCK_VIOLATIONS"
+      echo "[pre-commit] mock.module() of fs/child_process/os/path leaks across test files"
+      echo "[pre-commit] (bun runs all files in one process; failures appear only under CI's"
+      echo "[pre-commit] file order). Use: spyOn(realModule, \"fn\").mockImplementation(...) at"
+      echo "[pre-commit] module scope + afterAll(() => mock.restore()). See tests/worker/license-routes.test.ts."
+      exit 1
+    fi
+  fi
+
   echo "[pre-commit] Console source changed — running unit tests..."
   (cd console && bun test 2>&1) | tail -20
   echo "[pre-commit] Console unit tests passed."
 
-  # --- 3. Console typecheck + build + stage artifacts ---
+  # --- 3. Console typecheck + knip + build + stage artifacts ---
   echo "[pre-commit] Running typecheck..."
   (cd console && bun run typecheck 2>&1) | tail -20
   echo "[pre-commit] Console typecheck passed."
+
+  if [ "${SKIP_KNIP:-0}" != "1" ]; then
+    echo "[pre-commit] Running knip dead-code check..."
+    (cd console && bun run knip 2>&1) | tail -20
+    echo "[pre-commit] Console knip passed."
+  fi
 
   echo "[pre-commit] Rebuilding console artifacts..."
   (cd console && npm run build 2>&1) | tail -3

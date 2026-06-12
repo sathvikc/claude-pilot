@@ -94,6 +94,24 @@ job_console() {
   [ "${SKIP_KNIP:-0}" = "1" ] || bun run knip || return 1
 }
 job_console_tests() {
+  # Mock-hygiene gate: mock.module("fs"/"child_process"/...) is process-global
+  # in bun's single-process runner and leaks into later test files; failures
+  # then appear only under CI's (Linux) file order. Use spyOn(realModule, "fn")
+  # + afterAll(() => mock.restore()) instead (see tests/worker/license-routes.test.ts).
+  local staged_tests violations
+  staged_tests="$(git diff --cached --name-only --diff-filter=ACMR -- 'console/tests/*.ts' 'console/tests/**/*.ts')"
+  if [ -n "$staged_tests" ]; then
+    violations="$(printf '%s\n' "$staged_tests" | while IFS= read -r f; do
+      [ -n "$f" ] || continue
+      # Scan the worktree file, NOT `git show :$f` - console sources are
+      # git-crypt'd, so staged blobs are ciphertext and grep would never match.
+      grep -nE 'mock\.module\(["'"'"'](node:)?(fs|child_process|os|path)["'"'"']' "$f" 2>/dev/null | grep -vE '^[0-9]+:[[:space:]]*(//|\*)' | sed "s|^|$f:|"
+    done)"
+    if [ -n "$violations" ]; then
+      printf 'process-global builtin module mock(s) staged:\n%s\n' "$violations"
+      return 1
+    fi
+  fi
   cd console && bun test
 }
 job_trivy() {
