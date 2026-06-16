@@ -62,23 +62,23 @@ Use when behavior depends on data shape, ranges, or combinations — not single 
 ### Running Tests
 
 ```bash
-uv run pytest -q                              # Python (quiet)
-uv run pytest --cov=src                       # Coverage report (gate is per-critical-path; see "Test Strategy & Coverage" above)
-bun test                                      # Bun
-npm test -- --silent                          # Jest/Vitest
+uv run pytest -q                   # Python (quiet)
+uv run pytest --cov=src            # Coverage report (gate is per-critical-path; see "Test Strategy & Coverage" above)
+bun test                           # Bun
+npm test -- --silent               # Jest/Vitest
 ```
 
 ### Mandatory Mocking in Unit Tests
 
-| Call Type | MUST Mock | Example |
-|-----------|-----------|---------|
-| HTTP/Network | `httpx`, `requests` | `@patch("module.httpx.Client")` |
+| Call | MUST mock | Example |
+|------|-----------|---------|
+| HTTP/network | `httpx`, `requests` | `@patch("module.httpx.Client")` |
 | Subprocess | `subprocess.run` | `@patch("module.subprocess.run")` |
 | File I/O | `open`, `Path.read_text` | `@patch("builtins.open")` or `tmp_path` |
-| Database | SQLite, PostgreSQL | Use test fixtures |
+| Database | SQLite, PostgreSQL | Test fixtures |
 | External APIs | Any third-party | Mock the client |
 
-Mock at module level (where imported, not where defined). Test > 1s = likely unmocked I/O.
+Mock at module level (where imported, not where defined). Test > 1 s = likely unmocked I/O.
 
 ### ⛔ E2E: Frontend/UI (MANDATORY for web apps)
 
