@@ -739,6 +739,42 @@ class TestIsDotnetLogicFree:
         path = self._write(tmp_path, "IGreeter.cs", body)
         assert is_dotnet_logic_free(path) is False
 
+    def test_generic_constrained_method_body_enforces(self, tmp_path: Path):
+        """A generic method's `where` constraint sits between `)` and `{`; the body is still logic.
+
+        The body uses no statement keyword and no `=>`, so only the `)`...`{` body check can
+        catch it — the constraint must not let real logic slip through as logic-free.
+        """
+        body = (
+            "namespace App;\n"
+            "public class Registrar\n"
+            "{\n"
+            "    public void Register<T>(IServiceCollection services) where T : class\n"
+            "    {\n"
+            "        services.AddSingleton<T>();\n"
+            "    }\n"
+            "}\n"
+        )
+        path = self._write(tmp_path, "Registrar.cs", body)
+        assert is_dotnet_logic_free(path) is False
+
+    def test_event_accessor_body_enforces(self, tmp_path: Path):
+        """Explicit event add/remove accessors carry executable logic — enforce."""
+        body = (
+            "namespace App;\n"
+            "public class Publisher\n"
+            "{\n"
+            "    private EventHandler _handlers;\n"
+            "    public event EventHandler Changed\n"
+            "    {\n"
+            "        add { _handlers += value; }\n"
+            "        remove { _handlers -= value; }\n"
+            "    }\n"
+            "}\n"
+        )
+        path = self._write(tmp_path, "Publisher.cs", body)
+        assert is_dotnet_logic_free(path) is False
+
     def test_razor_is_never_logic_free(self, tmp_path: Path):
         path = self._write(tmp_path, "Counter.razor", "<h1>Count</h1>\n")
         assert is_dotnet_logic_free(path) is False

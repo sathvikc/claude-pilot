@@ -530,19 +530,22 @@ def is_dotnet_logic_free(impl_path: str) -> bool:
     if _CS_LOGIC_KEYWORDS.search(code):
         return False
 
-    # Manual accessor body (get/set/init { … }) — also catches default interface
-    # methods written as accessors. Auto-properties use `get;` and never match.
-    if re.search(r"\b(?:get|set|init)\b\s*\{", code):
+    # Manual accessor body (get/set/init/add/remove { … }) — also catches default
+    # interface methods written as accessors and explicit event accessors, which
+    # carry executable logic. Auto-properties use `get;` and never match.
+    if re.search(r"\b(?:get|set|init|add|remove)\b\s*\{", code):
         return False
 
-    # Method / constructor / control body: a ')' immediately followed by '{', after
-    # stripping the type header's primary-constructor list AND any initializer call.
+    # Method / constructor / control body: a ')' followed by '{', after stripping the
+    # type header's primary-constructor list AND any initializer call. An optional
+    # generic constraint (`where T : class`) may sit between ')' and '{' on a
+    # constrained generic method — it must not let a real body slip through.
     # Field/property initializers (`= new() { ... }`, `= Factory()`) are deliberately
     # NOT treated as own-logic — only method/accessor/ctor bodies are. Without the
     # initializer strip, an idiomatic DTO with a braced collection/object initializer
     # (`= new() { 1, 2 }`) would false-match ')' '{' and be wrongly enforced.
     body_code = _CS_INITIALIZER_CALL.sub(" ", _CS_PRIMARY_CTOR.sub(" ", code))
-    if re.search(r"\)\s*\{", body_code):
+    if re.search(r"\)\s*(?:where\b[^{}]*)?\{", body_code):
         return False
 
     return True
