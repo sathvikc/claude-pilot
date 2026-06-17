@@ -2,6 +2,30 @@
 
 All notable changes to Pilot Shell will be documented in this file.
 
+## [9.6.0] - 2026-06-17
+
+### Bug Fixes
+
+- Unify context window to single opusplan control and harden .NET hooks
+- **tdd:** Fix C# logic-free heuristic for generic methods and event accessors
+- Harden .NET file checker (code-review findings 1,2,3,6,7)
+- Address .NET support code-review findings
+
+### Documentation
+
+- Sync marketing site language support with .NET/C# addition
+- Correct dotnet format mischaracterization in hook docs
+- **rules:** Add C# naming convention to testing RED step
+
+### Features
+
+- Add .NET/C# support to file-quality & TDD hooks 
+- Optimize .NET dev support (rule scoping, TDD detector, single-file checker)
+
+### Styling
+
+- Apply ruff format to .NET test files
+
 ## [9.5.1] - 2026-06-16
 
 ### Bug Fixes
