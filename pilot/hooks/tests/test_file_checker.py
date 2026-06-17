@@ -303,7 +303,9 @@ class TestDotnetTddSuppression:
 
     def test_cs_file_with_method_body_emits_reminder(self, tmp_path):
         cs = tmp_path / "Calc.cs"
-        cs.write_text("namespace App;\npublic class Calc\n{\n    public int Add(int a, int b)\n    {\n        return a + b;\n    }\n}\n")
+        cs.write_text(
+            "namespace App;\npublic class Calc\n{\n    public int Add(int a, int b)\n    {\n        return a + b;\n    }\n}\n"
+        )
         assert "TDD Reminder" in self._check(str(cs))
 
     def test_razor_file_always_emits_reminder(self, tmp_path):

@@ -598,7 +598,9 @@ class TestIsDotnetLogicFree:
         assert is_dotnet_logic_free(path) is True
 
     def test_positional_record_is_logic_free(self, tmp_path: Path):
-        path = self._write(tmp_path, "PersonDto.cs", "namespace App;\npublic record PersonDto(string First, int Age);\n")
+        path = self._write(
+            tmp_path, "PersonDto.cs", "namespace App;\npublic record PersonDto(string First, int Age);\n"
+        )
         assert is_dotnet_logic_free(path) is True
 
     def test_poco_auto_properties_and_fields_is_logic_free(self, tmp_path: Path):
@@ -672,13 +674,7 @@ class TestIsDotnetLogicFree:
 
     def test_string_literal_does_not_force_skip_when_real_logic_present(self, tmp_path: Path):
         """A method body is real logic even if a string literal contains '}' — enforce."""
-        body = (
-            'namespace App;\n'
-            'public class Greeter\n'
-            '{\n'
-            '    public string Hi() { return "}"; }\n'
-            '}\n'
-        )
+        body = 'namespace App;\npublic class Greeter\n{\n    public string Hi() { return "}"; }\n}\n'
         path = self._write(tmp_path, "Greeter.cs", body)
         assert is_dotnet_logic_free(path) is False
 
@@ -690,14 +686,7 @@ class TestIsDotnetLogicFree:
         assert is_dotnet_logic_free(path) is False
 
     def test_expression_bodied_property_over_backing_field_enforces(self, tmp_path: Path):
-        body = (
-            "namespace App;\n"
-            "public class Name\n"
-            "{\n"
-            "    private string _name;\n"
-            "    public string Value => _name;\n"
-            "}\n"
-        )
+        body = "namespace App;\npublic class Name\n{\n    private string _name;\n    public string Value => _name;\n}\n"
         path = self._write(tmp_path, "Name.cs", body)
         assert is_dotnet_logic_free(path) is False
 
@@ -729,13 +718,7 @@ class TestIsDotnetLogicFree:
         assert is_dotnet_logic_free(path) is False
 
     def test_default_interface_method_with_body_enforces(self, tmp_path: Path):
-        body = (
-            "namespace App;\n"
-            "public interface IGreeter\n"
-            "{\n"
-            "    string Hello() => \"hi\";\n"
-            "}\n"
-        )
+        body = 'namespace App;\npublic interface IGreeter\n{\n    string Hello() => "hi";\n}\n'
         path = self._write(tmp_path, "IGreeter.cs", body)
         assert is_dotnet_logic_free(path) is False
 
@@ -784,7 +767,9 @@ class TestIsDotnetLogicFree:
 
     def test_no_type_declaration_enforces(self, tmp_path: Path):
         """A .cs file with only usings/attributes (no type) is ambiguous — enforce."""
-        path = self._write(tmp_path, "AssemblyInfo.cs", "using System;\n[assembly: System.Reflection.AssemblyVersion(\"1.0\")]\n")
+        path = self._write(
+            tmp_path, "AssemblyInfo.cs", 'using System;\n[assembly: System.Reflection.AssemblyVersion("1.0")]\n'
+        )
         assert is_dotnet_logic_free(path) is False
 
 
@@ -792,7 +777,16 @@ class TestFindDotnetTestDirs:
     """Test-project detection must match .NET conventions without matching lookalike words."""
 
     def test_matches_test_projects_but_not_words_ending_in_test(self, tmp_path: Path):
-        for name in ("MyApp.Tests", "MyApp.Test", "IntegrationTests", "FooTest", "tests", "latest", "contest", "greatest"):
+        for name in (
+            "MyApp.Tests",
+            "MyApp.Test",
+            "IntegrationTests",
+            "FooTest",
+            "tests",
+            "latest",
+            "contest",
+            "greatest",
+        ):
             (tmp_path / name).mkdir()
         src = tmp_path / "src"
         src.mkdir()
