@@ -5,11 +5,13 @@ paths:
   - "**/*.html"
   - "**/*.vue"
   - "**/*.svelte"
+  - "**/*.razor"
   - "**/*.css"
   - "**/*.scss"
   - "**/*.sass"
   - "**/*.less"
   - "**/*.module.css"
+  - "**/*.razor.css"
 ---
 
 # Frontend Standards
@@ -26,7 +28,7 @@ paths:
 
 ## CSS
 
-**Follow project methodology consistently. Identify first: Utility-first (Tailwind), CSS Modules, BEM, or CSS-in-JS. Never mix.**
+**Follow project methodology consistently. Identify first: Utility-first (Tailwind), CSS Modules, BEM, CSS-in-JS, or CSS isolation. Never mix.**
 
 - Use design tokens (`var(--color-primary)`) over hardcoded values
 - Work with the framework — if you need `!important`, reconsider your approach

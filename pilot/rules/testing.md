@@ -16,7 +16,7 @@ The structure of tests should be **contra-variant** with the structure of code (
 
 #### Red-Green-Refactor
 
-1. **RED** — One minimal test for the desired behavior. Behavior, not implementation. Mocks for external deps only. Naming: Python `test_<function>_<scenario>_<expected>` | TS `it("should <behavior> when <condition>")`.
+1. **RED** — One minimal test for the desired behavior. Behavior, not implementation. Mocks for external deps only. Naming: Python `test_<function>_<scenario>_<expected>` | TS `it("should <behavior> when <condition>")` | C# `MethodName_Scenario_ExpectedResult`.
 2. **VERIFY RED** — Run it; confirm it fails because the feature doesn't exist (not syntax). If it passes → rewrite.
 3. **GREEN** — Simplest code that passes. No extras, no refactor. Hardcoding is fine.
 4. **VERIFY GREEN** — Full suite passes. Check diagnostics.

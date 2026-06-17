@@ -6,7 +6,7 @@ import io
 import json
 from unittest.mock import patch
 
-from file_checker import main
+from file_checker import _tdd_check, main
 
 EM_DASH = "\u2014"
 
@@ -283,3 +283,45 @@ class TestApplyPatchFormat:
         assert "U+2014" in context  # the dirty file's added em-dash is flagged
         assert "dirty.sh" in context
         assert "clean.sh" not in context  # the clean file is NOT falsely flagged
+
+
+class TestDotnetTddSuppression:
+    """_tdd_check (the live path) suppresses reminders for logic-free C#, enforces otherwise.
+
+    Each fixture lives in an isolated ``tmp_path`` with no accompanying ``*Tests.cs``,
+    so ``has_dotnet_test_file``'s sibling/test-dir scan intentionally finds nothing and
+    returns False — exercising the detector path under test, not real external I/O.
+    """
+
+    def _check(self, file_path: str) -> str:
+        return _tdd_check("Write", {"file_path": file_path}, file_path)
+
+    def test_logic_free_cs_file_emits_no_reminder(self, tmp_path):
+        cs = tmp_path / "PersonDto.cs"
+        cs.write_text("namespace App;\npublic record PersonDto(string Name, int Age);\n")
+        assert self._check(str(cs)) == ""
+
+    def test_cs_file_with_method_body_emits_reminder(self, tmp_path):
+        cs = tmp_path / "Calc.cs"
+        cs.write_text("namespace App;\npublic class Calc\n{\n    public int Add(int a, int b)\n    {\n        return a + b;\n    }\n}\n")
+        assert "TDD Reminder" in self._check(str(cs))
+
+    def test_razor_file_always_emits_reminder(self, tmp_path):
+        razor = tmp_path / "Counter.razor"
+        razor.write_text("<h1>Counter</h1>\n")
+        assert "TDD Reminder" in self._check(str(razor))
+
+    def test_integration_test_importing_module_suppresses_reminder(self, tmp_path):
+        """A nearby test that references the module counts as coverage (parsimony),
+        even without a sibling *Tests.cs — the live hook must honour it."""
+        src = tmp_path / "src"
+        src.mkdir()
+        impl = src / "Order.cs"
+        impl.write_text("namespace App;\npublic class Order\n{\n    public int Total() { return 1; }\n}\n")
+        tests = tmp_path / "tests"
+        tests.mkdir()
+        (tests / "CheckoutFlowTests.cs").write_text(
+            "using Xunit;\nnamespace T;\n"
+            "public class CheckoutFlowTests\n{\n    [Fact] public void Pays() { var o = new Order(); }\n}\n"
+        )
+        assert self._check(str(impl)) == ""

@@ -5,6 +5,7 @@ Provides reusable TDD check functions used by file_checker.py hook.
 
 from __future__ import annotations
 
+import functools
 import json
 import re
 import sys
@@ -27,6 +28,13 @@ EXCLUDED_EXTENSIONS = [
     ".env",
     ".env.example",
     ".sql",
+    ".dll",
+    ".exe",
+    ".pdb",
+    ".csproj",
+    ".sln",
+    ".props",
+    ".targets",
 ]
 
 EXCLUDED_DIRS = [
@@ -52,6 +60,10 @@ EXCLUDED_DIRS = [
     "/__pycache__/",
 ]
 
+# .NET build output — skipped only for .NET source, since other ecosystems
+# legitimately keep hand-written source under bin/ (entry-point scripts, etc.).
+DOTNET_BUILD_DIRS = ["/bin/", "/obj/"]
+
 
 def should_skip(file_path: str) -> bool:
     """Check if file should be skipped based on extension or directory."""
@@ -66,6 +78,9 @@ def should_skip(file_path: str) -> bool:
     for excluded_dir in EXCLUDED_DIRS:
         if excluded_dir in file_path:
             return True
+
+    if path.suffix in (".cs", ".razor") and any(d in file_path for d in DOTNET_BUILD_DIRS):
+        return True
 
     return False
 
@@ -85,6 +100,11 @@ def is_test_file(file_path: str) -> bool:
 
     if name.endswith("_test.go"):
         return True
+
+    if name.endswith(".cs"):
+        stem = path.stem
+        if stem.endswith("Tests") or stem.endswith("Test"):
+            return True
 
     return False
 
@@ -135,6 +155,55 @@ def _find_test_dirs(start: Path) -> list[Path]:
         if current.parent == current:
             break
         current = current.parent
+    return dirs
+
+
+def is_dotnet_test_project_name(name: str) -> bool:
+    """True if a directory name follows a .NET test-project convention.
+
+    Matches the dotted convention (``MyApp.Tests``) or a PascalCase boundary
+    (``IntegrationTests``, ``FooTest``). Requiring the dot or a capital 'T'
+    avoids matching words that merely end in "test" (latest, contest, greatest).
+    Shared by the format checker's skip and test-dir discovery so the two agree.
+    """
+    return name.lower().endswith((".tests", ".test")) or name.endswith(("Tests", "Test"))
+
+
+@functools.lru_cache(maxsize=128)
+def _find_dotnet_test_dirs(start: Path) -> list[Path]:
+    """Walk up from start to find common .NET test directories/projects.
+
+    Memoized: both callers per edit (``has_dotnet_test_file`` and
+    ``has_test_importing_module_dotnet``) pass the same start dir, so the second
+    lookup is a cache hit instead of a second full iterdir walk. The hook runs as
+    a short-lived process, so the cache only dedupes within a single run (no
+    cross-edit staleness). Callers must not mutate the returned list.
+    """
+    dirs: list[Path] = []
+    current = start
+    seen: set[Path] = set()
+
+    for _ in range(15):
+        for name in ("tests", "test", "Tests"):
+            candidate = current / name
+            if candidate.is_dir() and candidate not in seen:
+                dirs.append(candidate)
+                seen.add(candidate)
+
+        try:
+            for child in current.iterdir():
+                if not child.is_dir() or child in seen:
+                    continue
+                if is_dotnet_test_project_name(child.name):
+                    dirs.append(child)
+                    seen.add(child)
+        except OSError:
+            pass
+
+        if current.parent == current:
+            break
+        current = current.parent
+
     return dirs
 
 
@@ -300,6 +369,188 @@ def has_go_test_file(impl_path: str) -> bool:
     return _search_test_dirs(test_dirs, base_name, ["_test.go"])
 
 
+def has_dotnet_test_file(impl_path: str) -> bool:
+    """Check if corresponding .NET test file exists (sibling or in test dirs)."""
+    path = Path(impl_path)
+
+    if not path.name.endswith((".cs", ".razor")):
+        return False
+
+    base_name = path.stem
+    if not base_name:
+        return False
+
+    sibling_names = [f"{base_name}Tests.cs", f"{base_name}Test.cs"]
+    for name in sibling_names:
+        if (path.parent / name).exists():
+            return True
+
+    test_dirs = _find_dotnet_test_dirs(path.parent)
+    return _search_test_dirs(test_dirs, "", sibling_names)
+
+
+def has_test_importing_module_dotnet(impl_path: str) -> bool:
+    """Return True if any nearby .NET test references the edited module/component."""
+    path = Path(impl_path)
+    if not path.name.endswith((".cs", ".razor")):
+        return False
+
+    module_name = path.stem
+    if not module_name:
+        return False
+
+    test_dirs = _find_dotnet_test_dirs(path.parent)
+    if not test_dirs:
+        return False
+
+    symbol_re = re.compile(rf"\b{re.escape(module_name)}\b")
+    test_attr_re = re.compile(r"\[(Fact|Theory|Test|TestMethod|TestCase|TestCaseSource)\b")
+
+    for test_dir in test_dirs:
+        for test_file in test_dir.glob("**/*.cs"):
+            try:
+                src = test_file.read_text(encoding="utf-8", errors="ignore")
+            except OSError:
+                continue
+            if not test_attr_re.search(src):
+                continue
+            if symbol_re.search(src):
+                return True
+
+    return False
+
+
+def _strip_cs_comments_and_strings(src: str) -> str:
+    """Remove C# comments and string/char literals.
+
+    Braces, '=>', and keywords inside comments or string/char literals must not
+    drive logic detection. Verbatim (@"..."), interpolated ($"..."), and regular
+    strings are all reduced to empty content.
+    """
+    out: list[str] = []
+    i, n = 0, len(src)
+    while i < n:
+        c = src[i]
+        # Line comment // ... (also covers /// XML doc)
+        if c == "/" and i + 1 < n and src[i + 1] == "/":
+            j = src.find("\n", i)
+            if j == -1:
+                break
+            i = j
+            continue
+        # Block comment /* ... */
+        if c == "/" and i + 1 < n and src[i + 1] == "*":
+            j = src.find("*/", i + 2)
+            i = n if j == -1 else j + 2
+            continue
+        # Verbatim string @"..." with doubled "" escapes
+        if c == "@" and i + 1 < n and src[i + 1] == '"':
+            i += 2
+            while i < n:
+                if src[i] == '"':
+                    if i + 1 < n and src[i + 1] == '"':
+                        i += 2
+                        continue
+                    i += 1
+                    break
+                i += 1
+            continue
+        # Regular / interpolated string "..." (the $ before it falls through to here)
+        if c == '"':
+            i += 1
+            while i < n:
+                if src[i] == "\\":
+                    i += 2
+                    continue
+                if src[i] == '"':
+                    i += 1
+                    break
+                i += 1
+            continue
+        # Char literal '.'
+        if c == "'":
+            i += 1
+            while i < n:
+                if src[i] == "\\":
+                    i += 2
+                    continue
+                if src[i] == "'":
+                    i += 1
+                    break
+                i += 1
+            continue
+        out.append(c)
+        i += 1
+    return "".join(out)
+
+
+# Reserved statement keywords whose presence implies executable logic. All are
+# reserved (or contextual) C# keywords, so they cannot appear as PascalCase type
+# or member names — matching lowercase \b…\b is safe against identifiers.
+_CS_LOGIC_KEYWORDS = re.compile(r"\b(return|if|for|foreach|while|switch|try|throw|await|yield|goto|do)\b")
+_CS_TYPE_KEYWORDS = re.compile(r"\b(interface|enum|record|class|struct)\b")
+# A type header's own primary-constructor parameter list, so `record Foo(...) { props }`
+# and `class Foo(...)` are not misread as a method/constructor body.
+_CS_PRIMARY_CTOR = re.compile(r"\b(?:record|class|struct|interface)\s+\w+(?:\s*<[^>]*>)?\s*\([^)]*\)")
+# An initializer's constructor/factory call (`= new(...)`, `= new T<U>(...)`, `= Make(...)`),
+# so an object/collection initializer brace (`= new() { ... }`) is not misread as a
+# method/ctor body by the ')' '{' check below.
+_CS_INITIALIZER_CALL = re.compile(r"=\s*(?:new\b\s*)?[\w.]*(?:\s*<[^>]*>)?\s*\([^)]*\)")
+
+
+def is_dotnet_logic_free(impl_path: str) -> bool:
+    """Conservatively report whether a C# file is provably free of testable logic.
+
+    True ⇒ the file is only interfaces (signatures), enums, positional records, or
+    POCO/DTO classes whose members are auto-properties/fields/constants — safe to
+    skip the TDD reminder. Any sign of executable logic, or any inability to read
+    the file, returns False (keep enforcing). `.razor` is never treated as logic-free.
+    """
+    # Only plain .cs. .razor (and components in general) carry logic in markup/@code.
+    if not impl_path.endswith(".cs"):
+        return False
+
+    try:
+        raw = Path(impl_path).read_text(encoding="utf-8", errors="ignore")
+    except OSError:
+        return False
+
+    code = _strip_cs_comments_and_strings(raw)
+
+    # Must contain at least one type declaration; otherwise (e.g. assembly-info,
+    # top-level statements) treat as ambiguous and enforce.
+    if not _CS_TYPE_KEYWORDS.search(code):
+        return False
+
+    # Expression-bodied member / lambda.
+    if "=>" in code:
+        return False
+
+    # Statement keyword anywhere ⇒ executable logic.
+    if _CS_LOGIC_KEYWORDS.search(code):
+        return False
+
+    # Manual accessor body (get/set/init/add/remove { … }) — also catches default
+    # interface methods written as accessors and explicit event accessors, which
+    # carry executable logic. Auto-properties use `get;` and never match.
+    if re.search(r"\b(?:get|set|init|add|remove)\b\s*\{", code):
+        return False
+
+    # Method / constructor / control body: a ')' followed by '{', after stripping the
+    # type header's primary-constructor list AND any initializer call. An optional
+    # generic constraint (`where T : class`) may sit between ')' and '{' on a
+    # constrained generic method — it must not let a real body slip through.
+    # Field/property initializers (`= new() { ... }`, `= Factory()`) are deliberately
+    # NOT treated as own-logic — only method/accessor/ctor bodies are. Without the
+    # initializer strip, an idiomatic DTO with a braced collection/object initializer
+    # (`= new() { 1, 2 }`) would false-match ')' '{' and be wrongly enforced.
+    body_code = _CS_INITIALIZER_CALL.sub(" ", _CS_PRIMARY_CTOR.sub(" ", code))
+    if re.search(r"\)\s*(?:where\b[^{}]*)?\{", body_code):
+        return False
+
+    return True
+
+
 def _is_import_line(line: str) -> bool:
     """Check if a line is part of an import statement."""
     if line.startswith(("import ", "from ")):
@@ -426,6 +677,23 @@ def run_tdd_enforcer() -> int:
 
     if file_path.endswith(".go"):
         if has_go_test_file(file_path):
+            return 0
+
+        return warn(
+            "No test covers this module's behaviour",
+            "Consider whether existing tests cover this behaviour. "
+            "If not, add a test for the new behaviour — not necessarily a new file. "
+            "See pilot/rules/testing.md § Test Parsimony.",
+        )
+
+    if file_path.endswith((".cs", ".razor")):
+        if has_dotnet_test_file(file_path):
+            return 0
+
+        if has_test_importing_module_dotnet(file_path):
+            return 0
+
+        if is_dotnet_logic_free(file_path):
             return 0
 
         return warn(
