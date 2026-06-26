@@ -289,6 +289,16 @@ class TestCodexSkillsInstallation:
         assert "MANDATORY: Write output" not in instructions
         assert "Your LAST action MUST be `Write`" not in instructions
 
+    def test_builds_changes_review_agent_with_final_status_guidance(self) -> None:
+        result = build_codex_review_agent_toml(Path("pilot/agents/changes-review.md"))
+        data = tomllib.loads(result)
+
+        assert data["name"] == "changes-review"
+        instructions = data["developer_instructions"]
+        assert "Status: VERIFIED" in instructions
+        assert "orchestrator after the user review gate" in instructions
+        assert "do not emit a finding during changes review" in instructions
+
     def test_installs_review_agents_to_codex_agents_dir(self, tmp_path: Path) -> None:
         claude_agents_dir = tmp_path / ".claude" / "agents"
         claude_agents_dir.mkdir(parents=True)
@@ -787,6 +797,10 @@ class TestAdaptInvocationSyntax:
         assert 'agent_type="changes-review"' in result
         assert "changes-review-agent-id-" in result
         assert "Do not silently skip review" in result
+        assert 'FIND_BIN="/usr/bin/find"' in result
+        assert "Reviewable file preflight" in result
+        assert "Broad-check failure classification" in result
+        assert "Final-status-only findings are not implementation fixes" in result
         assert "PILOT_CHANGES_REVIEW_ENABLED" in result
         assert "PILOT_CODEX_CHANGES_REVIEW_ENABLED" not in result
 

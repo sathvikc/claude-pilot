@@ -158,6 +158,8 @@ Severity mapping:
 - `should_fix` → fix immediately
 - `suggestion` → implement if quick
 
+Final-status-only findings are not implementation fixes. If a finding only says the plan still reads `Status: COMPLETE` instead of `Status: VERIFIED`, record it as pending Step 11 finalization and do not loop back to implementation. Step 11 is responsible for writing `VERIFIED` after the user review gate and re-checking final-status truths.
+
 For each fix: implement → run relevant tests → log `Fixed: [title]`.
 
 After all findings are handled, re-run the relevant automated checks from Step 2 before proceeding to Step 4.

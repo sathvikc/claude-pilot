@@ -74,6 +74,7 @@ Verify the plan's Goal Verification truths against actual code:
 
 - For each truth, confirm evidence exists in the diff or via targeted Grep
 - For each artifact, confirm it exists and is non-stub (check for `pass`, `return None`, `NotImplementedError`, empty renders)
+- If a truth clause only requires the final plan header `Status: VERIFIED`, do not emit a finding during changes review. That status is written by the orchestrator after the user review gate, not by implementation. Evaluate the other parts of the truth and mention final status as pending finalization only in `pass_summary`.
 - Status: **verified** (evidence found), **failed** (missing/stub), **uncertain** (can't confirm statically)
 - **goal_score**: `achieved` = all verified, `partial` = some failed, `not_achieved` = majority failed
 

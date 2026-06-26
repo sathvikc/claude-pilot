@@ -12,7 +12,8 @@ If any of the three is false → return to Step 10 and re-ask. Common traps that
 
 1. Set `Status: VERIFIED` in plan
 2. Register: `~/.pilot/bin/pilot register-plan "<plan_path>" "VERIFIED" 2>/dev/null || true`
-3. Report completion with summary:
+3. Re-check any Goal Verification truth that was pending only on final status. At minimum, grep the plan header for `^Status: VERIFIED$`; if a truth also references task checkboxes or artifacts, re-check those exact paths/lines before reporting it verified.
+4. Report completion with summary:
    ```
    ## Verification Complete
    **Issues Found:** X
@@ -21,7 +22,7 @@ If any of the three is false → return to Step 10 and re-ask. Common traps that
    ### Not Verified: [list items from Step 6.2, or "None"]
    ```
 
-4. **Instruct the user:** Include in your completion message:
+5. **Instruct the user:** Include in your completion message:
    ```
    Run /clear before starting new work — this resets context while keeping project rules loaded.
    ```

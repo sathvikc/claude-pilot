@@ -8,9 +8,13 @@
 
 ```bash
 SESS_DIR="$HOME/.pilot/sessions/${PILOT_SESSION_ID:-default}"
-test -d "$SESS_DIR" && find "$SESS_DIR" -maxdepth 1 -name 'findings-spec-review-*.json' -delete
-test -d "$SESS_DIR" && find "$SESS_DIR" -maxdepth 1 -name 'findings-changes-review-*.json' -delete
+FIND_BIN="/usr/bin/find"
+[ -x "$FIND_BIN" ] || FIND_BIN="$(command -v find)"
+test -d "$SESS_DIR" && "$FIND_BIN" "$SESS_DIR" -maxdepth 1 -name 'findings-spec-review-*.json' -delete
+test -d "$SESS_DIR" && "$FIND_BIN" "$SESS_DIR" -maxdepth 1 -name 'findings-changes-review-*.json' -delete
 ```
+
+Use the absolute `FIND_BIN` form above. In Pilot Shell sessions the shell hook may rewrite plain `find` to RTK, and RTK rejects the `-delete` predicate shape this cleanup needs.
 
 ### 1b: Stage the change's files (always run, before ANY reviewer launches)
 
@@ -25,6 +29,8 @@ git status --short --untracked-files=all | grep '^??' || true
 ```
 
 A bare `git add -N` (intent-to-add) is NOT enough — `git status` still treats the path as untracked and a later `git commit` can record empty content. Use a real `git add`. **Staging is not committing** — the commit still waits for the review, doc-sync, and (Phase B) the worktree sync; `git add` is pre-authorized, the push is not. All reviewers below scope to `git diff HEAD` (which now includes the staged additions); never narrow to a committed ref-range, which is empty pre-commit.
+
+**Reviewable file preflight:** the `Files:` block must contain at least one non-ignored repository artifact for implementation plans. `docs/plans/...` is workflow state and may be gitignored in Pilot Shell itself, so it cannot be the sole review target. Do NOT use `git add -f` to force ignored plan files into review. If every planned file is ignored, outside the repo, or only the plan file itself, set `Status: PENDING`, add a fix task for a reviewable non-production artifact (for smoke/no-production specs), and return to implementation before launching any reviewer.
 
 ---
 

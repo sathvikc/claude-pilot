@@ -45,3 +45,18 @@ class TestAutoApprovePlan:
         data = json.loads(stdout.strip())
         perms = data["hookSpecificOutput"]["decision"]["updatedPermissions"]
         assert any(p.get("type") == "setMode" and p.get("mode") == "bypassPermissions" for p in perms)
+
+    def test_message_does_not_claim_plan_approval(self):
+        """The decision message must NOT signal that the plan is approved.
+
+        Regression guard: emitting "Plan auto-approved" made agents misread the
+        auto-allowed ExitPlanMode (a model-switch/permission action) as the user
+        approving the plan, so they skipped the real /spec approval gate
+        (spec-plan/steps/12-approval.md). The message must perform the permission
+        action while explicitly disclaiming plan approval.
+        """
+        _, stdout = _run()
+        data = json.loads(stdout.strip())
+        message = data["hookSpecificOutput"]["decision"]["message"].lower()
+        assert "approved" not in message, f"misleading approval wording: {message!r}"
+        assert "not plan approval" in message, f"missing disclaimer: {message!r}"

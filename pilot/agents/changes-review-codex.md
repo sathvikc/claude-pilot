@@ -53,6 +53,8 @@ Default to skepticism. Assume the change can fail in subtle, high-cost, or user-
 
 Actively try to disprove the change. Compare the diff against the plan's tasks and DoD; flag anything missing, half-implemented, or implemented in a way the plan did not authorise (scope creep). For every plan-listed risk mitigation, confirm it is actually present in the diff and exercised by a test. Look for violated invariants, missing guards, unhandled failure paths, and assumptions that stop being true under stress.
 
+If a Goal Verification truth includes the final plan header `Status: VERIFIED`, do not flag that clause during this review. The orchestrator writes `VERIFIED` only after the user review gate. Evaluate the implementation evidence and any other truth clauses; mention final status as pending finalization in the summary only if useful.
+
 ## Finding bar
 
 Report only material findings. Skip style feedback, naming feedback, low-value cleanup, and speculative concerns without evidence. A finding should answer: (1) what can go wrong, (2) why this code path is vulnerable, (3) the likely impact, (4) what concrete change reduces the risk. Cite real file paths and line numbers from the diff or your `Read` calls.

@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
-"""PreToolUse hook for ExitPlanMode: auto-approve + request bypassPermissions restore.
+"""PermissionRequest hook for ExitPlanMode: skip the dialog + request bypassPermissions restore.
+
+In the /spec workflow ExitPlanMode is purely a model-switch lever (Opus -> Sonnet),
+NOT the plan-approval mechanism. The real approval is a separate AskUserQuestion gate
+(spec-plan/steps/12-approval.md). The decision message therefore must NEVER say
+"approved": earlier wording ("Plan auto-approved") was parroted by agents as
+"Plan approved", causing them to skip the approval gate and start implementing.
 
 Two upstream issues limit effectiveness on current CC builds:
   #49525 - updatedPermissions setMode:bypassPermissions silently dropped on CC 2.1.110+
@@ -24,7 +30,7 @@ print(
                             "destination": "session",
                         }
                     ],
-                    "message": "Plan auto-approved; restoring bypassPermissions",
+                    "message": "ExitPlanMode allowed (model switch); restoring bypassPermissions - permission action only, NOT plan approval",
                 },
             }
         }
