@@ -2349,6 +2349,77 @@ class TestParallelInstalls:
         # 4 tasks x 0.3s each = 1.2s sequential, should be ~0.3s parallel
         assert elapsed < 0.8, f"Expected parallel execution but took {elapsed:.1f}s"
 
+    def test_run_parallel_installs_reports_each_outcome_as_it_completes(self):
+        """A fast install's outcome must surface before a slow one finishes.
+
+        Regression: outcomes were buffered until the whole pool drained, so a slow
+        or hung package left `pilot update` with only the `[N/M]` header and a
+        transient bar until it completed. Outcomes must emit in the as-completed
+        loop so the user always sees real-time progress.
+        """
+        import threading
+
+        from installer.steps.dependencies import (
+            _OUTCOME_INSTALLED,
+            _InstallTask,
+            _record_outcome,
+            _run_parallel_installs,
+        )
+
+        gate = threading.Event()
+        reported: list[str] = []
+
+        class _FakeProgress:
+            def advance(self, amount: int = 1) -> None:
+                pass
+
+        class FakeUI:
+            @contextmanager
+            def progress(self, total, description="Processing"):
+                yield _FakeProgress()
+
+            def success(self, msg):
+                reported.append(msg)
+
+            def warning(self, msg):
+                reported.append(msg)
+
+            def info(self, msg):
+                reported.append(msg)
+
+        def fast():
+            _record_outcome(_OUTCOME_INSTALLED)
+            return True
+
+        def slow():
+            assert gate.wait(5), "slow task gate never released"
+            _record_outcome(_OUTCOME_INSTALLED)
+            return True
+
+        tasks = [
+            _InstallTask(name="slow-pkg", key="slow", fn=slow),
+            _InstallTask(name="fast-pkg", key="fast", fn=fast),
+        ]
+        holder: dict[str, list[str]] = {}
+
+        def run():
+            holder["installed"] = _run_parallel_installs(tasks, ui=FakeUI(), max_workers=2)
+
+        worker = threading.Thread(target=run, daemon=True)
+        worker.start()
+        try:
+            deadline = time.monotonic() + 3
+            while time.monotonic() < deadline and not any("fast-pkg" in m for m in reported):
+                time.sleep(0.01)
+            # fast-pkg must report while slow-pkg is still blocked (not buffered)
+            assert any("fast-pkg" in m for m in reported), "fast install was buffered until slow completed"
+            assert not any("slow-pkg" in m for m in reported), "slow install reported before it finished"
+        finally:
+            gate.set()
+            worker.join(5)
+
+        assert set(holder["installed"]) == {"fast", "slow"}
+
     def test_thread_local_error_isolation(self):
         """Thread-local error tracking isolates errors between parallel installs."""
         from installer.steps.dependencies import _InstallTask, _run_install_silent, _thread_local

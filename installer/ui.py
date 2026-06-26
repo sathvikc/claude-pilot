@@ -191,21 +191,28 @@ class Console:
         self._console.print(Rule(step_text, style="magenta"))
 
     def status(self, message: str) -> None:
-        """Print a status message in cyan with arrow."""
-        if self._quiet:
-            return
+        """Print a status message in cyan with arrow.
+
+        Emitted even in quiet mode: quiet suppresses decorative chrome (banner,
+        step rules, next-steps panel), not line-level progress and problems.
+        """
         self._console.print(f"  [cyan]→[/cyan] {message}")
 
     def success(self, message: str) -> None:
-        """Print a success message in green with checkmark."""
-        if self._quiet:
-            return
+        """Print a success message in green with checkmark.
+
+        Emitted even in quiet mode (see status() for the quiet-mode contract).
+        """
         self._console.print(f"  [green]✓[/green] [green]{message}[/green]")
 
     def warning(self, message: str) -> None:
-        """Print a warning message in yellow with warning symbol."""
-        if self._quiet:
-            return
+        """Print a warning message in yellow with warning symbol.
+
+        Emitted even in quiet mode so recoverable problems during `pilot update`
+        (e.g. a "could not install X" package skip) are never silently swallowed.
+        Fatal failures use error(), which is never suppressed. See status() for
+        the quiet-mode contract.
+        """
         self._console.print(f"  [yellow]⚠[/yellow] [yellow]{message}[/yellow]")
 
     def error(self, message: str) -> None:
@@ -213,9 +220,10 @@ class Console:
         self._console.print(f"  [red bold]✗[/red bold] [red]{message}[/red]")
 
     def info(self, message: str) -> None:
-        """Print an info message with info icon."""
-        if self._quiet:
-            return
+        """Print an info message with info icon.
+
+        Emitted even in quiet mode (see status() for the quiet-mode contract).
+        """
         self._console.print(f"  [muted]ℹ[/muted] [muted]{message}[/muted]")
 
     def next_steps(self, sections: list[tuple[str, list[tuple[str, str]]]]) -> None:

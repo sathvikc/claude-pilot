@@ -45,6 +45,49 @@ class TestConsole:
             progress.advance(5)
 
 
+class TestConsoleQuietMode:
+    """Quiet mode (used only by `pilot update`) must still surface progress.
+
+    Regression: quiet mode early-returned from status/success/warning/info, so the
+    long Dependencies step emitted only its `[N/M]` header for minutes and failed
+    installs were silently swallowed - the update looked frozen. Quiet means
+    "suppress decorative chrome", not "hide line-level progress and problems".
+    """
+
+    def test_quiet_mode_surfaces_progress_status_and_failures(self):
+        """In quiet mode, success/status/warning/info still emit their message."""
+        from installer.ui import Console
+
+        console = Console(non_interactive=True, quiet=True)
+
+        def capture(fn, message):
+            with console._console.capture() as out:
+                fn(message)
+            return out.get()
+
+        assert "Semble installed" in capture(console.success, "Semble installed")
+        assert "Initializing CodeGraph" in capture(console.status, "Initializing CodeGraph...")
+        assert "Could not install playwright-cli" in capture(console.warning, "Could not install playwright-cli")
+        assert "network timeout" in capture(console.info, "  Error: network timeout")
+
+    def test_quiet_mode_still_suppresses_decorative_chrome(self):
+        """Quiet keeps the compact step format and drops the next-steps panel."""
+        from installer.ui import Console
+
+        console = Console(non_interactive=True, quiet=True)
+        console.set_total_steps(8)
+
+        with console._console.capture() as out:
+            console.step("Dependencies")
+        step_output = out.get()
+        assert "[1/8] Dependencies" in step_output  # compact, not a Rule banner
+        assert "─" not in step_output
+
+        with console._console.capture() as out:
+            console.next_steps([("Getting Started", [("Start", "run claude")])])
+        assert out.get() == ""  # decorative panel stays suppressed
+
+
 class TestConsoleNonInteractive:
     """Test Console in non-interactive mode."""
 

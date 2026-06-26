@@ -561,6 +561,103 @@ class TestSyncCodexEnvVars:
         assert parsed["shell_environment_policy"]["set"]["SOME_EXISTING_VAR"] == "1"
         assert parsed["shell_environment_policy"]["set"]["PILOT_PLAN_APPROVAL_ENABLED"] == "true"
 
+    def test_heals_duplicate_managed_key_from_two_regions(self, tmp_path: Path) -> None:
+        """Two managed regions (left by a double-write/race) must collapse to one;
+        Codex aborts with 'duplicate key' if PILOT_* appears twice in the table."""
+        codex_config = tmp_path / ".codex" / "config.toml"
+        codex_config.parent.mkdir(parents=True)
+        codex_config.write_text(
+            'approval_policy = "never"\n'
+            "\n# --- pilot-shell managed env vars ---\n"
+            "[shell_environment_policy.set]\n"
+            'PILOT_BRANCH_ISOLATION_ENABLED = "false"\n'
+            'PILOT_PLAN_APPROVAL_ENABLED = "false"\n'
+            "# --- end pilot-shell managed env vars ---\n"
+            "\n# --- pilot-shell managed env vars ---\n"
+            "[shell_environment_policy.set]\n"
+            'PILOT_BRANCH_ISOLATION_ENABLED = "false"\n'
+            'PILOT_PLAN_APPROVAL_ENABLED = "false"\n'
+            "# --- end pilot-shell managed env vars ---\n"
+        )
+
+        with patch("codex_skill_sync.Path.home", return_value=tmp_path):
+            _sync_codex_env_vars()
+
+        content = codex_config.read_text()
+        assert content.count("PILOT_BRANCH_ISOLATION_ENABLED =") == 1
+        parsed = tomllib.loads(content)
+        assert parsed["shell_environment_policy"]["set"]["PILOT_BRANCH_ISOLATION_ENABLED"] == "true"
+
+    def test_heals_stray_managed_key_outside_markers(self, tmp_path: Path) -> None:
+        """A managed key left in the table outside the markers (lost START marker)
+        must not be re-emitted as a duplicate."""
+        codex_config = tmp_path / ".codex" / "config.toml"
+        codex_config.parent.mkdir(parents=True)
+        codex_config.write_text(
+            'approval_policy = "never"\n'
+            "\n[shell_environment_policy.set]\n"
+            'PILOT_BRANCH_ISOLATION_ENABLED = "false"\n'
+            "# --- end pilot-shell managed env vars ---\n"
+        )
+
+        with patch("codex_skill_sync.Path.home", return_value=tmp_path):
+            _sync_codex_env_vars()
+
+        content = codex_config.read_text()
+        assert content.count("PILOT_BRANCH_ISOLATION_ENABLED =") == 1
+        parsed = tomllib.loads(content)
+        assert parsed["shell_environment_policy"]["set"]["PILOT_BRANCH_ISOLATION_ENABLED"] == "true"
+
+    def test_collapses_duplicate_env_table_headers(self, tmp_path: Path) -> None:
+        """A user [shell_environment_policy.set] followed by a markerless old managed
+        table is two declarations of the same table -- a fatal TOML error. Sync must
+        collapse them into one and preserve the user's key."""
+        codex_config = tmp_path / ".codex" / "config.toml"
+        codex_config.parent.mkdir(parents=True)
+        codex_config.write_text(
+            'approval_policy = "never"\n'
+            "\n[shell_environment_policy.set]\n"
+            'SOME_EXISTING_VAR = "1"\n'
+            "\n[shell_environment_policy.set]\n"
+            'PILOT_BRANCH_ISOLATION_ENABLED = "false"\n'
+            'PILOT_PLAN_APPROVAL_ENABLED = "false"\n'
+        )
+
+        with patch("codex_skill_sync.Path.home", return_value=tmp_path):
+            _sync_codex_env_vars()
+
+        content = codex_config.read_text()
+        assert content.count("[shell_environment_policy.set]") == 1
+        parsed = tomllib.loads(content)
+        assert parsed["shell_environment_policy"]["set"]["SOME_EXISTING_VAR"] == "1"
+        assert parsed["shell_environment_policy"]["set"]["PILOT_BRANCH_ISOLATION_ENABLED"] == "true"
+
+        # Second sync is a no-op (idempotent).
+        with patch("codex_skill_sync.Path.home", return_value=tmp_path):
+            assert _sync_codex_env_vars() == 0
+        assert codex_config.read_text() == content
+
+    def test_dedup_is_scoped_to_env_table_and_preserves_other_tables(self, tmp_path: Path) -> None:
+        """The managed-key dedup only touches [shell_environment_policy.set]; an
+        identically-named key in a different table must survive untouched."""
+        codex_config = tmp_path / ".codex" / "config.toml"
+        codex_config.parent.mkdir(parents=True)
+        codex_config.write_text(
+            'approval_policy = "never"\n'
+            "\n[other.table]\n"
+            'PILOT_BRANCH_ISOLATION_ENABLED = "keep-me"\n'
+            "\n[shell_environment_policy.set]\n"
+            'SOME_EXISTING_VAR = "1"\n'
+        )
+
+        with patch("codex_skill_sync.Path.home", return_value=tmp_path):
+            _sync_codex_env_vars()
+
+        parsed = tomllib.loads(codex_config.read_text())
+        assert parsed["other"]["table"]["PILOT_BRANCH_ISOLATION_ENABLED"] == "keep-me"
+        assert parsed["shell_environment_policy"]["set"]["SOME_EXISTING_VAR"] == "1"
+        assert parsed["shell_environment_policy"]["set"]["PILOT_BRANCH_ISOLATION_ENABLED"] == "true"
+
     def test_defaults_branch_isolation_to_true_when_config_missing(self, tmp_path: Path) -> None:
         """When config.json is absent, branchIsolation should default to true (matching Console)."""
         codex_config = tmp_path / ".codex" / "config.toml"

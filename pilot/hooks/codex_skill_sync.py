@@ -407,28 +407,70 @@ def _merge_env_block(existing: str, env_lines: list[str]) -> str:
     [shell_environment_policy.set] header the managed lines are inserted inside
     that table; only otherwise is a self-contained block (header inside the
     markers) appended.
+
+    The merge is idempotent and self-healing: every prior managed region is
+    removed (not just the first), every [shell_environment_policy.set]
+    declaration is collapsed into one, and any managed key left in that table
+    outside the markers is dropped before the fresh block is written. Without
+    this, managed state left behind by a double-write/race, a lost marker, or a
+    manual edit would be emitted twice -- a duplicate key, or a duplicate table
+    header -- and Codex aborts startup with a "duplicate key" error loading
+    config.toml.
     """
+    managed_keys = {line.split("=", 1)[0].strip() for line in env_lines}
     lines = existing.splitlines()
 
-    # Drop any previous managed region; older formats kept the section header
-    # inside the markers, so it is removed together with the region.
-    if _ENV_MARKER_START in lines and _ENV_MARKER_END in lines:
-        start = lines.index(_ENV_MARKER_START)
-        end = lines.index(_ENV_MARKER_END)
-        if start < end:
-            del lines[start : end + 1]
+    # Drop every managed region, not just the first. Older formats kept the
+    # section header inside the markers, so it is removed together with the
+    # region. Marker pairs are matched explicitly so an orphaned marker can
+    # never swallow unrelated config; a leftover marker comment is dropped alone.
+    cleaned: list[str] = []
+    i = 0
+    while i < len(lines):
+        if lines[i] == _ENV_MARKER_START:
+            end = next((j for j in range(i + 1, len(lines)) if lines[j] == _ENV_MARKER_END), None)
+            if end is not None:
+                i = end + 1
+                continue
+        if lines[i] in (_ENV_MARKER_START, _ENV_MARKER_END):
+            i += 1
+            continue
+        cleaned.append(lines[i])
+        i += 1
 
-    header_idx = next(
-        (i for i, line in enumerate(lines) if line.split("#", 1)[0].strip() == _ENV_SECTION_HEADER),
-        None,
-    )
-    if header_idx is not None:
-        lines[header_idx + 1 : header_idx + 1] = [_ENV_MARKER_START, *env_lines, _ENV_MARKER_END]
+    # Collapse every [shell_environment_policy.set] declaration into a single
+    # managed table. Declaring that table twice is itself a fatal TOML error,
+    # and a managed key repeated inside it is the "duplicate key" crash, so each
+    # table's surviving (non-managed) keys are pulled out, every [set] header is
+    # dropped, and one managed table is re-emitted at the position of the first.
+    # Scoped to that table, so an identically-named key elsewhere is untouched.
+    body_keys: list[str] = []
+    rest: list[str] = []
+    insert_at: int | None = None
+    i = 0
+    while i < len(cleaned):
+        if cleaned[i].split("#", 1)[0].strip() == _ENV_SECTION_HEADER:
+            if insert_at is None:
+                insert_at = len(rest)
+            i += 1
+            while i < len(cleaned):
+                inner = cleaned[i].split("#", 1)[0].strip()
+                if inner.startswith("[") and inner.endswith("]"):
+                    break
+                if cleaned[i].strip() and cleaned[i].split("=", 1)[0].strip() not in managed_keys:
+                    body_keys.append(cleaned[i])
+                i += 1
+            continue
+        rest.append(cleaned[i])
+        i += 1
+
+    if insert_at is not None:
+        rest[insert_at:insert_at] = [_ENV_SECTION_HEADER, _ENV_MARKER_START, *env_lines, _ENV_MARKER_END, *body_keys]
     else:
-        while lines and not lines[-1].strip():
-            lines.pop()
-        lines += ["", _ENV_MARKER_START, _ENV_SECTION_HEADER, *env_lines, _ENV_MARKER_END]
-    return "\n".join(lines) + "\n"
+        while rest and not rest[-1].strip():
+            rest.pop()
+        rest += ["", _ENV_MARKER_START, _ENV_SECTION_HEADER, *env_lines, _ENV_MARKER_END]
+    return "\n".join(rest) + "\n"
 
 
 def _sync_codex_env_vars() -> int:

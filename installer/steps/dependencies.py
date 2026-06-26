@@ -1355,51 +1355,53 @@ def _run_install_silent(task: _InstallTask) -> _InstallResult:
         )
 
 
+def _report_parallel_outcome(ui: Any, result: _InstallResult, installed: list[str]) -> None:
+    """Emit one completed parallel install's durable outcome and track success.
+
+    Called as each future completes (not after the whole pool drains) so a slow
+    or hung package can't leave `pilot update` with only the `[N/M]` header and a
+    transient progress bar; every finished install reports its line immediately.
+    Rich renders these prints above the still-active progress bar.
+    """
+    if result.success:
+        installed.append(result.key)
+        if ui:
+            _report_install_outcome(ui, result.name, result.outcome)
+    elif ui:
+        ui.warning(f"Could not install {result.name} - please install manually")
+        if result.error:
+            last_line = result.error.strip().splitlines()[-1].strip()
+            ui.info(f"  Error: {last_line}")
+
+
 def _run_parallel_installs(
     tasks: list[_InstallTask],
     ui: Any,
     max_workers: int = 4,
 ) -> list[str]:
-    """Run multiple installs in parallel with a progress bar.
+    """Run multiple installs in parallel, reporting each as it completes.
 
-    Returns list of installed keys.
+    Outcomes are emitted in completion order (not task order) so the user sees
+    durable progress in real time rather than a silent gap until the slowest
+    install finishes. Returns list of installed keys.
     """
     if not tasks:
         return []
 
     installed: list[str] = []
-    results: dict[str, _InstallResult] = {}
 
     if ui:
         with ui.progress(len(tasks), f"Installing {len(tasks)} packages") as progress:
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                futures = {executor.submit(_run_install_silent, task): task for task in tasks}
+                futures = [executor.submit(_run_install_silent, task) for task in tasks]
                 for future in as_completed(futures):
-                    task = futures[future]
-                    results[task.key] = future.result()
                     progress.advance()
+                    _report_parallel_outcome(ui, future.result(), installed)
     else:
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            futures = {executor.submit(_run_install_silent, task): task for task in tasks}
+            futures = [executor.submit(_run_install_silent, task) for task in tasks]
             for future in as_completed(futures):
-                task = futures[future]
-                results[task.key] = future.result()
-
-    # Report results in original order
-    for task in tasks:
-        result = results[task.key]
-        if result.success:
-            if ui:
-                _report_install_outcome(ui, result.name, result.outcome)
-            installed.append(result.key)
-        else:
-            if ui:
-                if result.error:
-                    last_line = result.error.strip().splitlines()[-1].strip()
-                    ui.warning(f"Could not install {result.name} — please install manually")
-                    ui.info(f"  Error: {last_line}")
-                else:
-                    ui.warning(f"Could not install {result.name} — please install manually")
+                _report_parallel_outcome(None, future.result(), installed)
 
     return installed
 
