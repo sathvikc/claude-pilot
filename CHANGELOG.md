@@ -2,6 +2,12 @@
 
 All notable changes to Pilot Shell will be documented in this file.
 
+## [9.7.2] - 2026-06-26
+
+### Bug Fixes
+
+- Improvements for Codex Spec Mode
+
 ## [9.7.1] - 2026-06-26
 
 ### Bug Fixes
