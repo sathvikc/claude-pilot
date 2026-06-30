@@ -2,6 +2,12 @@
 
 All notable changes to Pilot Shell will be documented in this file.
 
+## [9.7.3] - 2026-06-30
+
+### Bug Fixes
+
+- Exclude terminal-status specs from active-specs top bar
+
 ## [9.7.2] - 2026-06-26
 
 ### Bug Fixes
