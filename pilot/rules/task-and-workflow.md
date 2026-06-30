@@ -191,7 +191,7 @@ Existing plans (`.md`): read `Type:` header.
 
 `spec-implement` is identical for both types (the plan file is the interface). Verification differs: features get a code review (built-in `/code-review` at the configured effort, default `xhigh`, on Claude Code; native `changes-review` agent on Codex) + inline plan-compliance/goal audit + optional Codex companion + structured E2E (TS-NNN); bugfixes get Behavior Contract audit + revert-test proof.
 
-**Status values:** `PENDING` (awaiting impl) → `COMPLETE` (ready to verify) → `VERIFIED` (done).
+**Status values (closed set):** the `Status:` header is **exactly one** of `PENDING` (awaiting impl) → `COMPLETE` (ready to verify) → `VERIFIED` (done). These are the ONLY valid values — never invent, rename, or substitute another word (no `RESOLVED`/`DONE`/`CLOSED`/`WONTFIX`). Write the **bare keyword only**: no trailing prose or parentheticals on the `Status:` line — `Status: VERIFIED`, never `Status: RESOLVED (#1-#13 fixed; #14 won't-fix)`. Put resolution notes in the plan body, not the status line. The Console treats any value outside this set as terminal/done.
 
 ### Feedback Loop
 
