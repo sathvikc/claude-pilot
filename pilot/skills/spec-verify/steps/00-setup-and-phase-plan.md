@@ -9,7 +9,7 @@
 echo "REVIEWER=$PILOT_CHANGES_REVIEW_ENABLED CODEX_CHG=$PILOT_CODEX_CHANGES_REVIEW_ENABLED EFFORT=$PILOT_CODE_REVIEW_EFFORT"
 ```
 
-Codex reviewers are controlled entirely by Console Settings — the env vars are authoritative. `EFFORT` is the configured `/code-review` effort (default `xhigh` when unset/invalid; allow-listed at the point of use in Step 3).
+Codex reviewers are controlled entirely by Console Settings — the env vars are authoritative. `EFFORT` is the configured `/code-review` effort (default `high` when unset/invalid; allow-listed at the point of use in Step 3).
 
 Reference these values in Steps 1 (Codex companion launch) and 3 (inline /code-review + Codex collection).
 <!-- /CC-ONLY -->

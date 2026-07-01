@@ -370,11 +370,11 @@ def load_target_config(evals_path: Path) -> TargetConfig:
 
 _MODEL_ALIASES: dict[str, str] = {
     "opus": "claude-opus-4-8",
-    "sonnet": "claude-sonnet-4-6",
+    "sonnet": "claude-sonnet-5",
     "haiku": "claude-haiku-4-5-20251001",
 }
 
-DEFAULT_FALLBACK_MODEL = "claude-sonnet-4-6"
+DEFAULT_FALLBACK_MODEL = "claude-sonnet-5"
 
 
 def resolve_executor_model(target: TargetConfig) -> str:

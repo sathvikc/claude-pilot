@@ -7,11 +7,11 @@
 
 #### Run /code-review (inline — AFTER the Step 2 automated checks are green)
 
-Resolve the configured effort first, fail-closed to `xhigh` for an unset/invalid value (never pass the raw env var straight through):
+Resolve the configured effort first, fail-closed to `high` for an unset/invalid value (never pass the raw env var straight through):
 
 ```bash
-EFFORT="${PILOT_CODE_REVIEW_EFFORT:-xhigh}"
-case "$EFFORT" in low|medium|high|xhigh|max) ;; *) EFFORT=xhigh ;; esac
+EFFORT="${PILOT_CODE_REVIEW_EFFORT:-high}"
+case "$EFFORT" in low|medium|high|xhigh|max) ;; *) EFFORT=high ;; esac
 echo "$EFFORT"
 ```
 

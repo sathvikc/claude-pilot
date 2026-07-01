@@ -30,7 +30,7 @@ For automated switching to work, your session must be on the `opusplan` model:
 /model opusplan
 ```
 
-Pilot writes this into `~/.claude/settings.json` during install and whenever Console settings change via `pilot sync-env`, so future sessions start on `opusplan` automatically.
+Pilot writes this into `~/.claude/settings.json` during install and whenever Console settings change via `pilot sync-env`, so future sessions start on `opusplan` automatically. (There is no `opusplan[1m]` alias in Claude Code — see [Context Window](#context-window) for how 1M applies to each leg.)
 
 `/spec` checks your model before planning and behaves differently per model:
 
@@ -46,7 +46,7 @@ With **Model Switching OFF**, the check flips: `/spec` requires **Opus** (only O
 
 - **`/spec` runs single-model on Fable**, in both Model Switching states. The planning skills detect a Fable session and skip `EnterPlanMode`/`ExitPlanMode` entirely -- plan, implement, and verify all run on Fable with no model toggling and no `/model opusplan` block.
 - **Your saved Fable model is preserved.** `ANTHROPIC_MODEL` (env) outranks the saved `model` field in `~/.claude/settings.json`, so Pilot removes its own `ANTHROPIC_MODEL` override instead of writing it when your saved model is Fable-family -- on installs, on Console settings changes (`pilot sync-env`), and healed on every `pilot` startup.
-- **1M context stays available.** `CLAUDE_CODE_DISABLE_1M_CONTEXT=1` removes 1M variants from the model picker, which would break `fable[1m]` -- Pilot forces it to `false` whenever a Fable-family model is selected, regardless of the Context Window settings below.
+- **1M context stays available.** `CLAUDE_CODE_DISABLE_1M_CONTEXT=1` removes 1M variants from the model picker, which would break `fable[1m]` -- Pilot forces it to `false` whenever a Fable-family model is selected, so `fable[1m]` always works.
 - **Statusline and Console Usage** display "Fable 5" / "Mythos 5" with the announced $10/$50 per-MTok pricing.
 
 Note: Fable 5 ships with safety classifiers; flagged requests (mostly cybersecurity/biology) are re-run on Opus 4.8 by Claude Code itself with a transcript notice -- that fallback is Claude Code behavior, not Pilot's (see the [model configuration docs](https://code.claude.com/docs/en/model-config), "Automatic model fallback").
@@ -76,30 +76,26 @@ Switch back to `opusplan` before the next `/spec` run:
 
 ## Turning It Off -- Opus Everywhere
 
-Turn off **Model Switching** in Console Settings -> Automation to run the entire `/spec` workflow on Opus. Pilot then defaults `~/.claude/settings.json` to plain `opus` and **does not manage the context window** -- you choose 1M or 200K yourself via `/model` (e.g. `/model opus[1m]`), and Pilot **preserves that choice across restarts**: it never writes an `ANTHROPIC_MODEL` pin, which (env) would outrank the saved `model` field and silently reset your selection to 200K on the next launch. Plan -> implement -> verify all run on Opus. Choose this if you prefer maximum reasoning quality over cost, or for headless / CI runs.
+Turn off **Model Switching** in Console Settings -> Automation to run the entire `/spec` workflow on Opus. Pilot then defaults `~/.claude/settings.json` to `opus[1m]` (Opus at 1M, the default everywhere now). It never writes an `ANTHROPIC_MODEL` pin, so a per-session `/model opus` (200K) still works -- but Pilot re-asserts `opus[1m]` as the default on the next settings write (install / upgrade / Console Save). Plan -> implement -> verify all run on Opus. Choose this if you prefer maximum reasoning quality over cost, or for headless / CI runs.
 
 ## Context Window
 
-When **Model Switching** is ON, a single **Context Window** setting controls whether the Opus Plan model runs on **1M** or **200K**:
+There is no per-model Context Window setting. Pilot persists the model alias by toggle state, and 1M applies **per model alias**, not globally:
 
-| Setting | Persisted model | Effect |
-|---------|-----------------|--------|
-| **200K** (default) | `opusplan` | Both legs (Opus planning + Sonnet default) run at 200K. |
-| **1M** | `opusplan[1m]` | Both legs run at 1M. |
+| Toggle | Persisted model | Context window |
+|--------|-----------------|----------------|
+| **Model Switching ON** | `opusplan` | Sonnet 5 execution leg: **1M** (native). Opus planning leg: **200K**. |
+| **Model Switching OFF** | `opus[1m]` | Opus 4.8: **1M**. |
 
-The `[1m]` suffix on the alias is what forces 1M: bare `opusplan` caps the plan-mode Opus leg at 200K regardless of any other env var ([Claude Code issue #67243](https://github.com/anthropics/claude-code/issues/67243); needs Claude Code >= 2.1.172). Because the suffix applies to the **whole** `opusplan` model, you cannot mix Opus-1M with Sonnet-200K -- the choice is all-or-nothing.
+The asymmetry comes from Claude Code's aliases: **`sonnet` already resolves to Sonnet 5 with a native 1M window** (no suffix needed), but **bare `opus` resolves to 200K** -- you need the `opus[1m]` alias to get Opus's 1M window. There is **no `opusplan[1m]` alias** (only `opus[1m]` and `sonnet[1m]` exist), so the `opusplan` planning leg cannot be forced to 1M. If you need 1M during planning, turn Model Switching **off** and run `/model opus[1m]` (or `/model default`, which resolves to Opus 4.8 at 1M).
 
 :::warning 1M context requires usage credits on Max
-On Max subscriptions, 1M context is billed via usage credits: a `opusplan[1m]` session errors with `Usage credits required for 1M context` until you enable them (`/usage-credits`). That is why **200K is the default** -- switch to 1M only if your account has credits or is on a tier where 1M is included (API, Team, Enterprise).
+On Max subscriptions, 1M context is billed via usage credits: an `opus[1m]` session errors with `Usage credits required for 1M context` until you enable them (`/usage-credits`). Use a tier where 1M is included (API, Team, Enterprise), or enable credits. Where 1M is unavailable, these aliases fall back to 200K gracefully.
 :::
 
-Pilot keeps 1M models available in the `/model` picker by always writing `CLAUDE_CODE_DISABLE_1M_CONTEXT=false`, and removes the obsolete `ANTHROPIC_DEFAULT_OPUS_MODEL` / `ANTHROPIC_DEFAULT_SONNET_MODEL` env vars (the alias suffix replaces them).
+Pilot keeps 1M models available in the `/model` picker by always writing `CLAUDE_CODE_DISABLE_1M_CONTEXT=false`, and removes the obsolete `ANTHROPIC_DEFAULT_OPUS_MODEL` / `ANTHROPIC_DEFAULT_SONNET_MODEL` env vars (the model alias replaces them).
 
-**To change the context window:** Console Settings -> Spec Workflow -> Context Window (active only when Model Switching is on). Click Save -- the change propagates immediately via `pilot sync-env`.
-
-**If a session errors with "Usage credits required for 1M context":** set the Context Window to 200K (or enable usage credits).
-
-**Sub-agents** (`spec-review`) are pinned to the base Sonnet model and do not use the 1M context window regardless of this setting. The changes review runs as the built-in `/code-review` skill on the session model at a configurable effort (default `xhigh`, set in Console -> Settings -> Spec Workflow -> Code Review Effort), so it follows the active model and context window.
+**Sub-agents** (`spec-review`) are pinned to the base Sonnet model and do not use the 1M context window. The changes review runs as the built-in `/code-review` skill on the session model at a configurable effort (default `high`, set in Console -> Settings -> Spec Workflow -> Code Review Effort), so it follows the active model and context window.
 
 ## Default-On
 

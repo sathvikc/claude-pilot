@@ -1656,9 +1656,9 @@ class TestMigrationV13:
         assert migrated["_configVersion"] == _CCV
         assert migrated["specWorkflow"]["modelSwitch"] is True
 
-    def test_v13_advances_to_current_with_safe_context_window(self, tmp_path: Path) -> None:
-        """A config at v13 advances to current; the single contextWindow lands at 200k
-        and the legacy per-model object is gone (dropped by the v16 migration)."""
+    def test_v13_advances_to_current_dropping_context_window(self, tmp_path: Path) -> None:
+        """A config at v13 advances to current; the legacy per-model object is gone
+        (v16) and the single contextWindow key is dropped entirely (v17)."""
         from installer.steps.config_migration import CURRENT_CONFIG_VERSION, migrate_model_config
 
         config_path = tmp_path / "config.json"
@@ -1675,7 +1675,7 @@ class TestMigrationV13:
         assert result is True
         migrated = json.loads(config_path.read_text())
         assert migrated["_configVersion"] == CURRENT_CONFIG_VERSION
-        assert migrated["contextWindow"] == "200k"
+        assert "contextWindow" not in migrated
         assert "contextWindows" not in migrated
 
 
@@ -1726,13 +1726,15 @@ class TestMigrationV14:
         assert result is True
         migrated = json.loads(config_path.read_text())
         assert migrated["_configVersion"] == CURRENT_CONFIG_VERSION
-        # v14 seeds the legacy object mid-chain, but v16 collapses it to the single key.
-        assert migrated["contextWindow"] == "200k"
+        # v14 seeds the legacy object mid-chain, v16 collapses it to a single key,
+        # v17 drops that key -- end state has no context-window config at all.
+        assert "contextWindow" not in migrated
         assert "contextWindows" not in migrated
 
     def test_v14_config_advances_to_current_seeding_code_review(self, tmp_path: Path) -> None:
         """A config at v14 (legacy contextWindows present, codeReview absent) advances:
-        codeReview is seeded by v15, and v16 collapses contextWindows to a 200k contextWindow."""
+        codeReview is seeded by v15, v16 collapses contextWindows to a single key, and
+        v17 drops that key entirely."""
         from installer.steps.config_migration import CURRENT_CONFIG_VERSION, migrate_model_config
 
         config_path = tmp_path / "config.json"
@@ -1750,10 +1752,11 @@ class TestMigrationV14:
         assert result is True
         migrated = json.loads(config_path.read_text())
         assert migrated["_configVersion"] == CURRENT_CONFIG_VERSION
-        assert migrated["codeReview"] == {"effort": "xhigh"}
-        # The legacy per-model object is dropped; the single contextWindow lands at 200k.
+        # v15 seeds xhigh, then v18 flips the blanket default to high.
+        assert migrated["codeReview"] == {"effort": "high"}
+        # Both the legacy per-model object and the collapsed single key are gone.
         assert "contextWindows" not in migrated
-        assert migrated["contextWindow"] == "200k"
+        assert "contextWindow" not in migrated
 
 
 class TestMigrationV15:
@@ -1786,10 +1789,10 @@ class TestMigrationV15:
 class TestMigrationV16:
     """Migration v15 -> v16: collapse contextWindows{opus,sonnet} -> contextWindow="200k"."""
 
-    def test_current_version_is_16(self) -> None:
+    def test_current_version_is_18(self) -> None:
         from installer.steps.config_migration import CURRENT_CONFIG_VERSION
 
-        assert CURRENT_CONFIG_VERSION == 16
+        assert CURRENT_CONFIG_VERSION == 18
 
     def test_v16_drops_legacy_object_and_seeds_safe_default(self) -> None:
         from installer.steps.config_migration import _migration_v16
@@ -1842,9 +1845,10 @@ class TestMigrationV16:
         assert result is True
         migrated = json.loads(config_path.read_text())
         assert migrated["_configVersion"] == CURRENT_CONFIG_VERSION
-        assert migrated["codeReview"] == {"effort": "xhigh"}
+        # v15 seeds xhigh, then v18 flips the blanket default to high.
+        assert migrated["codeReview"] == {"effort": "high"}
 
-    def test_v15_config_advances_to_v16_collapsing_context_window(self, tmp_path: Path) -> None:
+    def test_v15_config_advances_to_current_dropping_context_window(self, tmp_path: Path) -> None:
         from installer.steps.config_migration import CURRENT_CONFIG_VERSION, migrate_model_config
 
         config_path = tmp_path / "config.json"
@@ -1859,16 +1863,39 @@ class TestMigrationV16:
         )
 
         result = migrate_model_config(config_path)
-        # v15 -> v16 is a real migration: the legacy object is dropped for the safe default.
+        # v15 -> v16 collapses the legacy object to contextWindow="200k"; v16 -> v17
+        # then drops contextWindow entirely (Opus Plan is always 1M now).
         assert result is True
         migrated = json.loads(config_path.read_text())
         assert migrated["_configVersion"] == CURRENT_CONFIG_VERSION
         assert "contextWindows" not in migrated
-        assert migrated["contextWindow"] == "200k"
+        assert "contextWindow" not in migrated
         assert migrated["codeReview"] == {"effort": "high"}  # unrelated keys untouched
 
-    def test_v16_idempotent_when_already_current(self, tmp_path: Path) -> None:
-        from installer.steps.config_migration import migrate_model_config
+
+class TestMigrationV17:
+    """Migration v16 -> v17: drop the obsolete contextWindow key (Opus Plan is always 1M)."""
+
+    def test_v17_drops_context_window(self) -> None:
+        from installer.steps.config_migration import _migration_v17
+
+        raw: dict = {"contextWindow": "200k"}
+        modified = _migration_v17(raw)
+
+        assert modified is True
+        assert "contextWindow" not in raw
+
+    def test_v17_noop_when_absent(self) -> None:
+        from installer.steps.config_migration import _migration_v17
+
+        raw: dict = {"codeReview": {"effort": "high"}}
+        modified = _migration_v17(raw)
+
+        assert modified is False
+        assert raw == {"codeReview": {"effort": "high"}}
+
+    def test_full_migration_from_v16_drops_context_window_and_bumps_version(self, tmp_path: Path) -> None:
+        from installer.steps.config_migration import CURRENT_CONFIG_VERSION, migrate_model_config
 
         config_path = tmp_path / "config.json"
         config_path.write_text(
@@ -1876,6 +1903,91 @@ class TestMigrationV16:
                 {
                     "_configVersion": 16,
                     "contextWindow": "200k",
+                    "codeReview": {"effort": "high"},
+                }
+            )
+        )
+
+        result = migrate_model_config(config_path)
+        assert result is True
+        migrated = json.loads(config_path.read_text())
+        assert migrated["_configVersion"] == CURRENT_CONFIG_VERSION
+        assert "contextWindow" not in migrated
+        assert migrated["codeReview"] == {"effort": "high"}  # unrelated keys untouched
+
+
+class TestMigrationV18:
+    """Migration v17 -> v18: force-enable modelSwitch; flip blanket codeReview xhigh -> high."""
+
+    def test_v18_force_enables_model_switch(self) -> None:
+        from installer.steps.config_migration import _migration_v18
+
+        # A deliberate opt-out (modelSwitch=false) is re-enabled -- product decision
+        # to put everyone back on automated switching.
+        raw: dict = {"specWorkflow": {"modelSwitch": False, "planApproval": True}}
+        modified = _migration_v18(raw)
+
+        assert modified is True
+        assert raw["specWorkflow"]["modelSwitch"] is True
+        assert raw["specWorkflow"]["planApproval"] is True  # other toggles untouched
+
+    def test_v18_seeds_spec_workflow_when_absent(self) -> None:
+        from installer.steps.config_migration import _migration_v18
+
+        raw: dict = {}
+        modified = _migration_v18(raw)
+
+        assert modified is True
+        assert raw["specWorkflow"]["modelSwitch"] is True
+
+    def test_v18_flips_blanket_xhigh_to_high(self) -> None:
+        from installer.steps.config_migration import _migration_v18
+
+        raw: dict = {"specWorkflow": {"modelSwitch": True}, "codeReview": {"effort": "xhigh"}}
+        modified = _migration_v18(raw)
+
+        assert modified is True
+        assert raw["codeReview"]["effort"] == "high"
+
+    def test_v18_preserves_deliberate_non_xhigh_effort(self) -> None:
+        from installer.steps.config_migration import _migration_v18
+
+        raw: dict = {"specWorkflow": {"modelSwitch": True}, "codeReview": {"effort": "max"}}
+        modified = _migration_v18(raw)
+
+        assert modified is False  # nothing to change: switch already on, effort deliberate
+        assert raw["codeReview"]["effort"] == "max"
+
+    def test_full_migration_from_v17_forces_switch_and_flips_effort(self, tmp_path: Path) -> None:
+        from installer.steps.config_migration import CURRENT_CONFIG_VERSION, migrate_model_config
+
+        config_path = tmp_path / "config.json"
+        config_path.write_text(
+            json.dumps(
+                {
+                    "_configVersion": 17,
+                    "specWorkflow": {"modelSwitch": False},
+                    "codeReview": {"effort": "xhigh"},
+                }
+            )
+        )
+
+        result = migrate_model_config(config_path)
+        assert result is True
+        migrated = json.loads(config_path.read_text())
+        assert migrated["_configVersion"] == CURRENT_CONFIG_VERSION
+        assert migrated["specWorkflow"]["modelSwitch"] is True
+        assert migrated["codeReview"]["effort"] == "high"
+
+    def test_v18_idempotent_when_already_current(self, tmp_path: Path) -> None:
+        from installer.steps.config_migration import migrate_model_config
+
+        config_path = tmp_path / "config.json"
+        config_path.write_text(
+            json.dumps(
+                {
+                    "_configVersion": 18,
+                    "specWorkflow": {"modelSwitch": True},
                     "codeReview": {"effort": "high"},
                 }
             )

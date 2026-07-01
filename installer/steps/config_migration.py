@@ -11,7 +11,7 @@ import os
 from pathlib import Path
 from typing import Any
 
-CURRENT_CONFIG_VERSION = 16
+CURRENT_CONFIG_VERSION = 18
 
 _STALE_AGENT_KEYS = frozenset(
     {
@@ -124,6 +124,12 @@ def migrate_model_config(
 
     if version < 16:
         modified = _migration_v16(raw) or modified
+
+    if version < 17:
+        modified = _migration_v17(raw) or modified
+
+    if version < 18:
+        modified = _migration_v18(raw) or modified
 
     if raw.get("_configVersion") != CURRENT_CONFIG_VERSION:
         raw["_configVersion"] = CURRENT_CONFIG_VERSION
@@ -626,8 +632,8 @@ def _migration_v16(raw: dict[str, Any]) -> bool:
     ``contextWindow`` string, defaulting to the safe 200K.
 
     The redesign replaced ``contextWindows: {opus, sonnet}`` with one
-    ``contextWindow`` ("1m" | "200k") that rides on the opusplan alias's ``[1m]``
-    suffix (ON -> ``opusplan[1m]`` / ``opusplan``; OFF -> bare ``opus``, user-managed).
+    ``contextWindow`` ("1m" | "200k"). (Superseded by v17, which drops the field
+    entirely -- Opus Plan is always 1M now.)
 
     We deliberately do NOT carry an old ``contextWindows.opus == "1m"`` forward:
     ``_migration_v14`` seeded ``opus=1m`` into EVERY config, so that value is almost
@@ -648,6 +654,55 @@ def _migration_v16(raw: dict[str, Any]) -> bool:
         raw["contextWindow"] = "200k"
         changed = True
     return changed
+
+
+def _migration_v17(raw: dict[str, Any]) -> bool:
+    """v16 -> v17: drop the obsolete ``contextWindow`` selection.
+
+    There is no per-model context-window choice anymore: the launcher writer now
+    writes bare ``opusplan`` (Model Switching ON) or ``opus[1m]`` (OFF)
+    unconditionally, so the single ``contextWindow`` string ``_migration_v16``
+    seeded is obsolete. Remove it.
+
+    Rule: delete ``contextWindow`` if present; otherwise no-op.
+    """
+    if "contextWindow" in raw:
+        del raw["contextWindow"]
+        return True
+    return False
+
+
+def _migration_v18(raw: dict[str, Any]) -> bool:
+    """v17 -> v18: force-enable model switching again; relax code-review effort to high.
+
+    Two changes:
+    1. Force-enables ``specWorkflow.modelSwitch=True`` for ALL users -- re-asserting
+       automated switching as the standard even for those who disabled it after the
+       v13 force-enable. (Deliberate product decision; the toggle can be turned off
+       again in Console -> Settings -> Automation.)
+    2. Flips ``codeReview.effort`` from ``"xhigh"`` to ``"high"``. ``_migration_v15``
+       seeded ``xhigh`` into EVERY config, so that value is rarely a deliberate
+       choice; the new default is ``high`` because ``/code-review`` spawns many
+       subagents and cost scales steeply with effort. A deliberate non-``xhigh``
+       value (``low``/``medium``/``high``/``max``) is left untouched.
+    """
+    modified = False
+
+    spec_workflow = raw.get("specWorkflow")
+    if not isinstance(spec_workflow, dict):
+        spec_workflow = {}
+        raw["specWorkflow"] = spec_workflow
+        modified = True
+    if spec_workflow.get("modelSwitch") is not True:
+        spec_workflow["modelSwitch"] = True
+        modified = True
+
+    code_review = raw.get("codeReview")
+    if isinstance(code_review, dict) and code_review.get("effort") == "xhigh":
+        code_review["effort"] = "high"
+        modified = True
+
+    return modified
 
 
 def _write_atomic(path: Path, data: dict[str, Any]) -> None:

@@ -31,7 +31,7 @@ PYTHONPATH=~/.agents/skills/benchmark uv run python -m scripts.runner \
 CODEX-END -->
 
 <!-- CC-ONLY -->
-That's it for arguments — defaults handle the rest. The runner reads the target skill's `model:` frontmatter and uses that for both executor and grader. Rules targets and skills without a `model:` field fall back to `claude-sonnet-4-6`.
+That's it for arguments — defaults handle the rest. The runner reads the target skill's `model:` frontmatter and uses that for both executor and grader. Rules targets and skills without a `model:` field fall back to `claude-sonnet-5`.
 <!-- /CC-ONLY -->
 <!-- CODEX-START
 That's it for arguments — defaults handle the rest. With `--agent codex`, the runner installs skills in `.agents/skills/<name>/`, composes rules into root `AGENTS.md`, and omits `--model` unless you pass one explicitly so Codex uses its active default model.
@@ -114,7 +114,7 @@ Read the final output and:
 | Flag | Default | When to override |
 |------|---------|------------------|
 | `--runs N` | `1` | `2-3` only when measuring variance — N runs are now parallelized across workers, so wall time grows sub-linearly. |
-| `--model <id>` | Claude: skill frontmatter → `claude-sonnet-4-6`; Codex: active Codex default | Cross-model comparison. Claude accepts `opus`/`sonnet`/`haiku` aliases or explicit `claude-...` IDs. Codex passes the value directly to `codex exec --model`; omit it to use the active Codex model. |
+| `--model <id>` | Claude: skill frontmatter → `claude-sonnet-5`; Codex: active Codex default | Cross-model comparison. Claude accepts `opus`/`sonnet`/`haiku` aliases or explicit `claude-...` IDs. Codex passes the value directly to `codex exec --model`; omit it to use the active Codex model. |
 | `--grader-model <id>` | same as `--model` | Run the grader at a different tier (rare — pairing them avoids "smart writer judged by dumb grader" artifacts). |
 | `--configs with,without` | both | Smoke test one side. |
 | `--workers N` | `4` | Drop to `2` when running opus to be kinder to rate limits. For small eval sets bump to `min(total_runs, 8)` so every run lands in the first wave (3 evals × 2 configs × 1 run = 6 → `--workers 6` cuts wall time roughly in half). The runner submits one pool task per (eval, config, run_idx) so workers stay saturated. |

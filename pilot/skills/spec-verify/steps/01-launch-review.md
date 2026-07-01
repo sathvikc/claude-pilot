@@ -35,7 +35,7 @@ A bare `git add -N` (intent-to-add) is NOT enough — `git status` still treats 
 ---
 
 <!-- CC-ONLY -->
-**No native reviewer launch on Claude Code.** The code review runs INLINE in Step 3 via the built-in `/code-review` skill at the configured effort (`$PILOT_CODE_REVIEW_EFFORT`, default `xhigh`; resolved and allow-listed in Step 3) — there is no subagent to launch early and no findings file to derive. The only launch in this step is the optional Codex companion below.
+**No native reviewer launch on Claude Code.** The code review runs INLINE in Step 3 via the built-in `/code-review` skill at the configured effort (`$PILOT_CODE_REVIEW_EFFORT`, default `high`; resolved and allow-listed in Step 3) — there is no subagent to launch early and no findings file to derive. The only launch in this step is the optional Codex companion below.
 
 #### Codex Adversarial Review (Optional — launch NOW, in the background)
 

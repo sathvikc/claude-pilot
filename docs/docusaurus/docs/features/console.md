@@ -111,7 +111,7 @@ Pilot doesn't manage model preferences. Set the model with Claude Code's `/model
 
 ### Spec Workflow -> Review Agents
 
-Two reviews run during `/spec` on Claude Code and Codex; **Changes Review** also runs at the end of `/fix`. Toggle each on or off. On Claude Code, **Spec Review** runs as a Claude sub-agent and **Changes Review** runs as the built-in `/code-review` skill at a configurable effort (default `xhigh` - see [Code Review Effort](#spec-workflow---code-review-effort) below); Codex runs both as managed custom agents installed under `~/.codex/agents/`.
+Two reviews run during `/spec` on Claude Code and Codex; **Changes Review** also runs at the end of `/fix`. Toggle each on or off. On Claude Code, **Spec Review** runs as a Claude sub-agent and **Changes Review** runs as the built-in `/code-review` skill at a configurable effort (default `high` - see [Code Review Effort](#spec-workflow---code-review-effort) below); Codex runs both as managed custom agents installed under `~/.codex/agents/`.
 
 | Agent | Default | Role |
 |-------|---------|------|
@@ -139,7 +139,6 @@ Four toggles control user interaction points during `/spec`. Disable all four fo
 | **Ask Questions** | On | Asks clarifying questions during planning | Planning makes autonomous default choices |
 | **Plan Approval** | On | Requires your approval before implementation starts | Implementation begins automatically after planning |
 | **Model Switching** *(Claude Code only)* | On | Automatically runs `/spec` planning on Opus and implementation + verification on Sonnet (requires the `opusplan` model - see [Model Routing](model-routing)). No manual `/model` step. Not applicable on Fable 5, which runs the whole workflow single-model. | The whole `/spec` workflow runs on Opus (or on Fable 5 when that is the active model) |
-| **Context Window** *(Claude Code only)* | Opus: 1M / Sonnet: 200K | Per-model context window (1M or 200K). Sonnet 1M requires API/Team/Enterprise (some Max accounts also work). If you see "model not available", set that model to 200K. | |
 
 With all four workflow toggles off, `/spec add user authentication` plans, implements, and verifies the feature end-to-end without checkpoints, entirely on Opus.
 
