@@ -1,28 +1,46 @@
 ## Step 3: Code Review & Re-Verify
 
 <!-- CC-ONLY -->
-**If `PILOT_CHANGES_REVIEW_ENABLED` is `"false"` (from Step 0),** skip the inline `/code-review` below. If the Codex companion was launched in Step 1, still run its collection sub-step — then proceed to Step 4 (Phase B). If neither reviewer is enabled, skip this step entirely.
+**If `PILOT_CHANGES_REVIEW_ENABLED` is `"false"` (from Step 0),** skip the review collection below. If the Codex companion was launched in Step 1, still run its collection sub-step — then proceed to Step 4 (Phase B). If neither reviewer is enabled, skip this step entirely.
 
 **When enabled — mandatory. Never skip** — even if you're confident, context is high, or tests pass.
 
-#### Run /code-review (inline — AFTER the Step 2 automated checks are green)
-
-Resolve the configured effort first, fail-closed to `high` for an unset/invalid value (never pass the raw env var straight through):
+Re-resolve the mode exactly as in Step 1 (fail-closed to `agent`), then run the matching branch:
 
 ```bash
-EFFORT="${PILOT_CODE_REVIEW_EFFORT:-high}"
-case "$EFFORT" in low|medium|high|xhigh|max) ;; *) EFFORT=high ;; esac
-echo "$EFFORT"
+SPEC_MODE="${PILOT_SPEC_CODE_REVIEW_MODE:-agent}"
+case "$SPEC_MODE" in medium|high|xhigh) ;; *) SPEC_MODE=agent ;; esac
+echo "$SPEC_MODE"
 ```
 
-Then invoke the built-in code review skill at that effort (substitute the resolved `<EFFORT>`):
+#### Agent mode (`SPEC_MODE=agent`) — collect the changes-review findings launched in Step 1
+
+**Stale-snapshot guard first:** the Step 1 launch reviewed the tree as it stood BEFORE the Step 2 automated checks. If Step 2 fixes modified ANY file after that launch, the findings are against stale code — re-launch the sub-agent now (same Step 1 prompt, current diff) and collect the re-launch instead. ⛔ The original agent may still be running and will eventually write to its own path — every launch MUST get a FRESH `output_path` (append a `-r2`, `-r3`, … suffix to the filename) so a late write from a superseded agent can never be collected as the fresh run. If Step 2 changed nothing, collect the Step 1 run as-is.
+
+**Wait for the findings file (bash polling — NOT a Read loop, ⛔ NEVER `TaskOutput`):**
+
+```bash
+# Poll the path of the launch you are collecting (the Step 1 path, or the -rN re-launch path)
+OUTPUT_PATH="$HOME/.pilot/sessions/${PILOT_SESSION_ID:-default}/findings-changes-review-<plan-slug>.json"
+for i in $(seq 1 150); do [ -f "$OUTPUT_PATH" ] && echo "READY" && break; sleep 2; done
+```
+
+Run the poll as `Bash(run_in_background=true, timeout=330000)` — the loop can wait up to 5 min, which exceeds the default foreground Bash timeout, and `sleep` is allowed in background; you are notified when it exits. Then Read the file once. If not READY after the poll completes, the first agent may be slow rather than dead — re-launch ONCE with a fresh `-rN` output path (never reuse the in-flight path) and poll the new path.
+
+**Validate findings:** the JSON's `plan_file` field must match the current plan path. A mismatch means stale findings from another plan — delete the file, re-launch, wait again.
+
+**Apply agent findings (severity → action) — lineage first,** using the same lineage rule as the table below (out-of-lineage findings are mention-only regardless of severity): `must_fix` → fix immediately; `should_fix` → fix immediately; `suggestion` → implement if quick, else mention in the report. The agent's `truths` array feeds the Goal Achievement line of the report. Then skip the skill-mode sub-step and continue at "Collect Codex Results".
+
+#### Skill mode (`SPEC_MODE` = `medium`/`high`/`xhigh`) — run /code-review (inline — AFTER the Step 2 automated checks are green)
+
+Invoke the built-in code review skill at that effort (substitute the resolved `<SPEC_MODE>`):
 
 ```
-Skill(skill='code-review', args='<EFFORT>')
+Skill(skill='code-review', args='<SPEC_MODE>')
 ```
 
 - Execute the loaded review protocol fully (finder angles → verify → sweep). Do NOT pass `--fix` — findings are applied by this orchestrator (below), not by the review.
-- The default scope (branch commits ahead of upstream + uncommitted changes) is correct for a clean worktree or branch. **If the working tree carries unrelated dirty files, pass the plan's files AS THE TARGET in the Skill args** — `Skill(skill='code-review', args='<EFFORT> <file1> <file2> …')` with the paths from the plan's `Files:` blocks — so the review protocol itself scopes its diff (`git diff HEAD -- <those paths>`); prose-level scoping outside the args does NOT bind the review and risks spending the capped findings on unrelated files. ⛔ Do NOT use a bare ref-range like `main...HEAD` to narrow a dirty tree — ref-ranges cover committed work only and would scope AWAY the spec's uncommitted changes.
+- The default scope (branch commits ahead of upstream + uncommitted changes) is correct for a clean worktree or branch. **If the working tree carries unrelated dirty files, pass the plan's files AS THE TARGET in the Skill args** — `Skill(skill='code-review', args='<SPEC_MODE> <file1> <file2> …')` with the paths from the plan's `Files:` blocks — so the review protocol itself scopes its diff (`git diff HEAD -- <those paths>`); prose-level scoping outside the args does NOT bind the review and risks spending the capped findings on unrelated files. ⛔ Do NOT use a bare ref-range like `main...HEAD` to narrow a dirty tree — ref-ranges cover committed work only and would scope AWAY the spec's uncommitted changes.
 - Output: a ranked JSON array of findings `{file, line, summary, failure_scenario}` — most severe first, no severity labels.
 - **If the `code-review` skill is unavailable (older Claude Code version) or the invocation errors:** do NOT silently proceed as if reviewed. Record the gap explicitly in the Step 3 report and the Step 6.2 Not-Verified table, and rely on the Step 2.2 audit results for this iteration.
 
@@ -84,7 +102,7 @@ Run this as `Bash(run_in_background=true, timeout=600000)` (background so `sleep
   ```bash
   node "$CODEX_COMPANION" cancel "$JOB_ID" --json 2>/dev/null || true
   ```
-  If the re-launch also returns `STALLED`/`CEILING`/`FAIL`, do NOT spin a third time and do NOT silently skip: proceed WITHOUT the Codex pass and record the gap explicitly in the verification report and the Step 6.2 Not-Verified table (note how long it ran and when the log last advanced). Continue with the inline `/code-review` results for this iteration.
+  If the re-launch also returns `STALLED`/`CEILING`/`FAIL`, do NOT spin a third time and do NOT silently skip: proceed WITHOUT the Codex pass and record the gap explicitly in the verification report and the Step 6.2 Not-Verified table (note how long it ran and when the log last advanced). Continue with this iteration's changes-review results (agent findings or inline `/code-review`, per the resolved mode).
 
 1. **When (and ONLY when) the completion notification arrives**, fetch the findings via the companion's public interface:
 
@@ -130,7 +148,7 @@ rm -f "/tmp/codex-changes-review-${PILOT_SESSION_ID:-default}-<plan-slug>.md"
 
 **Skip** when fixes were localized (terminology, error handling, test updates, minor bugs). Run tests + lint to confirm, proceed to Phase B.
 
-**Re-verify** when fixes required new functionality, changed APIs, or significant new code paths: re-run the Step 2.2 Plan Compliance & Goal-Truth Audit on the post-fix diff (fixes can break mitigations or truths), then re-run the inline review SCOPED to the files the fixes touched — pass them as the target: `Skill(skill='code-review', args='<EFFORT> <fixed files>')` (same resolved `<EFFORT>` as the first run) — rather than the whole spec diff. Max 2 iterations before adding remaining issues to plan.
+**Re-verify** when fixes required new functionality, changed APIs, or significant new code paths: re-run the Step 2.2 Plan Compliance & Goal-Truth Audit on the post-fix diff (fixes can break mitigations or truths), then re-run the review SCOPED to the files the fixes touched rather than the whole spec diff. Agent mode: delete the findings file, re-launch the Step 1 `changes-review` sub-agent with `Changed files:` = the fixed files, poll and apply as above. Skill mode: pass the fixed files as the target — `Skill(skill='code-review', args='<SPEC_MODE> <fixed files>')` (same resolved `<SPEC_MODE>` as the first run). Max 2 iterations before adding remaining issues to plan.
 <!-- /CC-ONLY -->
 <!-- CODEX-START
 **If `PILOT_CHANGES_REVIEW_ENABLED` is `"false"` (from Step 0 — Step 1 was skipped),** skip this step entirely and proceed to Step 4 (Phase B).

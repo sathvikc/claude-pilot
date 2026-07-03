@@ -100,7 +100,7 @@ Hook blocks `subagent_type` of `Explore`/`Plan`, AND any description starting wi
 
 Use direct tools instead — see `development-practices.md` and `mcp-servers.md` for CodeGraph + Semble workflow.
 
-**Whitelisted (pass through silently):** `changes-review`, `spec-review`. (The `changes-review` entry is hook back-compat for older installed skills — do NOT launch it yourself; on Claude Code the changes review is the built-in `/code-review` skill, per the Sub-agents section below.)
+**Whitelisted (pass through silently):** `changes-review`, `spec-review`. (Launch `changes-review` only where the `/spec` and `/fix` steps say to — agent mode of the Changes Review Mode setting; in skill mode the changes review is the built-in `/code-review` skill, per the Sub-agents section below.)
 <!-- /CC-ONLY -->
 <!-- CODEX-START
 ### Agent Tools
@@ -128,7 +128,7 @@ CODEX-END -->
 
 - Launch with `run_in_background=true`
 - ⛔ NEVER use `TaskOutput` to retrieve results.
-- **Pilot reviewer agents** (`spec-review`) write findings JSON files — poll with bash file-existence loop, then Read once. Other agent types do NOT write files; their only output is the final message of a foreground call. Never plan on `SendMessage` to follow up — it may not exist in the running Claude Code version. (Code review in `/spec`/`/fix` is NOT a sub-agent on Claude Code — it is the built-in `/code-review` skill, invoked inline via `Skill(skill='code-review', args='<effort>')` where `<effort>` is the configured effort, `$PILOT_CODE_REVIEW_EFFORT`, default `xhigh`.)
+- **Pilot reviewer agents** (`spec-review`, and `changes-review` in agent mode) write findings JSON files — poll with bash file-existence loop, then Read once. Other agent types do NOT write files; their only output is the final message of a foreground call. Never plan on `SendMessage` to follow up — it may not exist in the running Claude Code version. (The changes review in `/spec`/`/fix` on Claude Code is mode-dependent: `$PILOT_SPEC_CODE_REVIEW_MODE` / `$PILOT_FIX_CODE_REVIEW_MODE`, default `agent`. `agent` launches the single `changes-review` sub-agent; `medium`/`high`/`xhigh` runs the built-in `/code-review` skill inline via `Skill(skill='code-review', args='<mode>')` at that effort. Set per workflow in Console Settings → Spec Workflow → Changes Review Mode.)
 - Sub-agents do NOT inherit rules; they can read `~/.claude/rules/*.md` and `.claude/rules/*.md`.
 
 ### Codex Companion (Reviews & Tasks)
@@ -138,7 +138,7 @@ CODEX-END -->
   `CODEX_COMPANION=$(ls ~/.claude/plugins/cache/openai-codex/codex/*/scripts/codex-companion.mjs 2>/dev/null | sort -V | tail -1)`
 - A background job is never lost while you hold its `task-…` ID: `node "$CODEX_COMPANION" status <job-id> --json` polls it, `node "$CODEX_COMPANION" result <job-id> --json` fetches the finished result. Do NOT abandon a launched job and redo the review yourself.
 - If the job ID is unrecoverable (it was launched inside a subagent), re-launch once directly via Bash and continue.
-- **Stage before any pre-commit diff review.** `/spec` and `/fix` review the WORKING TREE before committing, so every file the change ADDS is untracked. Before launching ANY pre-commit review (companion `task`/`review`/`adversarial-review` OR the inline `/code-review`), run a real `git add` of the change's own files (the plan's `Files:` paths, or the fix + its test — never unrelated dirty files). A bare `git add -N` is NOT enough: Codex's `git status --untracked-files=all` still flags the path as untracked, producing a spurious `critical` ("deliverable depends on untracked files"), while a `git diff HEAD` reviewer silently OMITS it. Review against `git diff HEAD`; never pass a committed ref-range (`--base HEAD`, `--scope branch`, `main...HEAD`, `HEAD~1`) — pre-commit those diffs are empty and the review scans nothing. Staging is not committing; the push still waits for approval.
+- **Stage before any pre-commit diff review.** `/spec` and `/fix` review the WORKING TREE before committing, so every file the change ADDS is untracked. Before launching ANY pre-commit review (companion `task`/`review`/`adversarial-review`, the `changes-review` sub-agent, OR the inline `/code-review`), run a real `git add` of the change's own files (the plan's `Files:` paths, or the fix + its test — never unrelated dirty files). A bare `git add -N` is NOT enough: Codex's `git status --untracked-files=all` still flags the path as untracked, producing a spurious `critical` ("deliverable depends on untracked files"), while a `git diff HEAD` reviewer silently OMITS it. Review against `git diff HEAD`; never pass a committed ref-range (`--base HEAD`, `--scope branch`, `main...HEAD`, `HEAD~1`) — pre-commit those diffs are empty and the review scans nothing. Staging is not committing; the push still waits for approval.
 - **Broker `status` is not a liveness signal — watch the log mtime.** A companion job can go silent mid-`verifying` while `status` keeps reporting `running`/`verifying` with a climbing `elapsed`. A poll that waits only on `status` then burns its full timeout before noticing. Resolve `job.logFile` from `status --json` and poll its mtime alongside `job.status`: if status is still running but the log has not advanced for ≥90s (stall) or total elapsed exceeds ~8min (ceiling), the job is dead — `cancel` it, re-launch once under the same monitor, and if it stalls again proceed WITHOUT the Codex pass and record the gap (do NOT spin the full poll timeout, do NOT silently skip). The `/spec` and `/fix` skill steps carry the exact monitor.
 <!-- /CC-ONLY -->
 <!-- CODEX-START
@@ -189,7 +189,7 @@ Existing plans (`.md`): read `Type:` header.
 | COMPLETE | * | Bugfix | `spec-bugfix-verify` |
 | VERIFIED | * | * | Done |
 
-`spec-implement` is identical for both types (the plan file is the interface). Verification differs: features get a code review (built-in `/code-review` at the configured effort, default `xhigh`, on Claude Code; native `changes-review` agent on Codex) + inline plan-compliance/goal audit + optional Codex companion + structured E2E (TS-NNN); bugfixes get Behavior Contract audit + revert-test proof.
+`spec-implement` is identical for both types (the plan file is the interface). Verification differs: features get a changes review (per the configured mode on Claude Code — single `changes-review` sub-agent by default, or the built-in `/code-review` skill at medium/high/xhigh; native `changes-review` agent on Codex) + inline plan-compliance/goal audit + optional Codex companion + structured E2E (TS-NNN); bugfixes get Behavior Contract audit + revert-test proof.
 
 **Status values (closed set):** the `Status:` header is **exactly one** of `PENDING` (awaiting impl) → `COMPLETE` (ready to verify) → `VERIFIED` (done). These are the ONLY valid values — never invent, rename, or substitute another word (no `RESOLVED`/`DONE`/`CLOSED`/`WONTFIX`). Write the **bare keyword only**: no trailing prose or parentheticals on the `Status:` line — `Status: VERIFIED`, never `Status: RESOLVED (#1-#13 fixed; #14 won't-fix)`. Put resolution notes in the plan body, not the status line. The Console treats any value outside this set as terminal/done.
 
@@ -205,6 +205,8 @@ Existing plans (`.md`): read `Type:` header.
 4. **Code Review Gate** — final quality gate via `AskUserQuestion`.
 
 Everything else is automatic. **NEVER ask "Should I fix these findings?"** — verification fixes are part of the approved plan.
+
+⛔ **An auto-continued question is NOT an answer.** An `AskUserQuestion` result reading "No response after Ns — continued without an answer" (or carrying `afkTimeoutMs`) means the user has NOT responded — at ANY interaction point. Treat it as silence: do not act on the recommended option, do not infer approval, and re-ask when the user returns.
 
 ### Spec Workflow Toggles
 

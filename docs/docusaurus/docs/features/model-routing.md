@@ -95,7 +95,7 @@ On Max subscriptions, 1M context is billed via usage credits: an `opus[1m]` sess
 
 Pilot keeps 1M models available in the `/model` picker by always writing `CLAUDE_CODE_DISABLE_1M_CONTEXT=false`, and removes the obsolete `ANTHROPIC_DEFAULT_OPUS_MODEL` / `ANTHROPIC_DEFAULT_SONNET_MODEL` env vars (the model alias replaces them).
 
-**Sub-agents** (`spec-review`) are pinned to the base Sonnet model and do not use the 1M context window. The changes review runs as the built-in `/code-review` skill on the session model at a configurable effort (default `high`, set in Console -> Settings -> Spec Workflow -> Code Review Effort), so it follows the active model and context window.
+**Sub-agents** (`spec-review`, and `changes-review` when the Changes Review Mode is Single Sub-Agent) are pinned to the base Sonnet model and do not use the 1M context window. When the mode is a Code Review tier, the changes review runs as the built-in `/code-review` skill on the session model at that effort (set per workflow in Console -> Settings -> Spec Workflow -> Changes Review Mode), so it follows the active model and context window.
 
 ## Default-On
 

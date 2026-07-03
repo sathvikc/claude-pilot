@@ -1752,8 +1752,8 @@ class TestMigrationV14:
         assert result is True
         migrated = json.loads(config_path.read_text())
         assert migrated["_configVersion"] == CURRENT_CONFIG_VERSION
-        # v15 seeds xhigh, then v18 flips the blanket default to high.
-        assert migrated["codeReview"] == {"effort": "high"}
+        # v15 seeds effort xhigh, v18 relaxes it, v19 replaces effort with modes.
+        assert migrated["codeReview"] == {"spec": "agent", "fix": "agent"}
         # Both the legacy per-model object and the collapsed single key are gone.
         assert "contextWindows" not in migrated
         assert "contextWindow" not in migrated
@@ -1788,11 +1788,6 @@ class TestMigrationV15:
 
 class TestMigrationV16:
     """Migration v15 -> v16: collapse contextWindows{opus,sonnet} -> contextWindow="200k"."""
-
-    def test_current_version_is_18(self) -> None:
-        from installer.steps.config_migration import CURRENT_CONFIG_VERSION
-
-        assert CURRENT_CONFIG_VERSION == 18
 
     def test_v16_drops_legacy_object_and_seeds_safe_default(self) -> None:
         from installer.steps.config_migration import _migration_v16
@@ -1845,8 +1840,8 @@ class TestMigrationV16:
         assert result is True
         migrated = json.loads(config_path.read_text())
         assert migrated["_configVersion"] == CURRENT_CONFIG_VERSION
-        # v15 seeds xhigh, then v18 flips the blanket default to high.
-        assert migrated["codeReview"] == {"effort": "high"}
+        # v15 seeds effort xhigh, v18 relaxes it, v19 replaces effort with modes.
+        assert migrated["codeReview"] == {"spec": "agent", "fix": "agent"}
 
     def test_v15_config_advances_to_current_dropping_context_window(self, tmp_path: Path) -> None:
         from installer.steps.config_migration import CURRENT_CONFIG_VERSION, migrate_model_config
@@ -1870,7 +1865,8 @@ class TestMigrationV16:
         assert migrated["_configVersion"] == CURRENT_CONFIG_VERSION
         assert "contextWindows" not in migrated
         assert "contextWindow" not in migrated
-        assert migrated["codeReview"] == {"effort": "high"}  # unrelated keys untouched
+        # v19 replaces the legacy effort with per-workflow agent defaults.
+        assert migrated["codeReview"] == {"spec": "agent", "fix": "agent"}
 
 
 class TestMigrationV17:
@@ -1913,7 +1909,8 @@ class TestMigrationV17:
         migrated = json.loads(config_path.read_text())
         assert migrated["_configVersion"] == CURRENT_CONFIG_VERSION
         assert "contextWindow" not in migrated
-        assert migrated["codeReview"] == {"effort": "high"}  # unrelated keys untouched
+        # v19 replaces the legacy effort with per-workflow agent defaults.
+        assert migrated["codeReview"] == {"spec": "agent", "fix": "agent"}
 
 
 class TestMigrationV18:
@@ -1977,10 +1974,80 @@ class TestMigrationV18:
         migrated = json.loads(config_path.read_text())
         assert migrated["_configVersion"] == CURRENT_CONFIG_VERSION
         assert migrated["specWorkflow"]["modelSwitch"] is True
-        assert migrated["codeReview"]["effort"] == "high"
+        # v18 flips xhigh -> high, then v19 replaces effort with the mode defaults.
+        assert migrated["codeReview"] == {"spec": "agent", "fix": "agent"}
 
-    def test_v18_idempotent_when_already_current(self, tmp_path: Path) -> None:
-        from installer.steps.config_migration import migrate_model_config
+
+class TestMigrationV19:
+    """Migration v18 -> v19: per-workflow changes-review modes replace codeReview.effort."""
+
+    def test_current_version_is_19(self) -> None:
+        from installer.steps.config_migration import CURRENT_CONFIG_VERSION
+
+        assert CURRENT_CONFIG_VERSION == 19
+
+    def test_v19_replaces_legacy_effort_with_agent_defaults(self) -> None:
+        from installer.steps.config_migration import _migration_v19
+
+        # Every stored effort tier is replaced -- deliberate product decision:
+        # everyone starts on the cheap single sub-agent and re-opts into the
+        # multi-agent /code-review via Console Settings.
+        for effort in ("low", "medium", "high", "xhigh", "max"):
+            raw: dict = {"codeReview": {"effort": effort}}
+            assert _migration_v19(raw) is True
+            assert raw["codeReview"] == {"spec": "agent", "fix": "agent"}
+
+    def test_v19_seeds_default_when_absent_or_not_dict(self) -> None:
+        from installer.steps.config_migration import _migration_v19
+
+        raw: dict = {}
+        assert _migration_v19(raw) is True
+        assert raw["codeReview"] == {"spec": "agent", "fix": "agent"}
+
+        raw = {"codeReview": "high"}
+        assert _migration_v19(raw) is True
+        assert raw["codeReview"] == {"spec": "agent", "fix": "agent"}
+
+    def test_v19_preserves_valid_post_v19_shape(self) -> None:
+        from installer.steps.config_migration import _migration_v19
+
+        raw: dict = {"codeReview": {"spec": "high", "fix": "agent"}}
+        assert _migration_v19(raw) is False
+        assert raw["codeReview"] == {"spec": "high", "fix": "agent"}
+
+    def test_v19_preserves_valid_partial_shape(self) -> None:
+        from installer.steps.config_migration import _migration_v19
+
+        # Upgrade window: a new Console bundle can merge a partial PUT (only one
+        # workflow key) onto a pre-v19 config. A valid subset is a deliberate
+        # choice -- runtime readers default the missing key to "agent".
+        raw: dict = {"codeReview": {"spec": "high"}}
+        assert _migration_v19(raw) is False
+        assert raw["codeReview"] == {"spec": "high"}
+
+    def test_v19_replaces_mixed_or_invalid_shape(self) -> None:
+        from installer.steps.config_migration import _migration_v19
+
+        # Mixed legacy + new keys, or invalid mode values, reset wholesale.
+        raw: dict = {"codeReview": {"spec": "high", "effort": "xhigh"}}
+        assert _migration_v19(raw) is True
+        assert raw["codeReview"] == {"spec": "agent", "fix": "agent"}
+
+        raw = {"codeReview": {"spec": "ultra", "fix": "agent"}}
+        assert _migration_v19(raw) is True
+        assert raw["codeReview"] == {"spec": "agent", "fix": "agent"}
+
+    def test_v19_replaces_unhashable_values_without_raising(self) -> None:
+        from installer.steps.config_migration import _migration_v19
+
+        # A corrupt/hand-edited dict or list value must trigger the wholesale
+        # replace, not a TypeError from the frozenset membership test.
+        raw: dict = {"codeReview": {"spec": ["agent"], "fix": {"mode": "agent"}}}
+        assert _migration_v19(raw) is True
+        assert raw["codeReview"] == {"spec": "agent", "fix": "agent"}
+
+    def test_full_migration_from_v18_replaces_effort(self, tmp_path: Path) -> None:
+        from installer.steps.config_migration import CURRENT_CONFIG_VERSION, migrate_model_config
 
         config_path = tmp_path / "config.json"
         config_path.write_text(
@@ -1989,6 +2056,27 @@ class TestMigrationV18:
                     "_configVersion": 18,
                     "specWorkflow": {"modelSwitch": True},
                     "codeReview": {"effort": "high"},
+                }
+            )
+        )
+
+        result = migrate_model_config(config_path)
+        assert result is True
+        migrated = json.loads(config_path.read_text())
+        assert migrated["_configVersion"] == CURRENT_CONFIG_VERSION
+        assert migrated["codeReview"] == {"spec": "agent", "fix": "agent"}
+        assert migrated["specWorkflow"]["modelSwitch"] is True  # unrelated keys untouched
+
+    def test_v19_idempotent_when_already_current(self, tmp_path: Path) -> None:
+        from installer.steps.config_migration import migrate_model_config
+
+        config_path = tmp_path / "config.json"
+        config_path.write_text(
+            json.dumps(
+                {
+                    "_configVersion": 19,
+                    "specWorkflow": {"modelSwitch": True},
+                    "codeReview": {"spec": "high", "fix": "agent"},
                 }
             )
         )

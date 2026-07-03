@@ -2,6 +2,11 @@
 
 set -e
 
+# Ambient uv config (e.g. ~/.config/uv/uv.toml with authenticated corporate
+# indexes) must not break nested uv invocations: the downloaded wrapper's
+# verification and the installer's `uv tool install` calls all inherit this.
+export UV_NO_CONFIG=1
+
 REPO="maxritter/pilot-shell"
 
 VERSION="${VERSION:-}"
@@ -421,7 +426,7 @@ run_installer() {
 		system_arg="--local-system"
 	fi
 
-	uv run --python 3.12 --no-project \
+	uv run --python 3.12 --no-project --no-config \
 		--with rich==15.0.0 --with certifi==2026.5.20 --with PyYAML==6.0.3 \
 		python -m installer install $system_arg $version_arg $local_arg "$@"
 }

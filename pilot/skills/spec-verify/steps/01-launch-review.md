@@ -4,7 +4,7 @@
 
 ### 1a: Clean Up Stale Review Findings (always run, before any launch)
 
-**Always run this first** — regardless of whether changes-review is enabled. Spec-review findings are stale artifacts from the planning phase that were already addressed during implementation; changes-review findings files are legacy artifacts from older Pilot versions (transitional cleanup — remove the second line once pre-migration installs are gone):
+**Always run this first** — regardless of whether changes-review is enabled. Spec-review findings are stale artifacts from the planning phase that were already addressed during implementation; changes-review findings files are the previous run's output (agent mode writes a fresh one below — a stale file left behind would be read as if it reviewed THIS iteration's diff). The cleanup runs strictly BEFORE any launch in this step:
 
 ```bash
 SESS_DIR="$HOME/.pilot/sessions/${PILOT_SESSION_ID:-default}"
@@ -35,7 +35,42 @@ A bare `git add -N` (intent-to-add) is NOT enough — `git status` still treats 
 ---
 
 <!-- CC-ONLY -->
-**No native reviewer launch on Claude Code.** The code review runs INLINE in Step 3 via the built-in `/code-review` skill at the configured effort (`$PILOT_CODE_REVIEW_EFFORT`, default `high`; resolved and allow-listed in Step 3) — there is no subagent to launch early and no findings file to derive. The only launch in this step is the optional Codex companion below.
+**Resolve the changes-review mode** (fail-closed to `agent` — never pass the raw env var through):
+
+```bash
+SPEC_MODE="${PILOT_SPEC_CODE_REVIEW_MODE:-agent}"
+case "$SPEC_MODE" in medium|high|xhigh) ;; *) SPEC_MODE=agent ;; esac
+echo "$SPEC_MODE"
+```
+
+#### Agent mode (`SPEC_MODE=agent`) — launch the changes-review sub-agent NOW, in the background
+
+**Only when `PILOT_CHANGES_REVIEW_ENABLED` is not `"false"`.** The single `changes-review` sub-agent is the low-token review mechanism; it works in the background while you run the Step 2 automated checks, and Step 3 collects its findings file.
+
+**Derive plan slug** from the plan filename (strip `YYYY-MM-DD-` prefix and `.md`). Output path: `$SESS_DIR/findings-changes-review-<plan-slug>.json` (the 1a cleanup already removed any stale file).
+
+```
+Task(
+  subagent_type="changes-review",
+  run_in_background=true,
+  prompt="""
+  **Plan file:** <plan-path>
+  **Changed files:** <paths from the plan's Files: blocks + documented deviations>
+  **Runtime environment:** <plan's Runtime Environment section, if present>
+  **Output path:** <absolute findings path above>
+
+  Review the diff (git diff HEAD -- <changed files>) against the plan: compliance, quality, goal achievement.
+  Write findings JSON to output_path using the Write tool.
+  IMPORTANT: Include the plan file path in your output JSON as the "plan_file" field.
+  """
+)
+```
+
+**⛔ NEVER use `TaskOutput`** to retrieve results — Step 3 polls the findings file.
+
+#### Skill mode (`SPEC_MODE` = `medium`/`high`/`xhigh`) — no reviewer launch here
+
+The code review runs INLINE in Step 3 via the built-in `/code-review` skill at effort `$SPEC_MODE` — there is no subagent to launch early and no findings file to derive. The only launch in this step is the optional Codex companion below.
 
 #### Codex Adversarial Review (Optional — launch NOW, in the background)
 
@@ -111,7 +146,7 @@ pathlib.Path(os.environ["PROMPT_FILE"]).write_text(text)
      || { echo "Codex launch did not register with broker — JOB_ID is synthetic. Skipping Codex this run."; JOB_ID=""; }
    ```
 
-   If `$JOB_ID` is empty after this check, skip Step 3's Codex collection and rely on the inline `/code-review` (Step 3) alone. If Changes Review is disabled too, no automated review runs this iteration — record that gap explicitly in the verification report.
+   If `$JOB_ID` is empty after this check, skip Step 3's Codex collection and rely on the Step 3 changes review alone (agent findings or inline `/code-review`, per the resolved mode). If Changes Review is disabled too, no automated review runs this iteration — record that gap explicitly in the verification report.
 
 **Do NOT wait** — proceed to Step 2 immediately. You'll be notified when the polling bash (Step 3) completes.
 <!-- /CC-ONLY -->

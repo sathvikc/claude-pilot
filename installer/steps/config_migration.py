@@ -11,7 +11,7 @@ import os
 from pathlib import Path
 from typing import Any
 
-CURRENT_CONFIG_VERSION = 18
+CURRENT_CONFIG_VERSION = 19
 
 _STALE_AGENT_KEYS = frozenset(
     {
@@ -130,6 +130,9 @@ def migrate_model_config(
 
     if version < 18:
         modified = _migration_v18(raw) or modified
+
+    if version < 19:
+        modified = _migration_v19(raw) or modified
 
     if raw.get("_configVersion") != CURRENT_CONFIG_VERSION:
         raw["_configVersion"] = CURRENT_CONFIG_VERSION
@@ -613,10 +616,10 @@ def _migration_v14(raw: dict[str, Any]) -> bool:
 def _migration_v15(raw: dict[str, Any]) -> bool:
     """v14 -> v15: seed codeReview default {effort: xhigh}.
 
-    Makes the historical hard-coded review effort explicit in every config.json so
-    the Console exposes it and build_pilot_env_vars() emits PILOT_CODE_REVIEW_EFFORT
-    on the next `pilot sync-env` / startup. Existing installs keep `xhigh` (zero
-    behavior change); lighter models can dial it down via Console Settings.
+    Made the then hard-coded review effort explicit in every config.json so the
+    Console could expose it and build_pilot_env_vars() could emit the (since
+    retired) PILOT_CODE_REVIEW_EFFORT env var. Superseded by v19, which replaces
+    the single effort with per-workflow modes.
 
     Rule: absent or non-dict -> seed with the default; present dict -> leave
     untouched (respect the user's explicit choice from Console Settings).
@@ -703,6 +706,45 @@ def _migration_v18(raw: dict[str, Any]) -> bool:
         modified = True
 
     return modified
+
+
+# Mirrors VALID_CODE_REVIEW_MODES in launcher/config_schema.py (vendored copy --
+# the package boundary forbids imports between installer and launcher).
+_V19_CODE_REVIEW_MODES = frozenset({"agent", "medium", "high", "xhigh"})
+_V19_CODE_REVIEW_DEFAULT = {"spec": "agent", "fix": "agent"}
+
+
+def _migration_v19(raw: dict[str, Any]) -> bool:
+    """v18 -> v19: per-workflow changes-review modes replace ``codeReview.effort``.
+
+    The single effort tier becomes one mode per workflow -- ``codeReview.spec`` /
+    ``codeReview.fix``, each ``agent`` (single changes-review sub-agent) or a
+    ``/code-review`` effort tier (``medium``/``high``/``xhigh``). Every stored
+    effort is DISCARDED and both workflows reset to ``agent`` (deliberate product
+    decision: ``_migration_v15``/``_migration_v18`` seeded an effort into every
+    config, so the stored value is rarely a deliberate choice, and the single
+    sub-agent is the new low-token default; re-opt into the multi-agent
+    ``/code-review`` via Console Settings -> Spec Workflow -> Changes Review Mode).
+
+    Rule: a dict whose keys are a subset of ``spec``/``fix`` with valid mode
+    values (written by a newer Console build -- possibly a partial PUT during
+    the upgrade window; runtime readers default a missing key to ``agent``) is
+    left untouched; anything else -- legacy ``effort``, mixed keys, invalid
+    values, non-dict, absent -- is replaced wholesale with the
+    ``agent``/``agent`` default.
+    """
+    code_review = raw.get("codeReview")
+    if (
+        isinstance(code_review, dict)
+        and code_review
+        and set(code_review.keys()) <= {"spec", "fix"}
+        # isinstance guard first: an unhashable value (dict/list) would
+        # TypeError out of the frozenset test instead of triggering the reset.
+        and all(isinstance(value, str) and value in _V19_CODE_REVIEW_MODES for value in code_review.values())
+    ):
+        return False
+    raw["codeReview"] = dict(_V19_CODE_REVIEW_DEFAULT)
+    return True
 
 
 def _write_atomic(path: Path, data: dict[str, Any]) -> None:

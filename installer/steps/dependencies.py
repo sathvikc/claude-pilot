@@ -192,7 +192,7 @@ def install_python_tools() -> bool:
     """Install or upgrade Python development tools."""
     tools = ["ruff", "basedpyright"]
     for tool in tools:
-        if not _run_bash_with_retry(f"uv tool install --upgrade {tool}"):
+        if not _run_bash_with_retry(f"uv tool install --no-config --upgrade {tool}"):
             return False
     _record_outcome(_OUTCOME_UPDATED)
     return True
@@ -336,15 +336,21 @@ def install_semble() -> bool:
     Semble is a Python package on PyPI, distributed via the uv tool ecosystem
     (parallel to ruff/basedpyright/hypothesis). No manifest pin — uv resolves
     the latest release at install time.
+
+    The `[mcp]` extra is included so the MCP entry in pilot/.mcp.json can
+    launch the installed binary directly. A `uvx --from semble[mcp]` launch
+    would re-resolve over the network on every session start, which fails
+    behind authenticated package indexes (e.g. expired corporate registry
+    credentials) and adds startup latency.
     """
     was_present = command_exists("semble")
     if not _run_bash_with_retry(
-        "uv tool install --upgrade semble",
+        'uv tool install --no-config --upgrade "semble[mcp]"',
         timeout=UV_TOOL_INSTALL_TIMEOUT,
     ):
         return False
 
-    _symlink_to_pilot_bin("semble")
+    _symlink_to_pilot_bin("semble", source=_uv_tool_bin_semble())
     _record_outcome(_OUTCOME_UPDATED if was_present else _OUTCOME_INSTALLED)
     return True
 
@@ -485,18 +491,42 @@ def _init_rtk() -> None:
             pass
 
 
-def _symlink_to_pilot_bin(binary_name: str) -> None:
-    """Create a symlink in ~/.pilot/bin/ pointing to the npm global binary.
+def _uv_tool_bin_semble() -> Path | None:
+    """Locate the semble executable via `uv tool dir --bin` (PATH-independent).
 
-    This ensures the binary is in PATH even when the npm global bin directory
+    shutil.which() is unreliable here: uv's tool bin dir (~/.local/bin) may be
+    absent from the installer's PATH, or an earlier PATH dir may hold a
+    shadowing semble without the [mcp] extra.
+    """
+    try:
+        result = subprocess.run(
+            ["uv", "tool", "dir", "--bin"],
+            capture_output=True,
+            text=True,
+            timeout=15,
+            check=True,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    candidate = Path(result.stdout.strip()) / "semble"
+    return candidate if candidate.is_file() else None
+
+
+def _symlink_to_pilot_bin(binary_name: str, source: Path | str | None = None) -> None:
+    """Create a symlink in ~/.pilot/bin/ pointing to the installed binary.
+
+    This ensures the binary is in PATH even when its install directory
     (e.g. ~/.nvm/versions/node/vXX/bin/) is not in PATH during hook execution.
-    ~/.pilot/bin/ is added to PATH by the shell integration step.
+    ~/.pilot/bin/ is added to PATH by the shell integration step. When
+    `source` is given it is used directly; otherwise the binary is located
+    via a PATH lookup.
     """
     pilot_bin = Path.home() / ".pilot" / "bin"
     pilot_bin.mkdir(parents=True, exist_ok=True)
     link_path = pilot_bin / binary_name
 
-    source = shutil.which(binary_name)
+    if source is None:
+        source = shutil.which(binary_name)
     if not source:
         return
 
@@ -1174,7 +1204,7 @@ def install_pbt_tools() -> bool:
     """
     ok = True
 
-    if not _run_bash_with_retry("uv tool install --upgrade hypothesis", timeout=UV_TOOL_INSTALL_TIMEOUT):
+    if not _run_bash_with_retry("uv tool install --no-config --upgrade hypothesis", timeout=UV_TOOL_INSTALL_TIMEOUT):
         ok = False
 
     if not _run_bash_with_retry(

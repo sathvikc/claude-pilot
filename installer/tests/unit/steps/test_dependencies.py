@@ -156,6 +156,32 @@ class TestDependencyInstallFunctions:
 
         assert callable(install_python_tools)
 
+    @patch("installer.steps.dependencies._uv_tool_bin_semble")
+    @patch("installer.steps.dependencies._symlink_to_pilot_bin")
+    @patch("installer.steps.dependencies.subprocess.run")
+    @patch("installer.steps.dependencies.command_exists", return_value=False)
+    @patch("installer.steps.dependencies._run_bash_with_retry", return_value=True)
+    def test_uv_tool_install_commands_are_hermetic(self, mock_run, _mock_cmd, mock_sub, _mock_symlink, _mock_locator):
+        """Every `uv tool install` command passes --no-config so an ambient
+        uv.toml (e.g. authenticated corporate indexes with expired credentials)
+        cannot break tool installation."""
+        from installer.steps.dependencies import (
+            install_pbt_tools,
+            install_python_tools,
+            install_semble,
+        )
+
+        mock_sub.return_value = MagicMock(returncode=1, stdout="")
+
+        install_python_tools()
+        install_semble()
+        install_pbt_tools()
+
+        uv_tool_cmds = [c.args[0] for c in mock_run.call_args_list if "uv tool install" in str(c.args[0])]
+        assert uv_tool_cmds, "expected uv tool install commands to be issued"
+        for cmd in uv_tool_cmds:
+            assert "--no-config" in cmd, f"uv tool install missing --no-config: {cmd}"
+
     @patch("installer.steps.dependencies.command_exists", return_value=False)
     @patch("installer.steps.dependencies._run_bash_with_retry", return_value=True)
     def test_install_typescript_lsp_pins_vtsls_and_typescript(self, mock_run, _mock_cmd):
@@ -226,10 +252,12 @@ class TestSembleInstall:
 
         assert callable(install_semble)
 
+    @patch("installer.steps.dependencies._uv_tool_bin_semble", return_value=None)
     @patch("installer.steps.dependencies._symlink_to_pilot_bin")
     @patch("installer.steps.dependencies._run_bash_with_retry")
-    def test_install_semble_uses_uv_tool_install(self, mock_bash, _mock_symlink):
-        """install_semble shells out to `uv tool install --upgrade semble`."""
+    def test_install_semble_uses_uv_tool_install(self, mock_bash, _mock_symlink, _mock_locator):
+        """install_semble installs the [mcp] extra so the MCP entry in
+        pilot/.mcp.json can launch the installed binary offline."""
         from installer.steps.dependencies import install_semble
 
         mock_bash.return_value = True
@@ -240,12 +268,51 @@ class TestSembleInstall:
         mock_bash.assert_called_once()
         call_args = mock_bash.call_args[0][0]
         assert "uv tool install" in call_args
-        assert "semble" in call_args
+        assert "semble[mcp]" in call_args
         assert "--upgrade" in call_args
 
+    @patch("installer.steps.dependencies._uv_tool_bin_semble")
     @patch("installer.steps.dependencies._symlink_to_pilot_bin")
     @patch("installer.steps.dependencies._run_bash_with_retry", return_value=True)
-    def test_install_semble_uses_uv_tool_timeout(self, mock_bash, _mock_symlink):
+    def test_install_semble_symlinks_uv_tool_binary(self, _mock_bash, mock_symlink, mock_locator):
+        """The symlink targets uv's tool bin dir, not a PATH lookup: which()
+        can miss (~/.local/bin off the installer PATH) or hit a shadowing
+        non-mcp semble, leaving the MCP entry pointing at a dead binary."""
+        from pathlib import Path
+
+        from installer.steps.dependencies import install_semble
+
+        mock_locator.return_value = Path("/home/u/.local/bin/semble")
+
+        result = install_semble()
+
+        assert result is True
+        mock_symlink.assert_called_once_with("semble", source=Path("/home/u/.local/bin/semble"))
+
+    @patch("installer.steps.dependencies.subprocess.run")
+    def test_uv_tool_bin_semble_locates_binary(self, mock_run, tmp_path):
+        """_uv_tool_bin_semble resolves <uv tool dir --bin>/semble when present."""
+        from unittest.mock import MagicMock
+
+        from installer.steps.dependencies import _uv_tool_bin_semble
+
+        (tmp_path / "semble").write_text("#!/bin/sh\n")
+        mock_run.return_value = MagicMock(stdout=f"{tmp_path}\n")
+
+        assert _uv_tool_bin_semble() == tmp_path / "semble"
+
+    @patch("installer.steps.dependencies.subprocess.run", side_effect=OSError("uv missing"))
+    def test_uv_tool_bin_semble_none_on_failure(self, _mock_run):
+        """_uv_tool_bin_semble returns None when uv cannot be queried, so the
+        symlink helper falls back to a PATH lookup."""
+        from installer.steps.dependencies import _uv_tool_bin_semble
+
+        assert _uv_tool_bin_semble() is None
+
+    @patch("installer.steps.dependencies._uv_tool_bin_semble", return_value=None)
+    @patch("installer.steps.dependencies._symlink_to_pilot_bin")
+    @patch("installer.steps.dependencies._run_bash_with_retry", return_value=True)
+    def test_install_semble_uses_uv_tool_timeout(self, mock_bash, _mock_symlink, _mock_locator):
         """Semble install uses UV_TOOL_INSTALL_TIMEOUT, matching ruff/hypothesis/basedpyright."""
         from installer.steps.dependencies import UV_TOOL_INSTALL_TIMEOUT, install_semble
 

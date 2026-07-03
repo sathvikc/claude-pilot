@@ -127,6 +127,31 @@ def test_install_sh_uses_python_312():
     assert "--no-project" in content, "Must use --no-project to avoid modifying user's venv"
 
 
+def test_install_sh_uses_no_config_flag():
+    """Verify install.sh isolates uv from ambient uv.toml config.
+
+    Without --no-config, a user-level uv.toml with authenticated corporate
+    indexes (e.g. Google Artifact Registry with expired credentials) breaks
+    the bootstrap's dependency resolution."""
+    install_sh = Path(__file__).parent.parent.parent.parent / "install.sh"
+    content = install_sh.read_text()
+
+    uv_run_lines = [line for line in content.splitlines() if line.lstrip().startswith("uv run")]
+    assert uv_run_lines, "install.sh must contain a uv run invocation"
+    for line in uv_run_lines:
+        assert "--no-config" in line, f"uv run invocation missing --no-config: {line.strip()}"
+
+
+def test_install_sh_exports_uv_no_config():
+    """Verify install.sh exports UV_NO_CONFIG so nested uv invocations
+    (downloaded wrapper verification, installer's `uv tool install` calls)
+    are hermetic against ambient uv.toml config."""
+    install_sh = Path(__file__).parent.parent.parent.parent / "install.sh"
+    content = install_sh.read_text()
+
+    assert "export UV_NO_CONFIG=1" in content, "Must export UV_NO_CONFIG=1 for nested uv calls"
+
+
 def test_install_sh_skips_prompt_on_restart():
     """Verify install.sh skips install mode prompt during auto-updates."""
     install_sh = Path(__file__).parent.parent.parent.parent / "install.sh"

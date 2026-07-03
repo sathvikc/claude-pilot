@@ -38,7 +38,7 @@ All other commands are auto-rewritten by the Pilot shell hook when that hook is 
 
 **Intent-based code search — co-primary with CodeGraph.** CodeGraph for structural queries (callers, callees, impact, symbol enumeration); Semble for intent queries (concept discovery, cross-cutting features, mutation sites, debugging, cross-language search). Grep for exact text in known files. Hybrid (BM25 + Model2Vec semantic embeddings), code-aware chunking, ~1.5ms queries, ranks by relevance.
 
-Installed via `uv tool install semble` (also available as an MCP server — see `mcp-servers.md`). Verify with `semble --help`.
+Installed via `uv tool install "semble[mcp]"` (the same install serves the MCP server — see `mcp-servers.md`). Verify with `semble --help`.
 
 #### `semble search` — Hybrid Code Search
 

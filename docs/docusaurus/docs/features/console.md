@@ -111,7 +111,7 @@ Pilot doesn't manage model preferences. Set the model with Claude Code's `/model
 
 ### Spec Workflow -> Review Agents
 
-Two reviews run during `/spec` on Claude Code and Codex; **Changes Review** also runs at the end of `/fix`. Toggle each on or off. On Claude Code, **Spec Review** runs as a Claude sub-agent and **Changes Review** runs as the built-in `/code-review` skill at a configurable effort (default `high` - see [Code Review Effort](#spec-workflow---code-review-effort) below); Codex runs both as managed custom agents installed under `~/.codex/agents/`.
+Two reviews run during `/spec` on Claude Code and Codex; **Changes Review** also runs at the end of `/fix`. Toggle each on or off. On Claude Code, **Spec Review** runs as a Claude sub-agent and **Changes Review** runs per the mechanism chosen for each workflow (see [Changes Review Mode](#spec-workflow---changes-review-mode) below); Codex runs both as managed custom agents installed under `~/.codex/agents/`.
 
 | Agent | Default | Role |
 |-------|---------|------|
@@ -125,9 +125,16 @@ Two reviews run during `/spec` on Claude Code and Codex; **Changes Review** also
 | **Codex Companion Spec Review** | Off | Plugin plan review - second opinion before implementation. |
 | **Codex Companion Changes Review** | Off | Plugin code review - second opinion after `/spec` and `/fix`. |
 
-### Spec Workflow -> Code Review Effort
+### Spec Workflow -> Changes Review Mode
 
-Sets the effort level the built-in Claude Code `/code-review` skill runs at for the **Changes Review** in `/spec` verification and `/fix`. Choose from `low`, `medium`, `high`, `xhigh`, or `max` - the same reasoning tiers the skill accepts (the billed cloud `ultra` mode is intentionally excluded). The default is **XHigh**; lower it for lighter models (for example Fable 5), where `xhigh` may be more than the review needs. The choice flows to the review via `$PILOT_CODE_REVIEW_EFFORT` and is allow-listed at the point of use (an unset or unrecognized value falls back to `xhigh`). It applies to Claude Code only - on Codex the changes-review agent uses its own reasoning effort.
+Chooses the **Changes Review** mechanism separately for `/spec` verification and `/fix` - two dropdowns, four options each:
+
+| Option | What runs | Token cost |
+|--------|-----------|------------|
+| **Single Sub-Agent** (default) | One `changes-review` sub-agent reviews the diff and writes a findings file | Lowest |
+| **Code Review - Medium / High / XHigh** | The built-in `/code-review` skill at that effort - it spawns many finder/verifier sub-agents | Scales steeply with the tier |
+
+The billed cloud `ultra` mode stays excluded. Pick **Single Sub-Agent** to keep review costs minimal (also a good fit for lighter models); raise to **Code Review - XHigh** for high-risk or security-sensitive work. The choice flows to the workflows via `$PILOT_SPEC_CODE_REVIEW_MODE` / `$PILOT_FIX_CODE_REVIEW_MODE` and is allow-listed at the point of use (an unset or unrecognized value falls back to the single sub-agent). It applies only while the Changes Review toggle is on, and to Claude Code only - on Codex the changes review always runs as the native agent with its own reasoning effort. Upgrading from an older Pilot resets both dropdowns to **Single Sub-Agent** (the previous single effort setting is retired).
 
 ### Spec Workflow -> Automation
 
@@ -165,8 +172,14 @@ All settings are stored in `~/.pilot/config.json`:
     "askQuestionsDuringPlanning": true,
     "planApproval": true,
     "modelSwitch": true
+  },
+  "codeReview": {
+    "spec": "agent",
+    "fix": "agent"
   }
 }
 ```
+
+`codeReview.spec` / `codeReview.fix` accept `agent`, `medium`, `high`, or `xhigh` (see [Changes Review Mode](#spec-workflow---changes-review-mode) above); unknown values fall back to `agent`.
 
 You can edit `~/.pilot/config.json` directly - the Settings UI is a convenience wrapper. Changes take effect after restarting your session.
