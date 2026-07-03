@@ -2,6 +2,16 @@
 
 All notable changes to Pilot Shell will be documented in this file.
 
+## [9.9.0] - 2026-07-03
+
+### Bug Fixes
+
+- Check the full unreleased commit range for the release trigger
+
+### Features
+
+- Per-workflow changes-review modes, uv config isolation, AFK-timeout guard
+
 ## [9.8.1] - 2026-07-02
 
 ### Bug Fixes
