@@ -29,7 +29,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
-          fetch-depth: 2
+          fetch-depth: 0
 
       - name: Check commit message
         id: check
@@ -40,24 +40,34 @@ jobs:
             exit 0
           fi
 
-          COMMIT_MSG=$(git log -1 --pretty=%B)
-          echo "Commit message: $COMMIT_MSG"
+          # Scan every commit since the last release tag, not just the tip.
+          # A plain `git merge origin/main` before pushing makes an
+          # auto-generated merge commit ("Merge origin/main into ...") the new
+          # tip -- checking only `git log -1` would then miss a fix:/feat:
+          # commit earlier in the same push and silently skip the release.
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          RANGE="${LAST_TAG:+$LAST_TAG..}HEAD"
+          echo "Checking commits in range: $RANGE"
+
+          COMMIT_MSGS=$(git log "$RANGE" --pretty=%B)
+          echo "Commit messages since last release:"
+          echo "$COMMIT_MSGS"
 
           # Check for fix: or feat: prefix (first line or squash merge body)
-          if echo "$COMMIT_MSG" | grep -qE "(^|\* )(fix|feat):"; then
-            echo "Release commit detected (fix: or feat:)"
+          if echo "$COMMIT_MSGS" | grep -qE "(^|\* )(fix|feat):"; then
+            echo "Release commit detected (fix: or feat:) in $RANGE"
             echo "should_run=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
           # Check for merge from dev branch
-          if echo "$COMMIT_MSG" | grep -qE "^Merge (branch 'dev'|pull request .* from .*/dev)"; then
-            echo "Merge from dev detected"
+          if echo "$COMMIT_MSGS" | grep -qE "^Merge (branch 'dev'|pull request .* from .*/dev)"; then
+            echo "Merge from dev detected in $RANGE"
             echo "should_run=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
-          echo "Not a release trigger commit - skipping"
+          echo "No release trigger commit found in $RANGE - skipping"
           echo "should_run=false" >> "$GITHUB_OUTPUT"
 
   supply-chain-gate:
