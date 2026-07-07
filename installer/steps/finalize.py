@@ -147,6 +147,7 @@ class FinalizeStep(BaseStep):
             ("/setup-rules · $setup-rules", "Create modular and concise rules for your project codebase"),
             ("/create-skill · $create-skill", "Create well-structured reusable skills for your workflows"),
             ("/benchmark · $benchmark", "Quantitative before/after evals for rules, skills, and workflows"),
+            ("/ask-codex", "Run headless Codex as a steerable sub-agent (Claude Code only; auto-detects Codex)"),
         ]
 
         ui.next_steps(

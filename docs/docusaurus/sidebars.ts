@@ -31,6 +31,7 @@ const sidebars: SidebarsConfig = {
         "workflows/setup-rules",
         "workflows/create-skill",
         "workflows/benchmark",
+        "workflows/ask-codex",
       ],
     },
     {

@@ -9,6 +9,7 @@ import {
   Lightbulb,
   Gauge,
   Bug,
+  Bot,
   ArrowRight,
 } from "lucide-react";
 import { useInView } from "@/hooks/use-in-view";
@@ -288,16 +289,16 @@ const WorkflowSteps = () => {
               </p>
             </a>
             <a
-              href="/docs/workflows/benchmark"
+              href="/docs/workflows/ask-codex"
               className="rounded-xl p-4 border border-border/40 bg-background/30 hover:border-primary/40 hover:bg-background/50 transition-all duration-200 group"
             >
               <div className="flex items-center gap-2 mb-2">
-                <Gauge className="h-4 w-4 text-primary" />
-                <code className="text-sm font-medium text-primary">/benchmark</code>
+                <Bot className="h-4 w-4 text-primary" />
+                <code className="text-sm font-medium text-primary">/ask-codex</code>
               </div>
               <p className="text-xs text-muted-foreground group-hover:text-foreground/80">
-                Measure rule and skill impact — runs with/without
-                comparisons, grades outputs, proposes concrete edits.
+                Run headless Codex as a steerable sub-agent — second opinions,
+                bounded code tasks, live mid-flight corrections.
               </p>
             </a>
           </div>

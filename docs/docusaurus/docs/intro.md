@@ -40,6 +40,9 @@ codex    # Codex CLI — all core workflows
 
 # Plan and build a feature
 > /spec "Add user authentication with OAuth"            # Codex: $spec
+
+# Ask Codex for a second opinion or a steerable side-task (Claude Code only)
+> /ask-codex "Review the auth flow for race conditions"
 ```
 
 ## Architecture

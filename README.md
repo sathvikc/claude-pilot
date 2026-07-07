@@ -374,6 +374,19 @@ Six phases turn a rule or skill into a before/after comparison with an actionabl
 
 </details>
 
+### /ask-codex — Codex as an Orchestration Sub-Agent
+
+[`/ask-codex`](https://pilot-shell.com/docs/workflows/ask-codex) runs headless Codex from Claude Code — one-shot second opinions, bounded code tasks, and app-server sessions you can watch live and **steer mid-flight** (`steer:` corrections, `interrupt`, follow-up turns via a file control plane). Auto-detects Codex at runtime: without it you get a friendly install pointer, not an error, and installing Codex later needs no reinstall.
+
+```bash
+# Claude Code only
+claude
+> /ask-codex "Review the auth flow in this repo for race conditions"
+> /ask-codex "Refactor src/parser.ts to remove the legacy tokenizer path"
+```
+
+Complementary to the Codex companion plugin: `/spec`, `/fix`, and `codex:rescue` keep using the broker for workflow reviews; this skill covers ad-hoc orchestration: runtime auto-detection plus safety hardening of the bundled app-server clients.
+
 ## Pilot Shell Console
 
 Local web dashboard at `localhost:41777` with real-time notifications and 10 views.

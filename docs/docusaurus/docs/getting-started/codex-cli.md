@@ -20,6 +20,7 @@ All core and additional workflows run on both agents. Use `/` on Claude Code and
 
 ## Claude Code Only
 
+- **`/ask-codex`** — run headless Codex as a steerable orchestration sub-agent ([details](/docs/workflows/ask-codex); Codex driving Codex is redundant, so it ships to Claude Code only)
 - **Status line** — real-time session metrics below every response
 - **Pilot Bot** — scheduled tasks and background automation
 - **Remote control** — connect from the Claude app / browser, plus channels (Telegram, Discord, iMessage)

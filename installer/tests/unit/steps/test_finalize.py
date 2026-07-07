@@ -212,7 +212,7 @@ class TestFinalSuccessPanel:
                 expected_lengths = {
                     "Getting Started": 3,
                     "Core Workflows (Claude Code + Codex)": 3,
-                    "Additional Workflows (Claude Code + Codex)": 3,
+                    "Additional Workflows (Claude Code + Codex)": 4,
                 }
                 for title, items in sections:
                     assert len(items) == expected_lengths[title], (
@@ -228,3 +228,4 @@ class TestFinalSuccessPanel:
                 assert "/setup-rules · $setup-rules" in additional_labels
                 assert "/create-skill · $create-skill" in additional_labels
                 assert "/benchmark · $benchmark" in additional_labels
+                assert "/ask-codex" in additional_labels

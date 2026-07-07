@@ -46,6 +46,7 @@ testpaths = [
     "installer/tests",
     "pilot/hooks/tests",
     "pilot/skills/benchmark/tests",
+    "pilot/skills/ask-codex/tests",
 ]
 filterwarnings = [
     "ignore::DeprecationWarning",
@@ -158,6 +159,8 @@ include = [
     "launcher",
     "pilot/skills/benchmark/scripts",
     "pilot/skills/benchmark/tests",
+    "pilot/skills/ask-codex/scripts",
+    "pilot/skills/ask-codex/tests",
 ]
 exclude = [
     "**/node_modules",

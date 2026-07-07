@@ -244,6 +244,33 @@ class TestCodexSkillsInstallation:
         assert "$spec" in result
         assert "$fix" in result
 
+    def test_ask_codex_skill_is_never_shipped_to_codex(self, tmp_path: Path) -> None:
+        """ask-codex is deliberately CC-only (Codex driving Codex is redundant).
+
+        The mechanism is allowlist omission; this pins it so a future allowlist
+        edit or auto-discovery refactor cannot silently ship $ask-codex.
+        """
+        agents_skills_dir = tmp_path / ".agents" / "skills"
+        pilot_skills_dir = tmp_path / ".claude" / "skills"
+
+        for name in ("fix", "ask-codex"):
+            skill_dir = pilot_skills_dir / name
+            skill_dir.mkdir(parents=True)
+            (skill_dir / "manifest.json").write_text(
+                json.dumps({"version": 1, "orchestrator": "orchestrator.md", "steps": []})
+            )
+            (skill_dir / "orchestrator.md").write_text(f"---\nname: {name}\ndescription: d\n---\n\n# {name}\n\nBody.")
+
+        step = CodexFilesStep()
+        ctx = MagicMock()
+        ctx.ui = None
+
+        with patch("installer.steps.codex_files.Path.home", return_value=tmp_path):
+            step._install_codex_skills(ctx)
+
+        assert (agents_skills_dir / "fix" / "SKILL.md").exists()  # allowlisted sibling proves the run
+        assert not (agents_skills_dir / "ask-codex").exists()
+
     def test_installs_skills_to_agents_dir(self, tmp_path: Path) -> None:
         agents_skills_dir = tmp_path / ".agents" / "skills"
         pilot_skills_dir = tmp_path / ".claude" / "skills"

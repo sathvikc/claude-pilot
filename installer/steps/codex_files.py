@@ -459,10 +459,12 @@ class CodexFilesStep(BaseStep):
     def _install_codex_skills(self, ctx: InstallContext) -> int:
         """Install supported Pilot Shell skills to ~/.agents/skills/ for Codex.
 
-        All non-bot skills are shipped to Codex. Bot skills (bot-boot, bot-channel-task,
-        bot-defaults, bot-heartbeat, bot-jobs) depend on Claude Code cron/remote-control.
-        Stale bot-* skills from older installs are cleaned up. Returns the number
-        of adapted SKILL.md files successfully written.
+        Only skills in _CODEX_SUPPORTED_SKILLS ship to Codex. Bot skills (bot-boot,
+        bot-channel-task, bot-defaults, bot-heartbeat, bot-jobs) depend on Claude Code
+        cron/remote-control; ask-codex is deliberately CC-only (it orchestrates
+        Codex FROM Claude Code - shipping it to Codex is redundant, and its recipes
+        assume Claude Code semantics). Stale bot-* skills from older installs are
+        cleaned up. Returns the number of adapted SKILL.md files successfully written.
         """
         claude_skills_dir = Path.home() / ".claude" / "skills"
         agents_skills_dir = Path.home() / ".agents" / "skills"
