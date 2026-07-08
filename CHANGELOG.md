@@ -2,6 +2,12 @@
 
 All notable changes to Pilot Shell will be documented in this file.
 
+## [9.10.1] - 2026-07-08
+
+### Bug Fixes
+
+- Restore bypassPermissions after plan-mode exit
+
 ## [9.10.0] - 2026-07-07
 
 ### Bug Fixes
