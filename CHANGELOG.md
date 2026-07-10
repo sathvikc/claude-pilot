@@ -2,6 +2,12 @@
 
 All notable changes to Pilot Shell will be documented in this file.
 
+## [9.10.2] - 2026-07-10
+
+### Bug Fixes
+
+- Run model switching at 1M with a fixed Opus/Sonnet pair
+
 ## [9.10.1] - 2026-07-08
 
 ### Bug Fixes
