@@ -354,22 +354,22 @@ const DeepDiveSection = () => {
                 </span>
               </div>
               <p className="text-xs text-muted-foreground leading-relaxed">
-                When you approve the plan, Pilot drops to Sonnet automatically and
-                runs implementation and verification continuously — no manual{" "}
-                <code>/model</code> switch, no pause, no re-invoke.
+                When you approve the plan, Pilot drops to Sonnet automatically
+                and runs implementation and verification continuously — no
+                manual <code>/model</code> switch, no pause, no re-invoke.
               </p>
             </div>
           </div>
 
           <div className="rounded-lg p-4 border border-border/30 bg-card/20">
             <p className="text-xs text-muted-foreground text-center">
-              One model, set once — no per-phase dropdowns to manage. The opt-out{" "}
-              <strong>Model Switching</strong> automation flips Opus → Sonnet
-              between planning and implementation for you; turn it off in Console
-              Settings → Automation to run the whole workflow on Opus. Prefer{" "}
-              <strong>Claude Fable 5</strong>? Pilot preserves your{" "}
-              <code>/model fable</code> choice and runs the whole workflow
-              single-model on it, no <code>fableplan</code> needed.
+              One pair, both legs at 1M — the opt-out <strong>Model Switching</strong>{" "}
+              automation flips Opus 4.8 → Sonnet 5 between planning and
+              implementation for you. Turn it off in Console Settings → Model
+              Switching to run the whole workflow single-model on your{" "}
+              <code>/model</code> choice instead — including{" "}
+              <strong>Claude Fable 5</strong>, whose saved selection Pilot
+              preserves while the toggle is off.
             </p>
           </div>
         </div>

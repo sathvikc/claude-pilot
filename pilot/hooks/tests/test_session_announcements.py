@@ -18,6 +18,10 @@ class TestRegistry:
         ids = [a["id"] for a in ANNOUNCEMENTS]
         assert "automated-model-switching" in ids
 
+    def test_has_model_switching_1m_planning_announcement(self) -> None:
+        ids = [a["id"] for a in ANNOUNCEMENTS]
+        assert "model-switching-1m-planning" in ids
+
     def test_has_fable_5_support_announcement(self) -> None:
         ids = [a["id"] for a in ANNOUNCEMENTS]
         assert "fable-5-support" in ids

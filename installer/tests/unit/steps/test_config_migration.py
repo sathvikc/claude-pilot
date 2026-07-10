@@ -1981,11 +1981,6 @@ class TestMigrationV18:
 class TestMigrationV19:
     """Migration v18 -> v19: per-workflow changes-review modes replace codeReview.effort."""
 
-    def test_current_version_is_19(self) -> None:
-        from installer.steps.config_migration import CURRENT_CONFIG_VERSION
-
-        assert CURRENT_CONFIG_VERSION == 19
-
     def test_v19_replaces_legacy_effort_with_agent_defaults(self) -> None:
         from installer.steps.config_migration import _migration_v19
 
@@ -2067,14 +2062,14 @@ class TestMigrationV19:
         assert migrated["codeReview"] == {"spec": "agent", "fix": "agent"}
         assert migrated["specWorkflow"]["modelSwitch"] is True  # unrelated keys untouched
 
-    def test_v19_idempotent_when_already_current(self, tmp_path: Path) -> None:
-        from installer.steps.config_migration import migrate_model_config
+    def test_idempotent_when_already_current(self, tmp_path: Path) -> None:
+        from installer.steps.config_migration import CURRENT_CONFIG_VERSION, migrate_model_config
 
         config_path = tmp_path / "config.json"
         config_path.write_text(
             json.dumps(
                 {
-                    "_configVersion": 19,
+                    "_configVersion": CURRENT_CONFIG_VERSION,
                     "specWorkflow": {"modelSwitch": True},
                     "codeReview": {"spec": "high", "fix": "agent"},
                 }

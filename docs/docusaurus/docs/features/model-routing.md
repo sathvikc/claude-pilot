@@ -10,17 +10,41 @@ description: Plan with Opus, implement with Sonnet - automatically, no manual sw
 Automated model switching is a Claude Code feature. It is not available in Codex CLI -- on Codex, set the model via `codex --model <name>` or in `~/.codex/config.toml`, and `/spec` runs on whatever model is active.
 :::
 
-Opus reasons better; Sonnet is faster and cheaper. The cost-saving move is to plan on Opus, then drop to Sonnet for the mechanical implementation and verification that follow. Pilot does this **automatically** during `/spec` -- no manual `/model` step.
+Opus reasons better; Sonnet is faster and cheaper. The cost-saving move is to plan on Opus, then drop to Sonnet for the mechanical implementation and verification that follow. Pilot does this **automatically** during `/spec` -- no manual `/model` step -- and **both legs run at 1M context**.
+
+## The Fixed Pair
+
+**Console -> Settings -> Model Switching** shows the pair (static -- see the note below for why it is not configurable):
+
+| Slot | Model |
+|------|-------|
+| **Plan Model** (plan mode / `/spec` planning) | Opus 4.8 (1M) |
+| **Execution Model** (everything else) | Sonnet 5 (1M) |
+
+Both legs run at the **1M context tier** -- the old 200K planning leg is legacy.
+
+:::warning Why the pair is fixed
+Claude Code's `ANTHROPIC_DEFAULT_OPUS_MODEL` / `ANTHROPIC_DEFAULT_SONNET_MODEL` env vars remap the *opus/sonnet model slots* -- everywhere, including the `/model` picker rows. Pointing a slot at a different family (say, Fable 5 as the plan model) makes the real Opus unreachable via `/model` entirely. Pilot therefore only ever writes a **same-family** pin: the opus slot gets `claude-opus-4-8[1m]` (upgrading planning from 200K to 1M without changing what "Opus" means), and the sonnet slot stays untouched (Sonnet 5 is natively 1M).
+:::
 
 ## How It Works
 
-Pilot relies on Claude Code's **Opus Plan** model (`opusplan`): Opus while in plan mode, Sonnet otherwise. With **Model Switching** ON (the default), `/spec`:
+Pilot rides Claude Code's **Opus Plan** model (`opusplan`): Opus while in plan mode, Sonnet otherwise. When you save the Console settings (or on install), `pilot sync-env` writes into `~/.claude/settings.json`:
 
-1. Calls **EnterPlanMode** at the start of planning -> you're on **Opus** for the reasoning-heavy planning leg.
-2. After you approve the plan, calls **ExitPlanMode** -> you drop to **Sonnet** automatically.
-3. Runs implementation and verification on **Sonnet**, continuously, in the same session.
+- `model: "opusplan"` plus an `ANTHROPIC_MODEL: "opusplan"` pin (env outranks the model field), and
+- the same-family pin `ANTHROPIC_DEFAULT_OPUS_MODEL: "claude-opus-4-8[1m]"`, which upgrades the planning leg to 1M.
+
+With **Model Switching** ON (the default), `/spec`:
+
+1. Calls **EnterPlanMode** at the start of planning -> you're on **Opus 4.8 (1M)** for the reasoning-heavy planning leg.
+2. After you approve the plan, calls **ExitPlanMode** -> you drop to **Sonnet 5 (1M)** automatically.
+3. Runs implementation and verification on Sonnet, continuously, in the same session.
 
 There is no pause, no handoff message, and no `/clear` + re-invoke. You approve the plan and implementation begins.
+
+:::info Model Switching wins while ON
+While Model Switching is ON, it **overrides a manually saved `/model` choice** (including a saved Fable model) on the next settings sync or restart -- the `ANTHROPIC_MODEL: opusplan` pin outranks the saved model field. Turn the toggle off to control the model entirely via `/model`.
+:::
 
 ## Set the Opus Plan Model
 
@@ -30,15 +54,15 @@ For automated switching to work, your session must be on the `opusplan` model:
 /model opusplan
 ```
 
-Pilot writes this into `~/.claude/settings.json` during install and whenever Console settings change via `pilot sync-env`, so future sessions start on `opusplan` automatically. (There is no `opusplan[1m]` alias in Claude Code — see [Context Window](#context-window) for how 1M applies to each leg.)
+Pilot writes this into `~/.claude/settings.json` during install and whenever Console settings change via `pilot sync-env`, so future sessions start on `opusplan` automatically. (There is no `opusplan[1m]` alias in Claude Code -- the 1M planning tier rides on the same-family opus slot pin instead; see [Context Window](#context-window).)
 
 `/spec` checks your model before planning and behaves differently per model:
 
-- **On a wrong, identifiable model** (e.g. plain **Opus**): `/spec` **hard-blocks** and tells you to run `/model opusplan`. Before plan mode, `opusplan` resolves to Sonnet -- so being on Opus means you never switched.
+- **On a wrong, identifiable model** (e.g. plain **Opus**): `/spec` **hard-blocks** and tells you to run `/model opusplan`. Before plan mode, `opusplan` resolves to Sonnet -- so being on Opus means you never switched. The check trusts your persisted `/model` selection (`~/.claude/settings.json`): if you just ran `/model opusplan`, a statusline that hasn't re-rendered yet won't re-block you.
 - **On Sonnet**: allowed. Pilot can't tell `opusplan`'s Sonnet leg from plain Sonnet, so it presumes you're correct rather than false-block every valid user.
 - **On Fable 5 / Mythos 5** (`fable`, `mythos`, `claude-fable-5`, `claude-mythos-5`, `best`): allowed in BOTH toggle states -- see [Fable 5](#fable-5) below.
 
-With **Model Switching OFF**, the check flips: `/spec` requires **Opus** (only Opus may enter plan mode; Fable-family models also pass) and hard-blocks any other model. Resuming an existing plan (`/spec <path/to/plan.md>`) skips the check on any model.
+With **Model Switching OFF**, the check flips: `/spec` requires **Opus** (only Opus may enter plan mode; Fable-family models also pass) and hard-blocks any other model. If your selected model is `opusplan`, the block explains the actual conflict -- planning would run on opusplan's execution leg -- and offers both ways out: turn Model Switching ON (Console -> Settings -> Model Switching) to keep `opusplan`, or run `/model opus[1m]` to stay single-model. Resuming an existing plan (`/spec <path/to/plan.md>`) skips the check on any model.
 
 ## Troubleshooting: Planning Didn't Switch to Opus
 
@@ -52,58 +76,56 @@ Pilot verifies the switch instead of assuming it: during the planning leg, the `
 
 ## Fable 5
 
-[Claude Fable 5](https://www.anthropic.com/news/claude-fable-5-mythos-5) is Anthropic's frontier model (`/model fable`, or `fable[1m]` for the 1M window). There is **no `fableplan`** -- no Fable equivalent of `opusplan` exists (for now), so automated model switching does not apply. Pilot is fully Fable-aware instead:
+[Claude Fable 5](https://www.anthropic.com/news/claude-fable-5-mythos-5) is Anthropic's frontier model (`/model fable`, or `fable[1m]` for the 1M window). There is **no `fableplan`** -- no Fable equivalent of `opusplan` exists, and remapping opusplan's slots to Fable would hijack the `/model` picker (see "Why the pair is fixed" above) -- so automated model switching does not apply. Pilot is fully Fable-aware instead:
 
-- **`/spec` runs single-model on Fable**, in both Model Switching states. The planning skills detect a Fable session and skip `EnterPlanMode`/`ExitPlanMode` entirely -- plan, implement, and verify all run on Fable with no model toggling and no `/model opusplan` block.
-- **Your saved Fable model is preserved.** `ANTHROPIC_MODEL` (env) outranks the saved `model` field in `~/.claude/settings.json`, so Pilot removes its own `ANTHROPIC_MODEL` override instead of writing it when your saved model is Fable-family -- on installs, on Console settings changes (`pilot sync-env`), and healed on every `pilot` startup.
-- **1M context stays available.** `CLAUDE_CODE_DISABLE_1M_CONTEXT=1` removes 1M variants from the model picker, which would break `fable[1m]` -- Pilot forces it to `false` whenever a Fable-family model is selected, so `fable[1m]` always works.
+- **Single-model Fable:** with Model Switching OFF, run `/model fable` and `/spec` runs plan, implement, and verify all on Fable. The planning skills detect a genuine single-model Fable session (a *saved* `/model fable`) and skip `EnterPlanMode`/`ExitPlanMode` entirely -- no model toggling and no `/model opusplan` block.
+- **Your saved Fable model is preserved -- while Model Switching is OFF.** `ANTHROPIC_MODEL` (env) outranks the saved `model` field in `~/.claude/settings.json`, so Pilot removes its own overrides instead of writing them when the toggle is off and your saved model is Fable-family. With the toggle ON, Model Switching wins instead (see above).
+- **1M context stays available.** `CLAUDE_CODE_DISABLE_1M_CONTEXT=1` removes 1M variants from the model picker, which would break `fable[1m]` -- Pilot forces it to `false`, so `fable[1m]` always works.
 - **Statusline and Console Usage** display "Fable 5" / "Mythos 5" with the announced $10/$50 per-MTok pricing.
 
 Note: Fable 5 ships with safety classifiers; flagged requests (mostly cybersecurity/biology) are re-run on Opus 4.8 by Claude Code itself with a transcript notice -- that fallback is Claude Code behavior, not Pilot's (see the [model configuration docs](https://code.claude.com/docs/en/model-config), "Automatic model fallback").
 
 ## Quick Mode (Outside /spec) -- Default is Sonnet
 
-`opusplan` resolves to **Sonnet** whenever you are *not* in plan mode. This means regular quick-mode prompts -- everything outside `/spec` and `/fix` planning -- run on Sonnet, not Opus.
+`opusplan` resolves to **Sonnet** whenever you are *not* in plan mode. This means regular quick-mode prompts -- everything outside `/spec` and `/fix` planning -- run on Sonnet 5, not Opus.
 
-This is by design: the model exists specifically to power the planning leg of the spec workflow, not to make Opus the default for all interactions.
-
-**If you want Opus for a quick-mode task**, switch manually:
+This is by design: the model exists specifically to power the planning leg of the spec workflow, not to make Opus the default for all interactions. **If you want Opus for a quick-mode task**, switch manually:
 
 ```text
 /model opus[1m]
 ```
 
-Switch back to `opusplan` before the next `/spec` run:
+Switch back to `opusplan` before the next `/spec` run (with Model Switching ON, Pilot re-asserts it on the next settings sync or restart anyway):
 
 ```text
 /model opusplan
 ```
 
 :::tip Summary
-- `opusplan` on = `/spec` and `/fix` plan on Opus, everything else on Sonnet.
+- `opusplan` on = `/spec` and `/fix` plan on Opus 4.8 (1M), everything else on Sonnet 5 (1M).
 - For ad-hoc Opus work outside those workflows, switch to `opus[1m]` for that session.
 :::
 
-## Turning It Off -- Opus Everywhere
+## Turning It Off -- One Model Everywhere
 
-Turn off **Model Switching** in Console Settings -> Automation to run the entire `/spec` workflow on Opus. Pilot then defaults `~/.claude/settings.json` to `opus[1m]` (Opus at 1M, the default everywhere now). It never writes an `ANTHROPIC_MODEL` pin, so a per-session `/model opus` (200K) still works -- but Pilot re-asserts `opus[1m]` as the default on the next settings write (install / upgrade / Console Save). Plan -> implement -> verify all run on Opus. Choose this if you prefer maximum reasoning quality over cost, or for headless / CI runs.
+Turn off **Model Switching** in Console -> Settings -> Model Switching to run the entire `/spec` workflow on a single model of your choice. Pilot then defaults `~/.claude/settings.json` to `opus[1m]` (Opus at 1M) and strips its `ANTHROPIC_MODEL` and slot pins, so your `/model` choice rules -- a saved Fable model is preserved. Plan -> implement -> verify all run on the active model. Choose this if you prefer one model end-to-end, or for headless / CI runs.
 
 ## Context Window
 
-There is no per-model Context Window setting. Pilot persists the model alias by toggle state, and 1M applies **per model alias**, not globally:
+Everything runs at the **1M tier** -- there is no per-model Context Window setting, and 200K is legacy:
 
-| Toggle | Persisted model | Context window |
+| Toggle | Persisted state | Context window |
 |--------|-----------------|----------------|
-| **Model Switching ON** | `opusplan` | Sonnet 5 execution leg: **1M** (native). Opus planning leg: **200K**. |
-| **Model Switching OFF** | `opus[1m]` | Opus 4.8: **1M**. |
+| **Model Switching ON** | `opusplan` + the opus slot pin | Opus planning leg: **1M** (`claude-opus-4-8[1m]`). Sonnet 5 execution leg: **1M** (native). |
+| **Model Switching OFF** | `opus[1m]` (soft default) | Opus 4.8: **1M**. |
 
-The asymmetry comes from Claude Code's aliases: **`sonnet` already resolves to Sonnet 5 with a native 1M window** (no suffix needed), but **bare `opus` resolves to 200K** -- you need the `opus[1m]` alias to get Opus's 1M window. There is **no `opusplan[1m]` alias** (only `opus[1m]` and `sonnet[1m]` exist), so the `opusplan` planning leg cannot be forced to 1M. If you need 1M during planning, turn Model Switching **off** and run `/model opus[1m]` (or `/model default`, which resolves to Opus 4.8 at 1M).
+The `[1m]` suffix on the pinned ID rides as a context-beta header; Sonnet 5 is natively 1M and needs no pin. There is still no `opusplan[1m]` alias -- the same-family opus pin is how the planning leg reaches 1M.
 
 :::warning 1M context requires usage credits on Max
-On Max subscriptions, 1M context is billed via usage credits: an `opus[1m]` session errors with `Usage credits required for 1M context` until you enable them (`/usage-credits`). Use a tier where 1M is included (API, Team, Enterprise), or enable credits. Where 1M is unavailable, these aliases fall back to 200K gracefully.
+On Max subscriptions, 1M context is billed via usage credits: a 1M session errors with `Usage credits required for 1M context` until you enable them (`/usage-credits`). Use a tier where 1M is included (API, Team, Enterprise), or enable credits. Where 1M is unavailable, Claude Code falls back to 200K gracefully.
 :::
 
-Pilot keeps 1M models available in the `/model` picker by always writing `CLAUDE_CODE_DISABLE_1M_CONTEXT=false`, and removes the obsolete `ANTHROPIC_DEFAULT_OPUS_MODEL` / `ANTHROPIC_DEFAULT_SONNET_MODEL` env vars (the model alias replaces them).
+Pilot keeps 1M models available in the `/model` picker by always writing `CLAUDE_CODE_DISABLE_1M_CONTEXT=false`. The `ANTHROPIC_DEFAULT_OPUS_MODEL` pin is Pilot-managed: written (same-family, `claude-opus-4-8[1m]`) while Model Switching is ON, stripped when it is OFF (including at startup, covering a save that couldn't propagate).
 
 **Sub-agents** (`spec-review`, and `changes-review` when the Changes Review Mode is Single Sub-Agent) are pinned to the base Sonnet model and do not use the 1M context window. When the mode is a Code Review tier, the changes review runs as the built-in `/code-review` skill on the session model at that effort (set per workflow in Console -> Settings -> Spec Workflow -> Changes Review Mode), so it follows the active model and context window.
 

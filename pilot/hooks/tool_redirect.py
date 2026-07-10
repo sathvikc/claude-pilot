@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""Hook to block built-in WebSearch/WebFetch/Plan mode and research/explore-type Agent calls.
+"""Hook to block built-in WebSearch/WebFetch and the Plan Agent.
 
 Agent calls for /spec workflow reviewers (spec-review, changes-review) pass
-through silently.
-Explore and Plan agents are hard-blocked (both by subagent_type AND description).
-Research-pattern agents (description starts with "Research") are blocked,
-unless the subagent_type is in SILENT_AGENT_TYPES.
+through silently. The Plan agent is hard-blocked (structured planning goes
+through /spec). Read-only fan-out subagents are ALLOWED: the built-in Explore
+agent, general-purpose agents, and any "Explore ..."/"Research ..." description
+pass through untouched - an Explore/Haiku fan-out is often the cheaper, faster
+path than running CodeGraph/Semble inline.
 
 Also nudges (non-deny) on recursive code-search Bash commands (grep -r, rg, find,
 fd, ag), built-in Grep, and built-in Glob — pointing at codegraph_search /
@@ -37,36 +38,7 @@ BLOCKS: dict[str, dict[str, str]] = {
     },
 }
 
-RESEARCH_BLOCK = (
-    "Research agent blocked: use CodeGraph + Semble directly",
-    "Research sub-agents are blocked. Use direct tools instead:\n"
-    '-> Orient: codegraph_context(task="...") — ALWAYS start here\n'
-    '-> Deep dive: codegraph_search → codegraph_explore(query="SymbolA SymbolB") — full source in one call\n'
-    "-> Trace: codegraph_callers/codegraph_callees/codegraph_impact\n"
-    '-> Intent search: semble search "query" ./ (or MCP mcp__semble__search)\n'
-    "-> Exact text: Grep/Glob (last resort)",
-)
-
-EXPLORE_BLOCK = (
-    "Explore-description agent blocked: use CodeGraph + Semble directly",
-    "Agent with Explore description is blocked. Use CodeGraph for structural analysis and "
-    "Semble for intent-based search instead.\n"
-    '-> Orient: codegraph_context(task="...") — ALWAYS start here\n'
-    '-> Deep dive: codegraph_search → codegraph_explore(query="SymbolA SymbolB") — full source in one call\n'
-    "-> Trace: codegraph_callers/codegraph_callees/codegraph_impact\n"
-    '-> Intent search: semble search "query" ./ (or MCP mcp__semble__search)',
-)
-
 BLOCKED_AGENT_REASONS: dict[str, tuple[str, str]] = {
-    "Explore": (
-        "Explore agent blocked: use CodeGraph + Semble",
-        "The Explore agent is blocked. Use CodeGraph for structural analysis and "
-        "Semble for intent-based search instead.\n"
-        '-> Orient: codegraph_context(task="...") — ALWAYS start here\n'
-        '-> Deep dive: codegraph_search → codegraph_explore(query="SymbolA SymbolB") — full source in one call\n'
-        "-> Trace: codegraph_callers/codegraph_callees/codegraph_impact\n"
-        '-> Intent search: semble search "query" ./ (or MCP mcp__semble__search)',
-    ),
     "Plan": (
         "Plan agent blocked: use /spec for structured planning",
         "The Plan agent is blocked. Use /spec for structured planning with TDD, "
@@ -81,9 +53,6 @@ SILENT_AGENT_TYPES: set[str] = {
 }
 
 BLOCKED_AGENT_TYPES: set[str] = set(BLOCKED_AGENT_REASONS)
-
-RESEARCH_PATTERN: re.Pattern[str] = re.compile(r"^research\b", re.IGNORECASE)
-EXPLORE_PATTERN: re.Pattern[str] = re.compile(r"\bexplore\b", re.IGNORECASE)
 
 GIT_GLOBAL_OPTS_RE: re.Pattern[str] = re.compile(r"\bgit\s+(?:-[Cc]\s+\S+\s+)+")
 
@@ -386,7 +355,7 @@ def _check_dangerous_git(command: str) -> tuple[str, str] | None:
 
 
 def run_tool_redirect() -> int:
-    """Block WebSearch/WebFetch/Explore/Plan agents, research-pattern and explore-pattern agents."""
+    """Block WebSearch/WebFetch and the Plan agent; allow Explore/Research fan-out subagents."""
     try:
         hook_data = json.load(sys.stdin)
     except (json.JSONDecodeError, OSError):
@@ -397,22 +366,11 @@ def run_tool_redirect() -> int:
     if tool_name == "Agent":
         tool_input = hook_data.get("tool_input", {})
         subagent_type = tool_input.get("subagent_type", "")
-        description = tool_input.get("description", "")
 
         if subagent_type in SILENT_AGENT_TYPES:
             return 0
         if subagent_type in BLOCKED_AGENT_TYPES:
             stderr_msg, deny_reason = BLOCKED_AGENT_REASONS[subagent_type]
-            sys.stderr.write(f"\033[0;31m[Pilot] {stderr_msg}\033[0m\n")
-            print(pre_tool_use_deny(deny_reason))
-            return 2
-        if RESEARCH_PATTERN.search(description):
-            stderr_msg, deny_reason = RESEARCH_BLOCK
-            sys.stderr.write(f"\033[0;31m[Pilot] {stderr_msg}\033[0m\n")
-            print(pre_tool_use_deny(deny_reason))
-            return 2
-        if EXPLORE_PATTERN.search(description):
-            stderr_msg, deny_reason = EXPLORE_BLOCK
             sys.stderr.write(f"\033[0;31m[Pilot] {stderr_msg}\033[0m\n")
             print(pre_tool_use_deny(deny_reason))
             return 2

@@ -260,10 +260,10 @@ If a worktree was created: bundle test + fix (and any review-driven fixes from 6
 
 ```bash
 git add <test_file> <fix_file>
-git commit -m "fix: <one-line description>"
+git commit -m "fix: <one-line description>" -m "Root cause: <file>:<line> — <what was wrong and why>"
 ```
 
-The conventional `fix:` prefix triggers a patch release if/when this branch ships. Do not split into multiple commits in the quick lane.
+The conventional `fix:` prefix triggers a patch release if/when this branch ships. Do not split into multiple commits in the quick lane. The body placeholder is the Step 1.5 statement with its `Confidence` tail dropped — the template already carries the `Root cause:` prefix, so don't repeat it inside the placeholder. It gives the next debugger the confirmed cause in `git log`.
 
 ### 6.3 Approval gate (only when enabled)
 

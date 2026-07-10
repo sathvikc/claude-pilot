@@ -67,6 +67,7 @@ Focus on issues hooks CANNOT catch. Review the diff for:
   - Test class structure that mirrors a recently-refactored production-class structure (test moved purely because the code moved, not because behaviour changed) → **suggestion**
   - Task declares `Trivial:` but does not name an existing covering test/verification command, OR the diff shows >5 net new lines of production code, OR introduces a new branch (`if`/`else`/`match`/`try`/`for` with a non-trivial body), OR adds a new public method/function, OR adds a new error path → **must_fix** (the implementer must remove the `Trivial:` field and write a real RED test)
 - **Error handling:** bare except, swallowed errors → **should_fix**
+- **Design smells (suggestion-tier):** match the diff hunks you have already read against this fixed Fowler baseline — **no extra tool calls for smell hunting**: Mysterious Name (rename), Duplicated Code (extract the shared shape), Feature Envy (move the method onto the data it envies), Data Clumps (bundle into one type), Primitive Obsession (give the concept its own type), Repeated Switches (polymorphism or one shared map), Shotgun Surgery (gather what changes together), Divergent Change (split per reason), Speculative Generality (delete; inline until a real need shows), Message Chains (hide the walk behind one method), Middle Man (cut it, call the target direct), Refused Bequest (drop inheritance, use composition). Binding rules: every baseline-only match is a judgement call → `severity: suggestion` with `category: design_smell`; when the same defect independently meets one of the rules in §2–§4 of this prompt (compliance, security, bugs, test quality, error handling, goal achievement), report it under that rule's category at its earned severity — the baseline never downgrades; a repo standard visible in the plan or files you already read overrides the baseline (do not hunt for standards); skip anything tooling already enforces. Keep this baseline in sync with `changes-review-codex.md`.
 
 ### 4. Goal Achievement
 
@@ -98,7 +99,7 @@ Output ONLY valid JSON (no markdown wrapper):
   "issues": [
     {
       "severity": "must_fix | should_fix | suggestion",
-      "category": "spec_compliance | risk_mitigation | definition_of_done | security | bugs | test_quality | error_handling | goal_achievement",
+      "category": "spec_compliance | risk_mitigation | definition_of_done | security | bugs | test_quality | error_handling | design_smell | goal_achievement",
       "title": "Brief title",
       "description": "What's wrong, with file path and line if applicable",
       "suggested_fix": "Specific fix"
@@ -121,7 +122,7 @@ Output ONLY valid JSON (no markdown wrapper):
 1. Plan is source of truth — if planned, it must be in the code
 2. Use git diff as primary review source — avoid reading full files
 3. Be adversarial — verify independently, don't trust self-reported completion
-4. Coverage over filtering: surface every issue that could cause incorrect behaviour, a test failure, a security or data-integrity problem, or a misleading result. Rank by `severity` — downgrade a borderline issue to `suggestion`, don't drop it. Omit only pure style/naming nits.
+4. Coverage over filtering: surface every issue that could cause incorrect behaviour, a test failure, a security or data-integrity problem, or a misleading result. Rank by `severity` — downgrade a borderline issue to `suggestion`, don't drop it. Omit only pure style/naming nits — §3's design-smell baseline is the sanctioned exception, reported at `suggestion`.
 5. Every issue needs a concrete fix with file path
 6. Security is always must_fix; test coverage follows the Test Quality tiers in §3 (new public class without test = must_fix; new public function on existing class without `Trivial:` = should_fix; private helper = no requirement)
 7. Empty issues array if no problems found

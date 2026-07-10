@@ -7,9 +7,9 @@ Pull `$PILOT_PLAN_APPROVAL_ENABLED` and `$PILOT_MODEL_SWITCH_ENABLED` from Step 
 | `planApproval` | `modelSwitch` | What this step does |
 |----------------|---------------|----------------------|
 | true | true | AskUserQuestion → on Yes: set Approved, **call `ExitPlanMode` (Opus → Sonnet) unless the 12.3 Fable check says skip, then auto-invoke `Skill('spec-implement')`** |
-| true | false | AskUserQuestion → on Yes: set Approved, **auto-invoke `Skill('spec-implement')`** (stays on Opus) |
+| true | false | AskUserQuestion → on Yes: set Approved, **auto-invoke `Skill('spec-implement')`** (stays on the active model) |
 | false | true | Silently set `Approved: Yes`, run the 12.3 Fable check, call `ExitPlanMode` unless it says skip, auto-invoke `Skill('spec-implement')` |
-| false | false | Silently set `Approved: Yes`, auto-invoke `Skill('spec-implement')` (stays on Opus) |
+| false | false | Silently set `Approved: Yes`, auto-invoke `Skill('spec-implement')` (stays on the active model) |
 
 ### 12.1 Notify (always)
 
@@ -87,7 +87,7 @@ Then:
 3. **Phrase the handoff as a request, not an observation.** Say "exiting plan mode — implementation continues on the opusplan execution leg", never "Model switch complete (Opus planning → Sonnet implementation)": you cannot observe your own model, and Claude Code may not have delivered the expected leg (e.g. Opus usage-limit fallback served Sonnet during planning). The status bar shows the observed model; point the user there if they ask.
 4. Invoke `Skill(skill='spec-implement', args='<plan-path>')` to continue in the same session.
 
-**If `PILOT_MODEL_SWITCH_ENABLED` is `"false"`:** do NOT call `ExitPlanMode` (no plan mode was entered). Invoke `Skill(skill='spec-implement', args='<plan-path>')` directly — implementation continues on Opus.
+**If `PILOT_MODEL_SWITCH_ENABLED` is `"false"`:** do NOT call `ExitPlanMode` (no plan mode was entered). Invoke `Skill(skill='spec-implement', args='<plan-path>')` directly — implementation continues on the active model.
 <!-- /CC-ONLY -->
 <!-- CODEX-START
 Codex has no callable phase-dispatch tool and model switching is not available in Codex CLI. Continue immediately with the `$spec-implement` skill instructions using arguments: `<plan-path>`.

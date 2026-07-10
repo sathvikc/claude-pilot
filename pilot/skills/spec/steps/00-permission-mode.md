@@ -15,13 +15,13 @@ echo "MODEL_SWITCH=${PILOT_MODEL_SWITCH_ENABLED:-true}"
 
 - **If `MODEL_SWITCH` is `true` (default):**
 
-  > ℹ️ Automated model switching is ON — planning runs on **Opus**, implementation & verification on **Sonnet**, automatically. This requires the **Opus Plan** model: if your status bar isn't already on it, run `/model opusplan` now (future sessions set this automatically). The Sonnet execution leg is Sonnet 5 (1M); the Opus planning leg runs at 200K (Claude Code has no `opusplan[1m]` alias — for 1M planning, turn Model Switching off and use `/model opus[1m]`). On **Fable 5** (`/model fable`), ignore the opusplan reminder — `/spec` runs the whole workflow on Fable; model switching does not apply (there is no `fableplan`). Prefer Opus for everything? Disable **Model Switching** in the Pilot Console → Settings → Automation.
+  > ℹ️ Automated model switching is ON — planning runs on **Opus 4.8 (1M)**, implementation & verification on **Sonnet 5 (1M)**, automatically. This requires the **Opus Plan** model: if your status bar isn't already on it, run `/model opusplan` now (future sessions set this automatically). On a single-model **Fable 5** session (`/model fable`), `/spec` runs the whole workflow on Fable instead — model switching does not apply (there is no `fableplan`). Prefer one model for everything? Disable **Model Switching** in the Pilot Console → Settings → Model Switching.
 
 - **If `MODEL_SWITCH` is `false`:**
 
-  > ℹ️ Model Switching is OFF — `/spec` runs entirely on **Opus** (or on **Fable 5** when that is your active model).
+  > ℹ️ Model Switching is OFF — `/spec` runs entirely on your active `/model` choice (Pilot defaults it to **Opus 4.8 (1M)**; a saved **Fable 5** model is preserved).
 
-We can only see that the active model is "Sonnet" — not whether it's really Opus Plan — so this is guidance, not a hard check. After showing the message, continue with the workflow.
+We can only see the resolved execution-leg model — not whether it's really Opus Plan — so this is guidance, not a hard check. After showing the message, continue with the workflow.
 <!-- /CC-ONLY -->
 <!-- CODEX-START
 **Skip** — permission mode and model switching are not applicable in Codex CLI. Proceed directly to Step 1.

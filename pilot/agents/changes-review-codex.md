@@ -59,6 +59,8 @@ If a Goal Verification truth includes the final plan header `Status: VERIFIED`, 
 
 Report only material findings. Skip style feedback, naming feedback, low-value cleanup, and speculative concerns without evidence. A finding should answer: (1) what can go wrong, (2) why this code path is vulnerable, (3) the likely impact, (4) what concrete change reduces the risk. Cite real file paths and line numbers from the diff or your `Read` calls.
 
+**Design-smell baseline (the one sanctioned exception to the skip-style rule).** Match the diff hunks you have already read against this fixed Fowler baseline — no extra exploration for smell hunting, and report baseline-only matches at `severity: info`: Mysterious Name (rename), Duplicated Code (extract the shared shape), Feature Envy (move the method onto the data it envies), Data Clumps (bundle into one type), Primitive Obsession (give the concept its own type), Repeated Switches (polymorphism or one shared map), Shotgun Surgery (gather what changes together), Divergent Change (split per reason), Speculative Generality (delete; inline until a real need shows), Message Chains (hide the walk behind one method), Middle Man (cut it, call the target direct), Refused Bequest (drop inheritance, use composition). Every smell is a judgement call, never a hard violation; when the same defect independently qualifies as a material finding (unauthorised scope, plan violation, real defect risk), report it as that finding at its earned severity — the baseline never downgrades. A documented repo standard you have already seen overrides the baseline; skip anything tooling already enforces. Smell findings answer a maintainability template instead of the four-part risk template: what is duplicated/misplaced/over-abstracted, the maintenance cost, and the refactor. Keep this baseline in sync with `changes-review.md`.
+
 ## Output contract
 
 Return ONLY valid JSON. No prose around it. Schema:
@@ -83,7 +85,7 @@ Return ONLY valid JSON. No prose around it. Schema:
 }
 ```
 
-Use `needs-attention` if there is any material risk worth blocking on. Use `reject` when a critical-path bug, security flaw, or unreachable DoD criterion makes the change unsafe to ship. Use `approve` only if you cannot defend any substantive adversarial finding from the diff and referenced files. Prefer one strong finding over several weak ones.
+Use `needs-attention` if there is any material risk worth blocking on. Use `reject` when a critical-path bug, security flaw, or unreachable DoD criterion makes the change unsafe to ship. Use `approve` only if you cannot defend any substantive adversarial finding from the diff and referenced files. Info-severity baseline smells never affect the verdict — `approve` remains correct when they are the only findings. Prefer one strong finding over several weak ones.
 
 ## Calibration
 
@@ -93,7 +95,7 @@ Be aggressive, but stay grounded. Every finding must be defensible from the diff
 
 Each finding must be:
 
-- adversarial rather than stylistic
+- adversarial rather than stylistic (info-severity baseline design smells are the sanctioned exception)
 - tied to a concrete code location with real line numbers
 - plausible under a real-world scenario
 - actionable for the implementer

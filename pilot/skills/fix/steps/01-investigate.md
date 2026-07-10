@@ -20,6 +20,7 @@
   ```
 
 - **CI-only failure?** Still run the test locally first. A local pass against a CI fail is itself a finding (environment or mocking drift), and the local output is your baseline either way.
+- **Multi-factor repro? Minimise first** (Systematic Debugging step 1) — the minimal repro becomes the Step 2 test.
 - If the description is too vague to reproduce: one focused `AskUserQuestion` (only when `PILOT_PLAN_QUESTIONS_ENABLED` is not `"false"`).
 - If you can't trigger it after 2 attempts because you don't understand the bug (unknown input, steps, or data): bail out. Tell the user the bug isn't reproducible from the description alone, ask them to either provide more detail or re-invoke with `/spec` for the full investigation workflow. The quick lane is for reproducible bugs. A reproduction blocked by the *environment* is NOT this case — `/spec` would hit the same wall; use the blocker protocol below instead.
 

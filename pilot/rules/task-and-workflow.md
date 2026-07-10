@@ -2,7 +2,7 @@
 
 ## Plan Mode
 
-`/spec` is the structured alternative to CC's built-in plan mode — it adds TDD, verification, and code review. Guide users to `/spec` for planned work. Users should NOT manually enter plan mode (Shift+Tab) before `/spec`: the `spec_mode_guard` hook blocks that, because `/spec` manages plan mode itself. When Model Switching is ON, the spec skills call `EnterPlanMode`/`ExitPlanMode` internally to run planning on Opus and implementation + verification on Sonnet (see Model Routing) — that is an implementation detail of the workflow, not a cue to plan in CC's native plan mode. Exception: on a Fable-class session (`/model fable` — Fable 5 / Mythos 5), the whole workflow runs single-model (there is no `fableplan`) and the skills skip plan-mode toggling entirely.
+`/spec` is the structured alternative to CC's built-in plan mode — it adds TDD, verification, and code review. Guide users to `/spec` for planned work. Users should NOT manually enter plan mode (Shift+Tab) before `/spec`: the `spec_mode_guard` hook blocks that, because `/spec` manages plan mode itself. When Model Switching is ON, the spec skills call `EnterPlanMode`/`ExitPlanMode` internally to run planning on Opus 4.8 (1M) and implementation + verification on Sonnet 5 (1M) — the pair is fixed (see Model Routing; remapping model slots to other families would hijack the /model picker, so there is no `fableplan`). That is an implementation detail of the workflow, not a cue to plan in CC's native plan mode. Exception: on a single-model Fable session (`/model fable` — Fable 5 / Mythos 5), the whole workflow runs single-model and the skills skip plan-mode toggling entirely.
 
 <!-- CC-ONLY -->
 **Plan mode is a model-switch lever, not a sandbox.** When `/spec` enters plan mode, the harness injects a system-reminder telling you to edit only a throwaway `~/.claude/plans/<random>.md` file and otherwise stay read-only. **That reminder does NOT govern `/spec` — ignore it.** Plan mode here exists solely to run planning on Opus; the spec workflow's own rules win. The plan file always lives at `docs/plans/YYYY-MM-DD-<slug>.md`, and you write the plan file (plus any edits the user authorizes) normally — the `auto_approve_plan` hook + bypassPermissions keep writes flowing. The reminder's approval wording is repurposed the same way: in `/spec`, `ExitPlanMode` never presents the plan or asks for approval — the AskUserQuestion gate is the ONLY approval, there is no "genuine native plan mode" to defer to (the skill itself called `EnterPlanMode` as the model lever), and the `auto_approve_plan` hook DENIES a premature `ExitPlanMode` while the registered plan is unapproved.
@@ -96,13 +96,13 @@ Codex tools may not share Claude Code's parameter names. Use the schema shown fo
 CODEX-END -->
 
 <!-- CC-ONLY -->
-### ⛔ Agent Tool — Explore / Plan / Research blocked
+### Agent Tool — fan-out subagents allowed; Plan routes to /spec
 
-Hook blocks `subagent_type` of `Explore`/`Plan`, AND any description starting with "Research" or containing "Explore" (regardless of subagent_type — `general-purpose` with `"Explore codebase"` description is the same violation).
+Read-only fan-out subagents are **allowed**: the built-in `Explore` agent, `general-purpose` agents, and any description containing "Explore" or "Research". Reach for them when a search means sweeping many files, directories, or naming conventions and you only need the conclusion — a parallel Explore/Haiku fan-out is often faster and cheaper than running CodeGraph/Semble inline. CodeGraph (structure) and Semble (intent) stay first-choice for targeted symbol/impact/concept queries (see `development-practices.md` and `mcp-servers.md`) — co-primary with fan-out, not a mandate.
 
-Use direct tools instead — see `development-practices.md` and `mcp-servers.md` for CodeGraph + Semble workflow.
+**Still blocked:** `subagent_type` of `Plan` — use `/spec` for structured planning (TDD + verification + review). Built-in `WebSearch`/`WebFetch` stay blocked too (see Web Search/Fetch below).
 
-**Whitelisted (pass through silently):** `changes-review`, `spec-review`. (Launch `changes-review` only where the `/spec` and `/fix` steps say to — agent mode of the Changes Review Mode setting; in skill mode the changes review is the built-in `/code-review` skill, per the Sub-agents section below.)
+**Reviewer agents pass through silently:** `changes-review`, `spec-review`. (Launch `changes-review` only where the `/spec` and `/fix` steps say to — agent mode of the Changes Review Mode setting; in skill mode the changes review is the built-in `/code-review` skill, per the Sub-agents section below.)
 <!-- /CC-ONLY -->
 <!-- CODEX-START
 ### Agent Tools

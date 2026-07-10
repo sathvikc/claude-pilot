@@ -100,9 +100,9 @@ No unrequested abstractions (no interface with one implementation, no factory fo
 
 **No fixes without root cause investigation.** Phases run sequentially:
 
-1. **Root cause** — read errors completely, reproduce consistently, check `git diff`, instrument at boundaries.
+1. **Root cause** — read errors completely, reproduce consistently, check `git diff`, instrument at boundaries. For multi-factor repros, **minimise**: shrink to the smallest scenario that still fails, cutting elements (halve first, then one at a time) and re-running after each cut; done when every remaining element is load-bearing. A minimal repro shrinks the hypothesis space and becomes the regression test.
 2. **Pattern analysis** — `semble search` to find working examples and related code; `semble find-related` from the bug site to discover parallel implementations. Compare; identify ALL differences.
-3. **Hypothesis** — specific, falsifiable ("state resets because component remounts on route change"). Test with minimal change, one variable at a time.
+3. **Hypothesis** — when the trace hasn't conclusively pinned the cause, generate **2–3 ranked, specific, falsifiable hypotheses before testing the first**; single-hypothesis generation anchors on the first plausible idea. Each names a concrete mechanism ("state resets because component remounts on route change") and the prediction that would confirm or refute it — no stated prediction means discard or sharpen. Test the top one with minimal change, one variable at a time.
 4. **Implementation** — failing test first (TDD), single fix, verify completely.
 
 **Red flags → STOP:** "quick fix for now," multiple changes at once, proposing fixes before tracing data flow, 2+ failed fixes. **3+ failed fixes = architectural problem** — question the pattern, don't fix again.
@@ -145,6 +145,16 @@ result = await wait_for(lambda: get_result() is not None, timeout=5.0)
 - **Ghost** — past constraints baked in that no longer apply
 
 Ghost constraints are the highest-value to find — they lock out options nobody realises are available. Ask "why can't we do X?" — if nobody can name a current requirement, it may be a ghost.
+
+### Merge Conflict Resolution
+
+For an in-progress merge/rebase conflict:
+
+1. **Survey the state** — conflicting files, both sides' git history.
+2. **Find the primary sources** for each hunk whose correct resolution isn't evident from the code itself — commit messages, PRs, original issues — to understand why each side changed. Regenerate generated files (lockfiles, build output) instead of hand-resolving them.
+3. **Resolve hunk by hunk, preserving both intents.** When they're incompatible: if the merge's stated goal or the user's request discriminates, pick that side and note the trade-off; when neither the primary sources nor the goal settle it, stop and ask — never invent new behaviour inside a resolution. **Never `--abort` on your own initiative** (an explicit user instruction to abort is the exception): resolving is the default; abandoning the merge is the user's call.
+4. **Run the project's checks** (typecheck → tests → format) and fix anything the merge broke.
+5. **Completing the merge** (`git add`, `git commit`, `git rebase --continue`) follows the Git Operations rules below.
 
 ### Git Operations
 

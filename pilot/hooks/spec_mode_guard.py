@@ -7,11 +7,15 @@
 - Model gate (runs in BOTH toggle states, expected model flipped):
     * Switching ON (default): the session runs `opusplan`, whose non-plan leg is
       Sonnet, so at /spec-submit time a correct user shows Sonnet. A non-Sonnet
-      model (e.g. plain Opus) means they never ran `/model opusplan` -- blocked.
+      model (e.g. plain Opus) means they never ran `/model opusplan` -- blocked,
+      UNLESS settings.json shows `opusplan` is the selected model (the async
+      statusline cache may lag the `/model opusplan` the user just ran).
       A user wrongly on plain Sonnet is indistinguishable from opusplan and is
       allowed (accepted false-negative, avoids false-blocking correct users).
     * Switching OFF: the whole workflow runs on Opus and only Opus may enter plan
-      mode, so a non-Opus model is blocked with a `/model opus[1m]` prompt.
+      mode, so a non-Opus model is blocked with a `/model opus[1m]` prompt. An
+      explicit `opusplan` selection is blocked with targeted guidance instead:
+      turn Model Switching ON (Console) or run `/model opus[1m]`.
     * Fable-family models (e.g. `claude-fable-5`, `claude-mythos-5`, `best`)
       pass the gate in BOTH states: they run the whole workflow single-model,
       so neither prompt applies.
@@ -22,6 +26,15 @@ Reads:
   - `model_id` from the statusline cache at ``~/.pilot/sessions/<sid>/context-pct.json``
     -- the statusline writes this every render and Claude Code UserPromptSubmit
     stdin does NOT include the active model field.
+  - `model` from ``$CLAUDE_CONFIG_DIR/settings.json`` (default ``~/.claude``)
+    -- the *selected* model alias, persisted synchronously by `/model`. The
+    statusline cache only ever holds the *resolved* model id (opusplan resolves
+    to its Sonnet leg outside plan mode), so this is the only place an explicit
+    `opusplan` selection is observable. Consulted as a tie-breaker when the
+    cache would block: ON + opusplan selected passes (the cache may lag the
+    `/model opusplan` the user just ran); OFF + opusplan selected blocks with
+    guidance naming the Model Switching toggle instead of the generic
+    requires-Opus message.
 """
 
 from __future__ import annotations
@@ -107,6 +120,55 @@ def _is_fable(model: str) -> bool:
     if base in ("fable", "mythos", "best"):
         return True
     return bool(_CLAUDE_FABLE_MYTHOS_PREFIX_RE.match(base))
+
+
+def _is_opusplan(model: str) -> bool:
+    """Return True iff ``model`` is the opusplan alias.
+
+    Mirror of :func:`_is_opus`. Matches the bare ``opusplan`` alias after
+    stripping the ``[1m]`` suffix, so a legacy ``opusplan[1m]`` value an older
+    Pilot wrote to settings.json still counts.
+    """
+    if not isinstance(model, str) or not model:
+        return False
+    return _strip_1m(model) == "opusplan"
+
+
+def is_single_model_fable_session() -> bool:
+    """True iff the session runs single-model on a Fable-class model.
+
+    The settings.json *selection* is authoritative: `/model` persists it
+    synchronously, and an ``opusplan`` selection means model switching manages
+    the legs -- the skills must still toggle plan mode even if a stale
+    statusline cache shows a Fable id. Only without a usable selection does
+    the async cache decide. Consumed by the /spec skills' ON_FABLE check.
+    """
+    selected = _read_selected_model_from_settings()
+    if selected is not None:
+        if _is_opusplan(selected):
+            return False
+        if _is_fable(selected):
+            return True
+    return _is_fable(_read_active_model_from_cache() or "")
+
+
+def _read_selected_model_from_settings() -> str | None:
+    """Read the *selected* model alias from Claude Code's settings.json, or None.
+
+    `/model <choice>` persists the selection here synchronously ("saved as your
+    default for new sessions"). Unlike the statusline cache -- async, and only
+    ever holding the *resolved* model id -- this is where the ``opusplan``
+    alias itself is observable. The value is global across sessions while the
+    cache is per-session, so it is only consulted as a tie-breaker when the
+    cache would block, never to override a cache that already passes the gate.
+    """
+    claude_dir = Path(os.environ.get("CLAUDE_CONFIG_DIR", str(Path.home() / ".claude")))
+    try:
+        data = json.loads((claude_dir / "settings.json").read_text())
+    except (OSError, json.JSONDecodeError):
+        return None
+    model = data.get("model") if isinstance(data, dict) else None
+    return model if isinstance(model, str) and model else None
 
 
 def _read_active_model_from_cache() -> str | None:
@@ -262,12 +324,56 @@ def run_spec_mode_guard() -> int:
             "Current model: " + (active_model or "unknown") + ". Run '/model opus[1m]' (or '/model opus').\033[0m\n"
         )
 
-    if active_model is None:
+    model_ok = active_model is not None and (model_is_correct(active_model) or _is_fable(active_model))
+
+    # The cache can never show 'opusplan' -- only its resolved leg -- so when it
+    # would block, consult the alias the user actually SELECTED (settings.json,
+    # written synchronously by /model) before issuing model guidance. Read lazily:
+    # a cache that already passes the gate never needs (or touches) settings.
+    opusplan_selected = False
+    if not model_ok:
+        selected_model = _read_selected_model_from_settings()
+        opusplan_selected = selected_model is not None and _is_opusplan(selected_model)
+
+    if not model_ok and opusplan_selected:
+        if not model_switch_on:
+            # OFF + an explicit opusplan selection is a real misconfiguration
+            # (the skills skip plan mode, so planning would run opusplan's
+            # Sonnet leg) -- block regardless of cache state, but name the
+            # actual conflict and BOTH ways out instead of the generic
+            # requires-Opus message that contradicts the user's /model choice.
+            print(
+                json.dumps(
+                    {
+                        "decision": "block",
+                        "reason": (
+                            "[Pilot] You are on the 'opusplan' model but Model Switching is OFF, "
+                            "so /spec would run planning on opusplan's execution leg instead of Opus. "
+                            "Either turn Model Switching ON (Pilot Console -> Settings -> "
+                            "Model Switching) to use opusplan, or run '/model opus[1m]' (or "
+                            "'/model opus') to run the whole workflow on Opus, then try again. "
+                            "(Resuming an existing plan with '/spec <path/to/plan.md>' is allowed "
+                            "on any model.)"
+                        ),
+                    }
+                )
+            )
+            sys.stderr.write(
+                "\033[0;31m[Pilot] /spec blocked: 'opusplan' needs Model Switching ON "
+                "(Console -> Settings -> Model Switching), or run '/model opus[1m]' (or "
+                "'/model opus') to stay single-model on Opus.\033[0m\n"
+            )
+            return 2
+        # ON + opusplan selected: correctly configured. The cache may still
+        # hold the pre-switch id right after `/model opusplan` (async render)
+        # or the Opus leg from a plan-mode render -- blocking here would tell
+        # the user to run the command they just ran. Allow.
+    elif active_model is None:
         # Cache may not have been written yet (very first prompt of a fresh
         # session, or a transient render that omitted model_id). Fall open but
         # warn so the user knows the model check did not run.
         sys.stderr.write(cache_warn)
-    elif not (model_is_correct(active_model) or _is_fable(active_model)):
+    elif not model_ok:
         print(json.dumps({"decision": "block", "reason": block_reason}))
         sys.stderr.write(block_stderr)
         return 2

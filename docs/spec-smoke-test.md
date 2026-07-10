@@ -7,9 +7,9 @@ automated model switching between the planning and execution legs.
 
 | Phase | Model | Context window | How switched |
 |-------|-------|-----------------|---------------|
-| Planning (`spec-plan`) | Opus 4.8 (plan mode) | 200K | `EnterPlanMode` called at start of planning (opusplan → Opus) |
-| Implementation (`spec-implement`) | Sonnet 5 (`claude-sonnet-5`) | 967k tokens (native 1M) | `ExitPlanMode` called after plan approval (opusplan → Sonnet) |
-| Verification (`spec-verify`) | Sonnet 5 (`claude-sonnet-5`) | 967k tokens (native 1M) | Same session as implementation — no further switch needed |
+| Planning (`spec-plan`) | Opus 4.8 (`claude-opus-4-8[1m]`; plan mode) | 1M | `EnterPlanMode` called at start of planning (opusplan → Opus via the same-family `ANTHROPIC_DEFAULT_OPUS_MODEL` pin) |
+| Implementation (`spec-implement`) | Sonnet 5 (`claude-sonnet-5`) | ~967k tokens (native 1M) | `ExitPlanMode` called after plan approval (opusplan → Sonnet) |
+| Verification (`spec-verify`) | Sonnet 5 (`claude-sonnet-5`) | ~967k tokens (native 1M) | Same session as implementation — no further switch needed |
 
 The implementation-leg reading above was confirmed directly via `/context` mid-run:
 `Sonnet 5 · claude-sonnet-5 · 126.5k/967k tokens (13%)`.
@@ -17,11 +17,12 @@ The implementation-leg reading above was confirmed directly via `/context` mid-r
 ## Why the switch happens
 
 With `PILOT_MODEL_SWITCH_ENABLED=true` (default), Claude Code runs on the `opusplan`
-model alias. Under this alias, plan mode resolves to Opus and non-plan-mode resolves
-to Sonnet. `/spec` calls `EnterPlanMode` before planning and `ExitPlanMode` right after
-plan approval, so the model flip is automatic — no manual `/model` command needed
-mid-workflow. Claude Code has no `opusplan[1m]` alias, so under Model Switching ON the
-planning leg is capped at 200K while the Sonnet execution leg gets Sonnet 5's native 1M.
+model alias: plan mode resolves to Opus and non-plan-mode to Sonnet. Pilot additionally
+pins the opus slot to `claude-opus-4-8[1m]` (same family — cross-family pins would hijack
+the /model picker), which lifts the planning leg from 200K to 1M; the Sonnet 5 execution
+leg is natively 1M. `/spec` calls `EnterPlanMode` before planning and `ExitPlanMode`
+right after plan approval, so the model flip is automatic — no manual `/model` command
+needed mid-workflow.
 
 ## Contrast: Model Switching OFF
 

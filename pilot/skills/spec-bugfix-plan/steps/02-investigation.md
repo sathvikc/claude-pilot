@@ -19,6 +19,7 @@ CODEX-END -->
 - Vague? One focused `AskUserQuestion`.
 - Reliable repro? Steps?
 - **Not reproducible after 2 attempts:** STOP guessing. `AskUserQuestion` for the missing signal — exact command, input, environment, stack trace, or recording.
+- **Multi-factor repro? Minimise first** (Systematic Debugging step 1 in `development-practices.md`): the minimal repro shrinks the Step 2.3 trace space and becomes the RED test in implementation.
 - **Intermittent (flaky / race):** trigger 10+ times, record state at failure. Flaky bugs need a test that **forces** the race (deterministic ordering, frozen clock, blocked event loop), not one that hopes to hit it.
 
 ### 2.2 Recent changes
@@ -85,6 +86,8 @@ Tools: CodeGraph, Semble (`semble search`/`semble find-related` or `mcp__semble_
 3. List every difference — don't assume "that can't matter".
 
 ### 2.5 Root cause statement
+
+**Trace inconclusive? Rank hypotheses before testing any** (Systematic Debugging step 3 in `development-practices.md`): when 2.3/2.4 did not conclusively pin the cause, list 2–3 ranked, specific, falsifiable hypotheses and test the top one first; the ranked list goes into the plan's `## Investigation` section.
 
 State clearly:
 

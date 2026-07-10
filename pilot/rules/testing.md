@@ -99,6 +99,7 @@ When a function gains a new dependency (subprocess, helper, I/O), update ALL exi
 - **Unnecessary mocks** — only for external deps.
 - **Test-only methods in production** — never add methods/properties/flags purely for test access. Refactor so behavior is observable through public interfaces.
 - **Mocking without understanding** — a mock that doesn't reflect real behavior is a lie. Tests pass against the lie, fail against reality.
+- **Tautological tests** — the assertion recomputes the expected value the way the implementation does (`expect(calculateTotal(items)).toBe(items.reduce((s, i) => s + i.price, 0))`) or asserts a constant equal to itself: it passes by construction and can never disagree with the code. Expected values come from an independent source of truth — a known-good literal, a worked example, the spec. A spec-named invariant asserted property-style is legitimate (see *Property-Based Testing*); the anti-pattern is deriving the expectation from the implementation's own logic.
 
 ### Test Parsimony — what NOT to do
 
@@ -131,7 +132,7 @@ Four mental checks before committing any assertion:
 
 1. **One-character bug check** — would a one-char bug in the implementation still pass? `assert result` (truthy) ≠ `assert result == 42` (exact). If a tiny mistake survives, the assertion is too weak.
 2. **Right field check** — `response.status` vs `response.body.error` is a common confusion. Confirm the assertion targets the field that carries meaning.
-3. **Computed value check** — for hand-derived expected values, verify via a second path (different code, manual calculation, reference). Don't trust your own arithmetic.
+3. **Computed value check** — for hand-derived expected values, verify via a second path (different code, manual calculation, reference). Don't trust your own arithmetic. The second path must be independent of the implementation (see *Tautological tests* above).
 4. **Spec-named behavior check** — assert the behavior the spec/contract names, not what you imagined. "User can perform X within rate limit" is named; "calls `_internal_fn` with `'QUEUED'`" is mechanics.
 
 If you can't write a precise assertion because the spec is ambiguous, **STOP and ask** — don't pattern-match a plausible expected value.

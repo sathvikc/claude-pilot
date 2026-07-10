@@ -1,4 +1,4 @@
-"""Tests for tool_redirect hook — blocks WebSearch/WebFetch/Explore/PlanMode/research agents."""
+"""Tests for tool_redirect hook - blocks WebSearch/WebFetch/Plan agent; allows Explore/Research fan-out."""
 
 from __future__ import annotations
 
@@ -73,12 +73,6 @@ class TestBlockedTools:
 class TestBlockedAgentTypes:
     """Agent types that should be hard-blocked (exit code 2)."""
 
-    def test_blocks_explore_agent(self):
-        code, output = _run_with_input("Agent", {"subagent_type": "Explore", "prompt": "find files"})
-        assert code == 2
-        assert "Semble" in output
-        assert "CodeGraph" in output
-
     def test_blocks_plan_agent(self):
         code, output = _run_with_input("Agent", {"subagent_type": "Plan", "prompt": "plan impl"})
         assert code == 2
@@ -87,6 +81,11 @@ class TestBlockedAgentTypes:
 
 class TestAgentPassthrough:
     """Non-blocked Agent calls pass through silently — no output."""
+
+    def test_allows_explore_agent(self):
+        code, output = _run_with_input("Agent", {"subagent_type": "Explore", "prompt": "find files"})
+        assert code == 0
+        assert output == ""
 
     def test_allows_agent_general_purpose(self):
         code, output = _run_with_input(
@@ -101,17 +100,19 @@ class TestAgentPassthrough:
         assert output == ""
 
 
-class TestResearchAgentBlocked:
-    """Agent with description starting with 'Research' is blocked."""
+class TestResearchDescriptionAllowed:
+    """Agent with a 'Research' description passes through silently - the block was
+    removed (Research is the same read-only fan-out category as Explore)."""
 
-    def test_blocks_research_first_word(self):
+    def test_allows_research_first_word(self):
         code, output = _run_with_input("Agent", {"description": "Research Extensions system", "prompt": "explore"})
-        assert code == 2
-        assert "codegraph_context" in output
+        assert code == 0
+        assert output == ""
 
-    def test_blocks_research_case_insensitive(self):
+    def test_allows_research_case_insensitive(self):
         code, output = _run_with_input("Agent", {"description": "research codebase architecture", "prompt": "explore"})
-        assert code == 2
+        assert code == 0
+        assert output == ""
 
     def test_allows_research_not_first_word(self):
         code, output = _run_with_input("Agent", {"description": "Find research papers", "prompt": "search"})
@@ -124,34 +125,31 @@ class TestResearchAgentBlocked:
         assert output == ""
 
 
-class TestExploreDescriptionBlocked:
-    """Agent with 'Explore' anywhere in description is blocked (regardless of subagent_type)."""
+class TestExploreDescriptionAllowed:
+    """Agent with 'Explore' in the description passes through silently - the block
+    was removed so an Explore / general-purpose fan-out is no longer denied."""
 
-    def test_blocks_explore_first_word(self):
+    def test_allows_explore_first_word(self):
         code, output = _run_with_input(
             "Agent",
             {"subagent_type": "general-purpose", "description": "Explore console UI codebase", "prompt": "look around"},
         )
-        assert code == 2
-        assert "Semble" in output
+        assert code == 0
+        assert output == ""
 
-    def test_blocks_explore_mid_sentence(self):
+    def test_allows_explore_mid_sentence(self):
         code, output = _run_with_input("Agent", {"description": "Deep explore of auth module", "prompt": "search"})
-        assert code == 2
+        assert code == 0
+        assert output == ""
 
-    def test_blocks_explore_case_insensitive(self):
+    def test_allows_explore_case_insensitive(self):
         code, output = _run_with_input("Agent", {"description": "EXPLORE the project structure", "prompt": "look"})
-        assert code == 2
+        assert code == 0
+        assert output == ""
 
-    def test_blocks_explore_no_subagent_type(self):
+    def test_allows_explore_no_subagent_type(self):
         code, output = _run_with_input(
             "Agent", {"description": "Explore and understand the codebase", "prompt": "look"}
-        )
-        assert code == 2
-
-    def test_allows_non_explore_description(self):
-        code, output = _run_with_input(
-            "Agent", {"subagent_type": "general-purpose", "description": "Fix test failures", "prompt": "fix"}
         )
         assert code == 0
         assert output == ""
@@ -172,8 +170,9 @@ class TestAllowedSpecReviewerAgents:
 
 
 class TestAllowedReviewerAgents:
-    """Whitelisted reviewer agents pass through silently even when their
-    description matches the Research/Explore block patterns."""
+    """Whitelisted reviewer agents pass through silently, including when their
+    description contains 'Research'/'Explore' (guards against a future
+    description-based block re-catching a reviewer)."""
 
     def test_changes_review_bypasses_research_pattern(self):
         """A whitelisted reviewer with a 'Research' description must NOT be blocked."""
@@ -316,10 +315,10 @@ class TestSubprocessIntegration:
         assert exit_code == 0
         assert stdout.strip() == ""
 
-    def test_research_agent_blocked(self):
+    def test_research_agent_allowed(self):
         exit_code, stdout, _ = _run_subprocess("Agent", {"description": "Research API design"})
-        assert exit_code == 2
-        assert _is_denied(stdout)
+        assert exit_code == 0
+        assert not _is_denied(stdout)
 
     def test_spec_reviewers_silent(self):
         for subagent in ["changes-review", "spec-review"]:
@@ -328,24 +327,22 @@ class TestSubprocessIntegration:
             assert not _is_denied(stdout)
             assert not _has_warning_context(stdout)
 
-    def test_explore_agent_blocked(self):
+    def test_explore_agent_allowed(self):
         exit_code, stdout, _ = _run_subprocess("Agent", {"subagent_type": "Explore"})
-        assert exit_code == 2
-        assert "Semble" in stdout
-        assert "CodeGraph" in stdout
+        assert exit_code == 0
+        assert not _is_denied(stdout)
 
     def test_plan_agent_blocked(self):
         exit_code, stdout, _ = _run_subprocess("Agent", {"subagent_type": "Plan"})
         assert exit_code == 2
         assert "/spec" in stdout
 
-    def test_explore_description_blocked(self):
+    def test_explore_description_allowed(self):
         exit_code, stdout, _ = _run_subprocess(
             "Agent", {"subagent_type": "general-purpose", "description": "Explore console UI codebase"}
         )
-        assert exit_code == 2
-        assert _is_denied(stdout)
-        assert "Semble" in stdout
+        assert exit_code == 0
+        assert not _is_denied(stdout)
 
     def test_whitelisted_reviewer_allowed_with_research_description(self):
         exit_code, stdout, _ = _run_subprocess(
@@ -993,7 +990,7 @@ class TestSearchNudgeSafety:
         assert code == 2
         assert _is_denied(output)
 
-    def test_existing_explore_agent_still_denies(self):
+    def test_explore_agent_now_allowed(self):
         code, output = _run_with_input("Agent", {"subagent_type": "Explore", "prompt": "find files"})
-        assert code == 2
-        assert _is_denied(output)
+        assert code == 0
+        assert not _is_denied(output)

@@ -182,11 +182,22 @@ def _exit_plan_mode_decision(data: dict) -> dict:
     # planning leg - never escalate a session that was not in bypass.
     if data.get("permission_mode", "plan") == "plan" and _pre_plan_bypass_evidence():
         _arm_restore_marker()
-    return {
+    decision = {
         "behavior": "allow",
         "updatedPermissions": [dict(_RESTORE_SETMODE)],
         "message": "ExitPlanMode allowed (model switch); restoring bypassPermissions - permission action only, NOT plan approval",
     }
+    # ExitPlanMode is a "requires user interaction" tool: per the CC hooks
+    # reference, behavior:"allow" ALONE does NOT skip its plan-approval prompt.
+    # Echoing the injected tool_input (plan + planFilePath) back as updatedInput
+    # signals the interaction was collected, so the tool runs without prompting.
+    # The plan-approval gate in /spec is the separate AskUserQuestion step, so
+    # suppressing this redundant confirmation is safe. Fail-open: a missing or
+    # non-dict tool_input just omits updatedInput (falls back to today's prompt).
+    tool_input = data.get("tool_input")
+    if isinstance(tool_input, dict):
+        decision["updatedInput"] = dict(tool_input)
+    return decision
 
 
 # Modes a plan exit involuntarily drops the session into: acceptEdits

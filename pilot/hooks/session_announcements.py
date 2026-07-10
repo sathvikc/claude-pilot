@@ -41,13 +41,13 @@ ANNOUNCEMENTS: list[dict[str, str]] = [
             "  - Pilot sets the Opus Plan model in your settings.json, so new Claude sessions start on it automatically.\n\n"
             "What you need to do:\n"
             "  - Run `/model opusplan` in this session (future sessions set this automatically).\n"
-            "  - The Opus Plan model runs Opus while planning (plan mode) and Sonnet for everything else.\n"
-            "    The Sonnet leg is Sonnet 5 (1M); the Opus planning leg runs at 200K (opusplan has no 1M\n"
-            "    variant). For 1M planning, turn Model Switching OFF and use `/model opus[1m]`.\n"
+            "  - The Opus Plan model runs the Plan Model while planning (plan mode) and the Execution\n"
+            "    Model for everything else -- both configurable in Console -> Settings -> Model\n"
+            "    Switching, and both at the 1M context tier.\n"
             "  - /spec now checks your model first: if you are not on opusplan it stops and reminds you\n"
             "    to run `/model opusplan` before planning (when Model Switching is OFF it requires Opus).\n\n"
             "To disable (run entire /spec workflow on Opus instead):\n"
-            "  - Open the Pilot Console -> Settings -> Automation -> turn off 'Model Switching'.\n"
+            "  - Open the Pilot Console -> Settings -> Model Switching -> turn off 'Model Switching'.\n"
             "  - Your settings.json will be patched to `opus[1m]` (Opus at 1M; on Max, 1M needs usage credits).\n\n"
             "Docs: https://pilot-shell.com/docs/features/model-routing"
         ),
@@ -57,14 +57,33 @@ ANNOUNCEMENTS: list[dict[str, str]] = [
         "message": (
             "Pilot Shell -- Claude Fable 5 is fully supported.\n\n"
             "What this means:\n"
-            "  - Run `/model fable` (or `fable[1m]`) and Pilot preserves your choice: settings syncs\n"
-            "    and startups no longer overwrite a saved Fable model with opusplan/opus.\n"
-            "  - /spec runs the WHOLE workflow on Fable in both Model Switching states -- there is\n"
-            "    no 'fableplan' (yet), so plan/implement/verify stay on one frontier model and the\n"
-            "    skills skip plan-mode model toggling automatically.\n"
+            "  - With Model Switching OFF, run `/model fable` (or `fable[1m]`) and Pilot preserves\n"
+            "    your choice: settings syncs and startups no longer overwrite a saved Fable model.\n"
+            "  - A single-model Fable session runs the WHOLE /spec workflow on Fable -- plan /\n"
+            "    implement / verify stay on one frontier model and the skills skip plan-mode\n"
+            "    model toggling automatically.\n"
             "  - Statusline and Console Usage show Fable 5 / Mythos 5 names and costs.\n\n"
             "Note: Fable's 1M context stays available -- Pilot never leaves\n"
             "CLAUDE_CODE_DISABLE_1M_CONTEXT=true while a Fable model is selected.\n\n"
+            "Docs: https://pilot-shell.com/docs/features/model-routing"
+        ),
+    },
+    {
+        "id": "model-switching-1m-planning",
+        "message": (
+            "Pilot Shell -- Model Switching now runs BOTH legs at 1M context.\n\n"
+            "What changed:\n"
+            "  - The opusplan planning leg (Opus 4.8) now runs at 1M instead of 200K: Pilot pins\n"
+            "    ANTHROPIC_DEFAULT_OPUS_MODEL to the opus [1m] ID. The Sonnet 5 execution leg\n"
+            "    was already natively 1M.\n"
+            "  - Console -> Settings -> Model Switching shows the fixed pair (Opus 4.8 planning,\n"
+            "    Sonnet 5 execution). The pair is not configurable: remapping the model slots to\n"
+            "    other families would hijack the /model picker.\n\n"
+            "Behavior change:\n"
+            "  - While Model Switching is ON, it now also overrides a manually saved /model choice\n"
+            "    (including a saved Fable model) on the next settings sync or restart. Turn Model\n"
+            "    Switching OFF to control the model entirely via /model.\n\n"
+            "On Max, 1M context draws usage credits (enable via /usage-credits if prompted).\n\n"
             "Docs: https://pilot-shell.com/docs/features/model-routing"
         ),
     },

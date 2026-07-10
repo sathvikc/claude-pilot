@@ -45,7 +45,7 @@ This returns **full source code sections** from all relevant files in ONE call �
 
 #### 5.3: Systematic exploration
 
-**Explore one area at a time (sequentially, not parallel).** Use CodeGraph and Semble as primary tools — Grep/Glob only for exact text patterns.
+**Broad sweeps may fan out in parallel; targeted deep-dives stay sequential.** For wide "where does X live across the tree" surveys, a parallel `Explore` / `general-purpose` subagent fan-out (read-only, cheap — Haiku-class is fine) is fair game and often faster than serial inline queries. For targeted structure/intent work use CodeGraph and Semble as primary tools — Grep/Glob only for exact text patterns.
 
 | Need                            | Tool                                                    |
 | ------------------------------- | ------------------------------------------------------- |

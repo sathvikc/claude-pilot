@@ -10,8 +10,20 @@ from unittest.mock import patch
 
 from spec_mode_guard import _is_fable, _is_opus, _is_sonnet, run_spec_mode_guard
 
+# Hermetic default for CLAUDE_CONFIG_DIR: the guard reads the selected model
+# from <config-dir>/settings.json, and legacy tests must never see the dev
+# machine's real ~/.claude/settings.json (a real `model: opusplan` there would
+# flip their outcomes). A nonexistent dir makes the read deterministically None.
+_NO_CLAUDE_DIR = "/nonexistent/pilot-test-claude-config"
 
-def _run_with_input(prompt: str, permission_mode: str, *, model_switch: str = "false") -> tuple[int, str]:
+
+def _run_with_input(
+    prompt: str,
+    permission_mode: str,
+    *,
+    model_switch: str = "false",
+    claude_config_dir: str = _NO_CLAUDE_DIR,
+) -> tuple[int, str]:
     """Simulate hook invocation. Returns (exit_code, stdout_output).
 
     By default the cached active model is mocked as None (no cache yet), which
@@ -19,12 +31,16 @@ def _run_with_input(prompt: str, permission_mode: str, *, model_switch: str = "f
 
     ``model_switch`` controls ``PILOT_MODEL_SWITCH_ENABLED`` -- defaults to
     ``"false"`` so the Opus gate is active (the OFF behavior these legacy tests
-    encode). ON-path tests pass ``model_switch="true"``.
+    encode). ON-path tests pass ``model_switch="true"``. ``claude_config_dir``
+    controls where the guard looks for the settings.json `model` field.
     """
     hook_data = {"prompt": prompt, "permission_mode": permission_mode}
     stdin = StringIO(json.dumps(hook_data))
     with (
-        patch.dict(os.environ, {"PILOT_MODEL_SWITCH_ENABLED": model_switch}),
+        patch.dict(
+            os.environ,
+            {"PILOT_MODEL_SWITCH_ENABLED": model_switch, "CLAUDE_CONFIG_DIR": claude_config_dir},
+        ),
         patch("sys.stdin", stdin),
         patch("sys.stdout", new_callable=StringIO) as stdout,
         patch("spec_mode_guard._read_active_model_from_cache", return_value=None),
@@ -34,7 +50,12 @@ def _run_with_input(prompt: str, permission_mode: str, *, model_switch: str = "f
 
 
 def _run_with_model_cache(
-    prompt: str, permission_mode: str, model_id: str | None, *, model_switch: str = "false"
+    prompt: str,
+    permission_mode: str,
+    model_id: str | None,
+    *,
+    model_switch: str = "false",
+    claude_config_dir: str = _NO_CLAUDE_DIR,
 ) -> tuple[int, str]:
     """Simulate hook invocation with a specific cached model_id.
 
@@ -43,7 +64,10 @@ def _run_with_model_cache(
     hook_data = {"prompt": prompt, "permission_mode": permission_mode}
     stdin = StringIO(json.dumps(hook_data))
     with (
-        patch.dict(os.environ, {"PILOT_MODEL_SWITCH_ENABLED": model_switch}),
+        patch.dict(
+            os.environ,
+            {"PILOT_MODEL_SWITCH_ENABLED": model_switch, "CLAUDE_CONFIG_DIR": claude_config_dir},
+        ),
         patch("sys.stdin", stdin),
         patch("sys.stdout", new_callable=StringIO) as stdout,
         patch("spec_mode_guard._read_active_model_from_cache", return_value=model_id),
@@ -508,7 +532,10 @@ class TestCacheMissingEmitsWarning:
         hook_data = {"prompt": "/spec build a feature", "permission_mode": "bypassPermissions"}
         stdin = StringIO(json.dumps(hook_data))
         with (
-            patch.dict(os.environ, {"PILOT_MODEL_SWITCH_ENABLED": "false"}),
+            patch.dict(
+                os.environ,
+                {"PILOT_MODEL_SWITCH_ENABLED": "false", "CLAUDE_CONFIG_DIR": _NO_CLAUDE_DIR},
+            ),
             patch("sys.stdin", stdin),
             patch("sys.stdout", new_callable=StringIO),
             patch("sys.stderr", new_callable=_io.StringIO) as stderr,
@@ -615,7 +642,10 @@ class TestModelSwitchToggle:
         hook_data = {"prompt": "/spec build a feature", "permission_mode": "bypassPermissions"}
         stdin = StringIO(json.dumps(hook_data))
         with (
-            patch.dict(os.environ, {"PILOT_MODEL_SWITCH_ENABLED": "true"}),
+            patch.dict(
+                os.environ,
+                {"PILOT_MODEL_SWITCH_ENABLED": "true", "CLAUDE_CONFIG_DIR": _NO_CLAUDE_DIR},
+            ),
             patch("sys.stdin", stdin),
             patch("sys.stdout", new_callable=StringIO),
             patch("sys.stderr", new_callable=_io.StringIO) as stderr,
@@ -657,3 +687,166 @@ class TestModelSwitchToggle:
         assert code == 2
         result = json.loads(output)
         assert "Opus" in result["reason"]
+
+
+class TestOpusplanSelectedModel:
+    """The gate consults the *selected* model (settings.json `model`, written
+    synchronously by /model) whenever the resolved statusline cache would
+    block. The cache can never show 'opusplan' -- only its resolved leg -- so
+    on its own it cannot tell an opusplan user from a plain-Sonnet user (OFF)
+    or from a stale pre-switch render (ON, the "run /model opusplan" loop the
+    user just satisfied)."""
+
+    @staticmethod
+    def _settings_dir(tmp_path, model: str) -> str:
+        (tmp_path / "settings.json").write_text(json.dumps({"model": model}))
+        return str(tmp_path)
+
+    def test_off_blocks_opusplan_selection_with_toggle_guidance(self, tmp_path) -> None:
+        """OFF + /model opusplan: still blocked (planning would run the Sonnet
+        leg), but the reason must name the opusplan conflict and BOTH ways out
+        -- the Model Switching toggle and /model opus."""
+        code, output = _run_with_model_cache(
+            "/spec add feature",
+            "bypassPermissions",
+            "claude-sonnet-5",
+            model_switch="false",
+            claude_config_dir=self._settings_dir(tmp_path, "opusplan"),
+        )
+        assert code == 2
+        reason = json.loads(output)["reason"]
+        assert "opusplan" in reason
+        assert "Model Switching" in reason
+        assert "Console" in reason
+        assert "/model opus" in reason
+
+    def test_off_blocks_opusplan_selection_even_when_cache_missing(self, tmp_path) -> None:
+        """OFF + /model opusplan is provably misconfigured from settings alone
+        -- block even when the cache has not been written yet."""
+        code, output = _run_with_input(
+            "/spec add feature",
+            "bypassPermissions",
+            model_switch="false",
+            claude_config_dir=self._settings_dir(tmp_path, "opusplan"),
+        )
+        assert code == 2
+        assert "opusplan" in json.loads(output)["reason"]
+
+    def test_off_detects_legacy_opusplan_1m_value(self, tmp_path) -> None:
+        """A legacy 'opusplan[1m]' settings value from an older Pilot still
+        counts as an opusplan selection."""
+        code, output = _run_with_model_cache(
+            "/spec add feature",
+            "bypassPermissions",
+            "claude-sonnet-5",
+            model_switch="false",
+            claude_config_dir=self._settings_dir(tmp_path, "opusplan[1m]"),
+        )
+        assert code == 2
+        reason = json.loads(output)["reason"]
+        assert "opusplan" in reason
+        assert "Console" in reason
+
+    def test_on_allows_stale_opus_cache_when_opusplan_selected(self, tmp_path) -> None:
+        """ON + /model opusplan just ran: the async cache may still hold the
+        pre-switch id. The persisted selection is authoritative -- never block
+        the user with the very command they just ran."""
+        code, output = _run_with_model_cache(
+            "/spec add feature",
+            "bypassPermissions",
+            "claude-opus-4-8",
+            model_switch="true",
+            claude_config_dir=self._settings_dir(tmp_path, "opusplan"),
+        )
+        assert code == 0
+        assert output == ""
+
+    def test_on_missing_cache_with_opusplan_selected_allows_without_warning(self, tmp_path) -> None:
+        """ON + opusplan selected + cache never written: the persisted selection
+        is positive evidence of a correct configuration, so /spec is allowed
+        silently -- no 'could not verify active model' warning. (Documented
+        decision: settings.json replaces the missing cache here, it does not
+        fall through to the fail-open warn path.)"""
+        import io as _io
+
+        hook_data = {"prompt": "/spec add feature", "permission_mode": "bypassPermissions"}
+        stdin = StringIO(json.dumps(hook_data))
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "PILOT_MODEL_SWITCH_ENABLED": "true",
+                    "CLAUDE_CONFIG_DIR": self._settings_dir(tmp_path, "opusplan"),
+                },
+            ),
+            patch("sys.stdin", stdin),
+            patch("sys.stdout", new_callable=StringIO) as stdout,
+            patch("sys.stderr", new_callable=_io.StringIO) as stderr,
+            patch("spec_mode_guard._read_active_model_from_cache", return_value=None),
+        ):
+            code = run_spec_mode_guard()
+        assert code == 0
+        assert stdout.getvalue() == ""
+        assert stderr.getvalue() == ""
+
+    def test_off_non_opusplan_selection_keeps_generic_block(self, tmp_path) -> None:
+        """OFF + a non-opusplan selection on a Sonnet cache keeps the generic
+        requires-Opus block."""
+        code, output = _run_with_model_cache(
+            "/spec add feature",
+            "bypassPermissions",
+            "claude-sonnet-5",
+            model_switch="false",
+            claude_config_dir=self._settings_dir(tmp_path, "claude-fable-5[1m]"),
+        )
+        assert code == 2
+        assert "requires Opus for planning" in json.loads(output)["reason"]
+
+    def test_off_opus_cache_wins_over_opusplan_selection(self, tmp_path) -> None:
+        """OFF + this session actually on Opus: the per-session cache stays
+        primary -- a (global) opusplan settings value must not block it."""
+        code, output = _run_with_model_cache(
+            "/spec add feature",
+            "bypassPermissions",
+            "claude-opus-4-8[1m]",
+            model_switch="false",
+            claude_config_dir=self._settings_dir(tmp_path, "opusplan"),
+        )
+        assert code == 0
+        assert output == ""
+
+
+class TestSingleModelFableSession:
+    """is_single_model_fable_session: settings.json selection is authoritative."""
+
+    def _check(self, tmp_path, *, settings_model: str | None, cache_model: str | None) -> bool:
+        from spec_mode_guard import is_single_model_fable_session
+
+        claude_dir = tmp_path / ".claude"
+        claude_dir.mkdir(parents=True, exist_ok=True)
+        if settings_model is not None:
+            (claude_dir / "settings.json").write_text(json.dumps({"model": settings_model}))
+        with (
+            patch.dict(os.environ, {"CLAUDE_CONFIG_DIR": str(claude_dir)}),
+            patch("spec_mode_guard._read_active_model_from_cache", return_value=cache_model),
+        ):
+            return is_single_model_fable_session()
+
+    def test_false_when_opusplan_selected_even_with_fable_cache(self, tmp_path):
+        # An opusplan session whose execution leg is Fable is NOT a single-model
+        # Fable session -- the skills must still toggle plan mode.
+        assert self._check(tmp_path, settings_model="opusplan", cache_model="claude-fable-5") is False
+
+    def test_true_when_fable_selected(self, tmp_path):
+        assert self._check(tmp_path, settings_model="fable", cache_model=None) is True
+
+    def test_true_when_no_selection_but_fable_cache(self, tmp_path):
+        assert self._check(tmp_path, settings_model=None, cache_model="claude-fable-5") is True
+
+    def test_false_when_no_selection_and_sonnet_cache(self, tmp_path):
+        assert self._check(tmp_path, settings_model=None, cache_model="claude-sonnet-5") is False
+
+    def test_true_when_non_managed_selection_and_fable_cache(self, tmp_path):
+        # A user-selected non-opusplan model with a Fable cache render counts
+        # as single-model (e.g. `best` resolving to Fable).
+        assert self._check(tmp_path, settings_model="best", cache_model="claude-fable-5") is True

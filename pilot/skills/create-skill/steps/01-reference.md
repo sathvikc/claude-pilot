@@ -182,6 +182,8 @@ description: Implements the Project entity model with hierarchical relationships
 
 **Make descriptions "pushy"** — agents tend to undertrigger skills (not use them when they'd help). Combat this by being explicit about when to activate. Instead of "How to build a dashboard for internal data", write "How to build a dashboard for internal data. Use this skill whenever the user mentions dashboards, data visualization, internal metrics, or wants to display any kind of data, even if they don't explicitly ask for a 'dashboard.'"
 
+**One trigger per branch** — pushy means covering every *distinct* way the skill gets used, not restating one way in synonyms. "Build features using TDD … use when the user asks for test-first development" is one branch written twice; collapse it and spend the words on a genuinely different trigger instead.
+
 ### Progressive Disclosure
 
 Three-level system — each level loads only when needed:
@@ -225,7 +227,7 @@ Validate the data before proceeding.
 
 **Explain the why, not just the what** — Today's LLMs are smart. They have good theory of mind and respond better to reasoning than rigid commands. If you find yourself writing ALWAYS or NEVER in all caps, reframe and explain *why* the thing matters. "Use YYYY-MM-DD format because downstream parsers reject other formats" is more effective than "ALWAYS use YYYY-MM-DD format."
 
-**Keep the skill lean** — Remove instructions that aren't pulling their weight. If test runs show the model wasting time on unproductive steps, cut the instructions causing it. Every line should earn its context tokens.
+**Keep the skill lean** — Remove instructions that aren't pulling their weight. If test runs show the model wasting time on unproductive steps, cut the instructions causing it. The bar for "pulling its weight" is the sentence-level no-op test in *Steering the Agent* below.
 
 **Include error handling** — anticipate what goes wrong and provide fixes in the skill.
 
@@ -234,3 +236,17 @@ Validate the data before proceeding.
 **Generalize, don't overfit** — Skills are used across many different prompts. If you're testing with specific examples, make sure instructions generalize beyond those examples. Fiddly, overly specific changes that only fix one test case make the skill worse overall.
 
 **Bundle repeated patterns** — After test runs, review what the model did. If every test case independently wrote a similar helper script or took the same multi-step approach, that's a signal the skill should bundle that script in `scripts/`. Write it once — save every future invocation from reinventing the wheel.
+
+### Steering the Agent
+
+A skill exists to make agent behavior predictable — same *process* every run, not same output. Five levers serve that (adapted from mattpocock/skills' writing-great-skills):
+
+**Leading words** — a compact concept already in the model's pretraining (*relentless*, *tight*, *tracer bullet*, *fog of war*) that the agent thinks with while running the skill. Repeated as a token, it anchors a whole region of behavior in the fewest tokens — in the body it anchors execution, in the description it anchors invocation. Prefer an existing pretrained word over a coined term: a made-up word recruits no priors, so you pay in definition tokens what a pretrained word gives free. Hunt for restatements a leading word retires: "fast, deterministic, low-overhead" → a *tight* loop.
+
+**Prompt the positive** — steering by prohibition backfires: naming what NOT to do drags the forbidden behavior into context and makes it *more* available ("don't think of an elephant"). State the target behavior instead ("write one-line comments", not "never write verbose comments"). Keep a prohibition only as a hard guardrail you can't phrase positively — and even then, pair it with what to do instead.
+
+**Negative space** — every decision a skill leaves unstated is delegated to the agent's priors, not left neutral. Read the draft for its silences: for each thing the skill doesn't say, decide deliberately — fill it, or leave it open as a real branch. Omission is a choice; make it on purpose.
+
+**Completion criteria** — every step ends on a condition that tells the agent it's done. Make it *checkable* (the agent can tell done from not-done — "every modified file accounted for", not "until it looks good") and, where it matters, *exhaustive*. A vague bound invites the agent to declare done early and rush to the next step; when you observe that rush, sharpen the criterion first — it's cheaper than restructuring the skill.
+
+**The no-op test, per sentence** — for each sentence ask: does it change behavior versus what the agent does by default? If not, delete the whole sentence, don't trim words from it. "Be thorough" is a no-op (the agent is already thorough-ish); "relentless" passes. Apply it sentence by sentence on every revision.

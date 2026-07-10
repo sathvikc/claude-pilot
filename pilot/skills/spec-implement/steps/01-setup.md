@@ -13,7 +13,7 @@ SPEC_SESS="${PILOT_SESSION_ID:-${CLAUDE_CODE_SESSION_ID:-default}}"
 [ -f "$HOME/.pilot/sessions/$SPEC_SESS/plan-mode-skipped-fable" ] && echo "ON_FABLE=true" || echo "ON_FABLE=false"
 ```
 
-**If `ON_FABLE=true`:** skip this guard entirely even when `MODEL_SWITCH=true` — the planning leg ran on a Fable-class model (no `fableplan` split), `EnterPlanMode` was never called, and there is no plan mode to exit. Proceed to 1.1.
+**If `ON_FABLE=true`:** skip this guard entirely even when `MODEL_SWITCH=true` — the planning leg ran on a single-model Fable session (a saved `/model fable`), `EnterPlanMode` was never called, and there is no plan mode to exit. Proceed to 1.1.
 
 **Otherwise, if `MODEL_SWITCH=true`:**
 ```

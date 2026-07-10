@@ -9,6 +9,10 @@
 | **No verification** — "deploy to staging" (how do you know it worked?) | Always include a verification command |
 | **Hardcoded paths** — `/Users/john/projects/my-app/...` | Relative paths or environment variables |
 | **Ambiguous language** — "Make sure to validate things properly" | `Before calling create_project, verify: project name non-empty, at least one team member assigned` |
+| **Premature completion** — agent declares a step done early and rushes on | Sharpen the completion criterion first (see *Steering the Agent* in Step 1) |
+| **Negation steering** — walls of "never do X" prohibitions | State the positive target (see *Steering the Agent*) |
+| **Sediment & sprawl** — stale layers accumulate; SKILL.md grows past legibility | Prune on every revision (adding feels safe, removing feels risky — remove anyway); offload per Step 1's size limits |
+| **Duplication** — the same meaning stated in two places | Single source of truth: one authoritative place, so a behavior change is a one-place edit. Deliberate repetition of a critical instruction for emphasis (Step 1: "Put critical instructions at the top") is the sanctioned exception |
 
 ### Iteration Signals
 

@@ -145,9 +145,9 @@ Four toggles control user interaction points during `/spec`. Disable all four fo
 | **Branch Isolation** | On | Asks how to isolate `/spec` changes (new branch or worktree) | Always works on the current branch |
 | **Ask Questions** | On | Asks clarifying questions during planning | Planning makes autonomous default choices |
 | **Plan Approval** | On | Requires your approval before implementation starts | Implementation begins automatically after planning |
-| **Model Switching** *(Claude Code only)* | On | Automatically runs `/spec` planning on Opus and implementation + verification on Sonnet (requires the `opusplan` model - see [Model Routing](model-routing)). No manual `/model` step. Not applicable on Fable 5, which runs the whole workflow single-model. | The whole `/spec` workflow runs on Opus (or on Fable 5 when that is the active model) |
+| **Model Switching** *(Claude Code only; own Settings block showing the fixed pair)* | On | Automatically runs `/spec` planning on Opus 4.8 (1M) and implementation + verification on Sonnet 5 (1M) - requires the `opusplan` model (see [Model Routing](model-routing)). The pair is fixed; remapping model slots would hijack the /model picker. No manual `/model` step. | The whole `/spec` workflow runs on your active `/model` choice (Pilot defaults it to Opus 4.8 at 1M; a saved Fable model is preserved) |
 
-With all four workflow toggles off, `/spec add user authentication` plans, implements, and verifies the feature end-to-end without checkpoints, entirely on Opus.
+With all four workflow toggles off, `/spec add user authentication` plans, implements, and verifies the feature end-to-end without checkpoints, entirely on your active model.
 
 :::warning Token usage in autonomous mode
 No checkpoints means your agent executes the entire workflow without asking. Make sure your prompt is specific enough to avoid misinterpretation. You can always interrupt with Escape.

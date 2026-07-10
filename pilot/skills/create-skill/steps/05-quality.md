@@ -20,6 +20,9 @@
 - [ ] No sensitive information (API keys, passwords → use env vars)
 - [ ] No hardcoded paths (use relative paths or environment variables)
 - [ ] References clearly linked (to `references/` or external docs)
+- [ ] Steps (when the skill has them) end on a checkable completion criterion (agent can tell done from not-done)
+- [ ] Description carries one trigger per distinct branch — no synonym restatements
+- [ ] Sentence-level no-op scan done (each sentence changes behavior vs. the default, or it's deleted)
 
 ### Triggering Test
 
