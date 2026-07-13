@@ -2,6 +2,12 @@
 
 All notable changes to Pilot Shell will be documented in this file.
 
+## [9.11.0] - 2026-07-13
+
+### Features
+
+- Overhaul /spec, /prd, /fix skills and rules; harden worktree sync
+
 ## [9.10.2] - 2026-07-10
 
 ### Bug Fixes
