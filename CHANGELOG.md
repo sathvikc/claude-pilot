@@ -2,6 +2,13 @@
 
 All notable changes to Pilot Shell will be documented in this file.
 
+## [9.12.1] - 2026-07-14
+
+### Bug Fixes
+
+- Model Switching bug in Pilot Launcher for specific session ID cases
+- Update Spec Mode Guard to work with Fable Model Switch
+
 ## [9.12.0] - 2026-07-14
 
 ### Features
