@@ -17,7 +17,7 @@ Render the model names from those values: `PLAN_MODEL` `opus` → **Opus 4.8 (1M
 
 - **If `MODEL_SWITCH` is `true` (default):**
 
-  > ℹ️ Automated model switching is ON — planning runs on **{Plan Model}**, implementation & verification on **{Execution Model}**, automatically. This requires the **Opus Plan** model: if your status bar isn't already on it, run `/model opusplan` now (future sessions set this automatically). A **Fable 5** plan model is applied only during plan-mode windows, and an **Opus 4.8** execution model only during a running /spec — configure both in Pilot Console → Settings → Model Switching. On a single-model **Fable 5** session (`/model fable`), `/spec` runs the whole workflow on Fable instead. Prefer one model for everything? Disable **Model Switching** in the Console.
+  > ℹ️ Automated model switching is ON — planning runs on **{Plan Model}**, implementation & verification on **{Execution Model}**, automatically. This **requires the Opus Plan model** (`/model opusplan`): switching works by remapping opusplan's slots, so it is a no-op on any other model — on plain **Fable** it would plan *and* execute on Fable and never engage your Execution Model. If your status bar isn't already on Opus Plan, run `/model opusplan` now (future sessions set this automatically). A **Fable 5** plan model is applied only during plan-mode windows, and an **Opus 4.8** execution model only during a running /spec — configure both in Pilot Console → Settings → Model Switching. Prefer one model for everything (Fable included)? Disable **Model Switching** in the Console, then pick it with `/model`.
 
 - **If `MODEL_SWITCH` is `false`:**
 

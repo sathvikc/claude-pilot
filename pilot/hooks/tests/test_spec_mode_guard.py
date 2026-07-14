@@ -350,22 +350,33 @@ class TestIsFable:
 
 
 class TestFableModelGate:
-    """Fable passes the model gate in BOTH toggle states.
+    """Fable passes the gate ONLY when Switching is OFF (single-model Fable).
 
-    A Fable session runs the whole workflow on one frontier model -- there is
-    no fableplan equivalent, so blocking with a '/model opusplan' (ON) or
-    '/model opus[1m]' (OFF) prompt would force a downgrade.
+    Under Switching ON the window-scoped pins remap opusplan's slots, so the
+    switch is a no-op on plain Fable (it would plan AND execute on Fable, never
+    engaging the configured execution model). Fable is therefore BLOCKED under
+    ON and routed to '/model opusplan' or the Model Switching OFF toggle. Under
+    OFF a Fable session runs the whole workflow single-model and is allowed.
     """
 
     # The two toggle states are the only behavioral axes of the gate's
     # or-branch; per-input variants live in TestIsFable (predicate unit tests).
 
-    def test_on_allows_spec_on_explicit_fable_id(self) -> None:
+    def test_on_blocks_spec_on_explicit_fable_id(self) -> None:
         code, output = _run_with_model_cache(
             "/spec build a feature", "bypassPermissions", "claude-fable-5[1m]", model_switch="true"
         )
-        assert code == 0
-        assert output == ""
+        assert code == 2
+        reason = json.loads(output)["reason"]
+        assert "opusplan" in reason
+        assert "Model Switching OFF" in reason
+
+    def test_on_blocks_bare_fable_alias(self) -> None:
+        code, output = _run_with_model_cache(
+            "/spec build a feature", "bypassPermissions", "fable", model_switch="true"
+        )
+        assert code == 2
+        assert "opusplan" in json.loads(output)["reason"]
 
     def test_off_allows_spec_on_explicit_fable_id(self) -> None:
         code, output = _run_with_model_cache(
@@ -791,6 +802,24 @@ class TestOpusplanSelectedModel:
         )
         assert code == 0
         assert output == ""
+
+    def test_on_blocks_fable_cache_even_when_opusplan_selected(self, tmp_path) -> None:
+        """ON + /model opusplan persisted, but the live session is on Fable (a
+        manual `/model fable` overriding the selection): a Fable cache value is
+        never an opusplan resolution, so the opusplan selection must NOT rescue
+        it -- block so the window-scoped switch actually engages. This is the
+        exact hole a plain-Fable session slipped through before."""
+        code, output = _run_with_model_cache(
+            "/spec add feature",
+            "bypassPermissions",
+            "claude-fable-5[1m]",
+            model_switch="true",
+            claude_config_dir=self._settings_dir(tmp_path, "opusplan"),
+        )
+        assert code == 2
+        reason = json.loads(output)["reason"]
+        assert "opusplan" in reason
+        assert "Model Switching OFF" in reason
 
     def test_on_missing_cache_with_opusplan_selected_allows_without_warning(self, tmp_path) -> None:
         """ON + opusplan selected + cache never written: the persisted selection
