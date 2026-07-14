@@ -2,6 +2,12 @@
 
 All notable changes to Pilot Shell will be documented in this file.
 
+## [9.12.0] - 2026-07-14
+
+### Features
+
+- Window-scoped Fable/Opus model switching for /spec
+
 ## [9.11.0] - 2026-07-13
 
 ### Features
