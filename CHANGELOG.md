@@ -2,6 +2,12 @@
 
 All notable changes to Pilot Shell will be documented in this file.
 
+## [9.13.0] - 2026-07-16
+
+### Features
+
+- Three-way Model Switching mode (Automated default) replacing slot-pin machinery
+
 ## [9.12.1] - 2026-07-14
 
 ### Bug Fixes
