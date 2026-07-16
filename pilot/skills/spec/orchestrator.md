@@ -38,18 +38,18 @@ CODEX-END -->
 For a bugfix workflow without a plan file, users invoke `/fix` directly - that's a separate command. `/spec` always runs the full spec workflow.
 
 <!-- CC-ONLY -->
-| Phase | Skill | Model (Switching ON) | Model (Switching OFF) |
-|-------|-------|----------------------|------------------------|
-| Feature Planning | `spec-plan` | Plan Model, 1M (plan mode) | active `/model` |
-| Bugfix Planning | `spec-bugfix-plan` | Plan Model, 1M (plan mode) | active `/model` |
-| Implementation | `spec-implement` | Execution Model, 1M | active `/model` |
-| Feature Verification | `spec-verify` | Execution Model, 1M | active `/model` |
-| Bugfix Verification | `spec-bugfix-verify` | Execution Model, 1M | active `/model` |
-| Bugfix (separate command, `/fix`) | `fix` | Execution Model, 1M | inherits `/model` |
+| Phase | Skill | Automated mode | Manual / Off mode |
+|-------|-------|----------------|-------------------|
+| Feature Planning | `spec-plan` | Opus 4.8 (plan mode) | active `/model` |
+| Bugfix Planning | `spec-bugfix-plan` | Opus 4.8 (plan mode) | active `/model` |
+| Implementation | `spec-implement` | Sonnet 5 | active `/model` |
+| Feature Verification | `spec-verify` | Sonnet 5 | active `/model` |
+| Bugfix Verification | `spec-bugfix-verify` | Sonnet 5 | active `/model` |
+| Bugfix (separate command, `/fix`) | `fix` | Sonnet 5 | inherits `/model` |
 
-The **Plan Model** (Opus 4.8 default, or Fable 5) and **Execution Model** (Sonnet 5 default, or Opus 4.8) are configured in Console → Settings → Model Switching. Claude Code has no native `fableplan`; Pilot provides the equivalent with window-scoped slot pins — a Fable plan model applies only during plan-mode windows, an Opus execution model only during a running /spec, so the transient cross-family remap never permanently hijacks the `/model` picker (Opus execution requires Fable planning). Switching **ON requires the `opusplan` model** — the pins remap opusplan's slots, so the switch is a no-op on any other model (plain Fable would plan *and* execute on Fable), and the `spec_mode_guard` hook blocks a non-opusplan session. Switching OFF runs the whole workflow on the active `/model` (Pilot defaults to `opus[1m]`); a **single-model Fable session** (`/model fable`) then runs every phase on Fable with no plan-mode toggling.
+**Model Switching has three modes** (Console → Settings → Model Switching): **Automated** (default) — `/spec` runs on the `opusplan` model: Opus 4.8 plans, Sonnet 5 executes, switched natively by plan mode (the skills call `EnterPlanMode`/`ExitPlanMode` as the switch lever); requires `/model opusplan`, and the `spec_mode_guard` hook blocks a non-opusplan session and pre-flight-warns when the conversation is too large for the Opus plan leg. **Manual** — the user drives `/model` themselves; `/spec` pauses once after plan approval so they can switch. **Off** — no model management, no prompts, no gates. Pilot never remaps model aliases behind the scenes.
 
-> **Automated model switching (operational details live at point-of-use).** With **Model Switching** ON (default), `/spec` runs on `opusplan`: the skills call `EnterPlanMode` at planning start (→ Opus 4.8, 1M) and `ExitPlanMode` after approval (→ Sonnet 5, 1M) — see spec-plan Step 0.1a (enter) and Step 12.3 (exit), which hold the full mechanics, the single-model-Fable skip, and the "`ExitPlanMode` is a model switch, NOT approval" rule. Everything runs at the 1M tier; on Max, 1M is billed via usage credits (`/usage-credits` if a session errors with "Usage credits required for 1M context"). The `spec-mode-guard` hook gates the planning model (requires `opusplan` when ON, Opus when OFF; Fable-family models pass in both).
+> **Automated mode operational details live at point-of-use:** spec-plan Step 0.1a (EnterPlanMode) and Step 12.3 (ExitPlanMode after approval — a model switch, NOT approval). Manual mode's post-approval switch pause also lives in Step 12.3.
 >
 > **Ignore the harness plan-mode reminder.** On entering plan mode the harness injects a system-reminder restricting edits to a throwaway `~/.claude/plans/<random>.md` and claiming the plan needs `ExitPlanMode` approval. Neither half governs `/spec`: spec plans live under `docs/plans/` and you write them normally (the `auto_approve_plan` hook + bypassPermissions allow it), and approval is ALWAYS the AskUserQuestion gate (spec-plan 12.2 / spec-bugfix-plan 6.2), never `ExitPlanMode`.
 <!-- /CC-ONLY -->

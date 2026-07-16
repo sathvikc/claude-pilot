@@ -14,31 +14,25 @@ from session_announcements import (
 
 
 class TestRegistry:
-    def test_has_automated_model_switching_announcement(self) -> None:
-        ids = [a["id"] for a in ANNOUNCEMENTS]
-        assert "automated-model-switching" in ids
-
-    def test_has_model_switching_1m_planning_announcement(self) -> None:
-        ids = [a["id"] for a in ANNOUNCEMENTS]
-        assert "model-switching-1m-planning" in ids
-
-    def test_has_fable_5_support_announcement(self) -> None:
-        ids = [a["id"] for a in ANNOUNCEMENTS]
-        assert "fable-5-support" in ids
-
-    def test_has_configurable_plan_exec_models_announcement(self) -> None:
-        entry = next((a for a in ANNOUNCEMENTS if a["id"] == "configurable-plan-exec-models"), None)
+    def test_has_model_switching_modes_announcement(self) -> None:
+        entry = next((a for a in ANNOUNCEMENTS if a["id"] == "model-switching-modes"), None)
         assert entry is not None
-        # Names both dropdowns and the window-scoped caveat.
-        assert "Plan Model" in entry["message"]
-        assert "Execution Model" in entry["message"]
-        assert "WINDOW-SCOPED" in entry["message"]
+        # Names all three modes, the new default, and the migration mapping.
+        assert "Automated (default)" in entry["message"]
+        assert "Manual" in entry["message"]
+        assert "Off" in entry["message"]
+        assert "no longer touches those aliases" in entry["message"]
 
-    def test_no_stale_fixed_pair_claim_in_announcements(self) -> None:
-        # The configurable pair supersedes the old "not configurable" wording.
-        for a in ANNOUNCEMENTS:
-            assert "not configurable" not in a["message"]
-            assert "fixed pair" not in a["message"]
+    def test_stale_pin_era_announcements_pruned(self) -> None:
+        ids = [a["id"] for a in ANNOUNCEMENTS]
+        for stale in (
+            "automated-model-switching",
+            "model-switching-1m-planning",
+            "configurable-plan-exec-models",
+            "fable-5-support",
+            "opusplan-sonnet-default",
+        ):
+            assert stale not in ids
 
     def test_every_announcement_has_id_and_message(self) -> None:
         for a in ANNOUNCEMENTS:

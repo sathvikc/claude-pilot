@@ -26,6 +26,37 @@ FILE_LENGTH_CRITICAL = 1000
 
 _AUTOCOMPACT_BUFFER_TOKENS = 33_000
 
+_VALID_MODEL_SWITCH_MODES = ("automated", "manual", "off")
+
+
+def read_model_switch_mode() -> str:
+    """Resolve the Model Switching mode FRESH from ~/.pilot/config.json.
+
+    Session env vars are startup-frozen, so a Console mode change would be
+    invisible to running sessions if hooks read $PILOT_MODEL_SWITCH_MODE alone.
+    Resolution order: valid ``specWorkflow.modelSwitchMode`` from config.json ->
+    legacy ``modelSwitch`` mapping (false -> "off", else "automated") ->
+    "automated". Mirrors ``launcher.model_config.get_model_switch_mode``
+    (vendored: hooks cannot import the Cython-compiled launcher). Reuses
+    :func:`_read_pilot_config` so the config-read contract lives in one place.
+    """
+    config = _read_pilot_config()
+    if config is not None:
+        workflow = config.get("specWorkflow")
+        if isinstance(workflow, dict):
+            mode = workflow.get("modelSwitchMode")
+            if isinstance(mode, str) and mode in _VALID_MODEL_SWITCH_MODES:
+                return mode
+            if workflow.get("modelSwitch") is False:
+                return "off"
+    # Unreadable/missing config falls back to "automated" -- the SAME default
+    # the launcher's get_model_switch_mode uses, so hooks, skills, statusline,
+    # and writers can never disagree on the effective mode.
+    # ($PILOT_MODEL_SWITCH_MODE is display/subagent metadata, deliberately NOT a
+    # decision fallback: it is startup-frozen and could contradict a launcher
+    # that already fell back.)
+    return "automated"
+
 
 def _get_max_context_tokens() -> int:
     """Return context window size, auto-detected from Claude Code statusline.
@@ -126,7 +157,7 @@ def _read_pilot_config() -> dict | None:
         return None
     try:
         data = json.loads(config_file.read_text())
-    except (json.JSONDecodeError, OSError):
+    except (json.JSONDecodeError, OSError, UnicodeDecodeError):
         return None
     return data if isinstance(data, dict) else None
 
@@ -157,49 +188,6 @@ def resolve_session_id() -> str:
 def _sessions_base() -> Path:
     """Get base sessions directory."""
     return Path.home() / ".pilot" / "sessions"
-
-
-def invoke_model_pin(op: str, *, detached: bool) -> None:
-    """Invoke ``pilot model-pin <op>`` for the current session (best-effort).
-
-    Opens/closes/heartbeats the window-scoped model slot pins (hooks cannot
-    import the Cython-compiled launcher -- the same standalone-package boundary
-    as ``pilot register-plan`` -- so we shell out to the binary). Never raises:
-    a missing binary means the feature is silently off and planning proceeds on
-    the baseline model pair.
-
-    - ``detached=False`` (plan-mode transitions): a SYNCHRONOUS call, so the
-      window open/close order matches program order. A detached pair could run
-      plan-exit before plan-enter on a rapid enter/exit and strand a lease that
-      PID-liveness would keep alive all session.
-    - ``detached=True`` (heartbeats, session end): fire-and-forget; the caller
-      must not block on pin plumbing.
-    """
-    pilot_bin = Path.home() / ".pilot" / "bin" / "pilot"
-    if not pilot_bin.is_file():
-        return
-    cmd = [str(pilot_bin), "model-pin", op, "--session", resolve_session_id()]
-    try:
-        if detached:
-            subprocess.Popen(
-                cmd,
-                stdin=subprocess.DEVNULL,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                start_new_session=True,
-                close_fds=True,
-            )
-        else:
-            subprocess.run(
-                cmd,
-                stdin=subprocess.DEVNULL,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                timeout=8,
-                check=False,
-            )
-    except (OSError, subprocess.SubprocessError):
-        pass
 
 
 def get_session_cache_path() -> Path:

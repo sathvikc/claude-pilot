@@ -65,7 +65,7 @@ const insideItems: InsideItem[] = [
     title: "Cost Optimization",
     description: "Right model, right task, visible spend",
     summary:
-      "Model Switching drops to a cheaper tier for implementation and verification once the plan is approved. A CLI proxy compresses tool output by 60\u201390%. The Console tracks daily cost and surfaces trends over time.",
+      "Model Switching pauses /spec after plan approval so you drop to a cheaper tier for implementation \u2014 or automates the swap via opusplan. A CLI proxy compresses tool output by 60\u201390%. The Console tracks daily cost and surfaces trends over time.",
     href: "/docs/features/model-routing",
   },
   {

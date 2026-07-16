@@ -6,12 +6,14 @@ all notifications via `pilot notify`. The stop guard only blocks/allows stops.
 
 from __future__ import annotations
 
+import io
 import json
 import os
 import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 from unittest.mock import patch
 
@@ -834,3 +836,49 @@ class TestApprovalSentinel:
         assert exit_code == 0
         assert _is_blocked(stdout), "stale approval sentinel must not grant a stop"
         assert not sentinel.exists(), "stale approval sentinel must be unlinked"
+
+
+class TestManualSwitchSentinel:
+    """The manual-switch-pending sentinel allows ONE stop after plan approval so
+    the user can run /model (they cannot type /model inside an AskUserQuestion
+    prompt). One-shot: the guard deletes it when honoring it."""
+
+    def _run_with_sentinel(self, tmp_path, monkeypatch, *, approved: bool, age: float = 0.0):
+        import spec_stop_guard as g
+
+        monkeypatch.setenv("PILOT_SESSION_ID", "manual-switch-test")
+        monkeypatch.setattr(g, "_sessions_base", lambda: tmp_path / "sessions")
+        plan = tmp_path / "plan.md"
+        plan.write_text("# X\nStatus: PENDING\nApproved: " + ("Yes" if approved else "No") + "\nType: Feature\n")
+        monkeypatch.setattr(g, "find_active_plan", lambda: (plan, "PENDING"))
+        monkeypatch.setattr(g, "is_waiting_for_user_input", lambda _p: False)
+
+        sentinel = g.get_manual_switch_sentinel_path()
+        sentinel.write_text("")
+        if age:
+            stamp = time.time() - age
+            os.utime(sentinel, (stamp, stamp))
+
+        stdin = io.StringIO(json.dumps({"stop_hook_active": False, "transcript_path": ""}))
+        with patch("sys.stdin", stdin):
+            code = g.main()
+        return code, sentinel
+
+    def test_allows_one_stop_when_plan_approved(self, tmp_path, monkeypatch):
+        code, sentinel = self._run_with_sentinel(tmp_path, monkeypatch, approved=True)
+        assert code == 0
+        assert not sentinel.exists()  # one-shot: consumed on honor
+
+    def test_not_honored_when_plan_unapproved(self, tmp_path, monkeypatch):
+        # Pre-approval pauses use the approval sentinel; this one must not
+        # bypass the pre-approval flow.
+        code, sentinel = self._run_with_sentinel(tmp_path, monkeypatch, approved=False)
+        assert code != 0 or sentinel.exists()
+
+    def test_stale_sentinel_discarded(self, tmp_path, monkeypatch):
+        import spec_stop_guard as g
+
+        code, sentinel = self._run_with_sentinel(
+            tmp_path, monkeypatch, approved=True, age=g.SENTINEL_MAX_AGE_SECONDS + 60
+        )
+        assert not sentinel.exists()  # discarded, not honored

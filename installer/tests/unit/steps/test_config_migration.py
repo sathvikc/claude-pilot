@@ -1286,7 +1286,7 @@ class TestMigrationV10:
         # v12 pruned the dead keys outright
         assert "model" not in migrated
         assert "skills" not in migrated
-        assert migrated["specWorkflow"]["modelSwitch"] is True
+        assert migrated["specWorkflow"]["modelSwitchMode"] == "automated"
         # v12 also wrote a backup with the pre-migration state
         bak_path = config_path.with_suffix(".json.bak.v11")
         assert bak_path.exists()
@@ -1479,7 +1479,7 @@ class TestMigrationV12:
         assert migrated["_configVersion"] == _CCV2
         for dead in ("model", "skills", "agents", "extendedContext", "extendedContextOverrides"):
             assert dead not in migrated, f"{dead} should have been pruned"
-        assert migrated["specWorkflow"]["modelSwitch"] is True
+        assert migrated["specWorkflow"]["modelSwitchMode"] == "automated"
         assert migrated["specWorkflow"]["branchIsolation"] is True
         assert migrated["reviewerAgents"]["specReview"] is True
 
@@ -1537,7 +1537,7 @@ class TestMigrationV12:
         assert result is True
         migrated = json.loads(config_path.read_text())
         assert migrated["_configVersion"] == CURRENT_CONFIG_VERSION
-        assert migrated["specWorkflow"]["modelSwitch"] is True
+        assert migrated["specWorkflow"]["modelSwitchMode"] == "automated"
 
     def test_v12_seeds_model_switch_when_specworkflow_missing(self, tmp_path: Path) -> None:
         from installer.steps.config_migration import migrate_model_config
@@ -1547,7 +1547,7 @@ class TestMigrationV12:
 
         migrate_model_config(config_path)
         migrated = json.loads(config_path.read_text())
-        assert migrated["specWorkflow"]["modelSwitch"] is True
+        assert migrated["specWorkflow"]["modelSwitchMode"] == "automated"
 
     def test_v12_in_isolation_preserves_user_model_switch_false(self) -> None:
         """v12 ALONE preserves an explicit modelSwitch=false (v13 is what force-enables)."""
@@ -1566,25 +1566,22 @@ class TestMigrationV13:
 
         assert CURRENT_CONFIG_VERSION >= 13
 
-    def test_v13_force_enables_model_switch_when_false(self) -> None:
-        """v13 overrides an explicit modelSwitch=false -> true (one-time force-on)."""
+    def test_v13_preserves_explicit_model_switch_false(self) -> None:
         from installer.steps.config_migration import _migration_v13
 
-        raw: dict = {"specWorkflow": {"modelSwitch": False, "branchIsolation": True}}
-        modified = _migration_v13(raw)
+        # The historical force-enable is retired so v20 can map an explicit
+        # pre-v13 OFF to modelSwitchMode "off" (ordering bug fix).
+        raw: dict = {"specWorkflow": {"modelSwitch": False}}
+        _migration_v13(raw)
+        assert raw["specWorkflow"]["modelSwitch"] is False
 
-        assert modified is True
-        assert raw["specWorkflow"]["modelSwitch"] is True
-        assert raw["specWorkflow"]["branchIsolation"] is True
-
-    def test_v13_force_enables_when_specworkflow_missing(self) -> None:
+    def test_v13_seeds_spec_workflow_when_missing(self) -> None:
         from installer.steps.config_migration import _migration_v13
 
         raw: dict = {}
         modified = _migration_v13(raw)
-
         assert modified is True
-        assert raw["specWorkflow"]["modelSwitch"] is True
+        assert raw["specWorkflow"] == {}
 
     def test_v13_no_change_when_already_true_and_no_dead_keys(self) -> None:
         from installer.steps.config_migration import _migration_v13
@@ -1616,45 +1613,35 @@ class TestMigrationV13:
         assert sw["modelSwitch"] is True
         assert sw["branchIsolation"] is True
 
-    def test_v13_strips_dead_keys_and_force_enables_when_model_switch_false(self) -> None:
+    def test_v13_strips_dead_keys_and_preserves_model_switch(self) -> None:
         from installer.steps.config_migration import _migration_v13
 
         raw: dict = {
             "specWorkflow": {
                 "modelSwitch": False,
                 "isolatedImplementation": True,
-                "implementationModel": "opus",
+                "implementationModel": "sonnet",
             }
         }
         modified = _migration_v13(raw)
-
         assert modified is True
-        sw = raw["specWorkflow"]
-        assert "isolatedImplementation" not in sw
-        assert "implementationModel" not in sw
-        assert sw["modelSwitch"] is True
+        assert "isolatedImplementation" not in raw["specWorkflow"]
+        assert "implementationModel" not in raw["specWorkflow"]
+        assert raw["specWorkflow"]["modelSwitch"] is False  # explicit OFF preserved
 
-    def test_full_migration_from_v12_false_forces_true_and_bumps_version(self, tmp_path: Path) -> None:
-        from installer.steps.config_migration import migrate_model_config
+    def test_full_migration_from_v12_false_lands_on_off(self, tmp_path: Path) -> None:
+        from installer.steps.config_migration import CURRENT_CONFIG_VERSION, migrate_model_config
 
         config_path = tmp_path / "config.json"
-        config_path.write_text(
-            json.dumps(
-                {
-                    "_configVersion": 12,
-                    "specWorkflow": {"modelSwitch": False, "branchIsolation": True},
-                }
-            )
-        )
-
+        config_path.write_text(json.dumps({"_configVersion": 12, "specWorkflow": {"modelSwitch": False}}))
         result = migrate_model_config(config_path)
-
         assert result is True
         migrated = json.loads(config_path.read_text())
-        from installer.steps.config_migration import CURRENT_CONFIG_VERSION as _CCV
-
-        assert migrated["_configVersion"] == _CCV
-        assert migrated["specWorkflow"]["modelSwitch"] is True
+        assert migrated["_configVersion"] == CURRENT_CONFIG_VERSION
+        # The explicit pre-v13 opt-out survives every historical force-enable
+        # (v13 + v18 both retired theirs) and maps to "off" in v20.
+        assert migrated["specWorkflow"]["modelSwitchMode"] == "off"
+        assert "modelSwitch" not in migrated["specWorkflow"]
 
     def test_v13_advances_to_current_dropping_context_window(self, tmp_path: Path) -> None:
         """A config at v13 advances to current; the legacy per-model object is gone
@@ -1916,16 +1903,15 @@ class TestMigrationV17:
 class TestMigrationV18:
     """Migration v17 -> v18: force-enable modelSwitch; flip blanket codeReview xhigh -> high."""
 
-    def test_v18_force_enables_model_switch(self) -> None:
+    def test_v18_no_longer_touches_model_switch(self) -> None:
         from installer.steps.config_migration import _migration_v18
 
-        # A deliberate opt-out (modelSwitch=false) is re-enabled -- product decision
-        # to put everyone back on automated switching.
+        # The historical force-enable is retired: a deliberate opt-out must
+        # survive v18 so _migration_v20 can map it to "off" (ordering bug fix).
         raw: dict = {"specWorkflow": {"modelSwitch": False, "planApproval": True}}
-        modified = _migration_v18(raw)
+        _migration_v18(raw)
 
-        assert modified is True
-        assert raw["specWorkflow"]["modelSwitch"] is True
+        assert raw["specWorkflow"]["modelSwitch"] is False
         assert raw["specWorkflow"]["planApproval"] is True  # other toggles untouched
 
     def test_v18_seeds_spec_workflow_when_absent(self) -> None:
@@ -1935,7 +1921,7 @@ class TestMigrationV18:
         modified = _migration_v18(raw)
 
         assert modified is True
-        assert raw["specWorkflow"]["modelSwitch"] is True
+        assert raw["specWorkflow"] == {}
 
     def test_v18_flips_blanket_xhigh_to_high(self) -> None:
         from installer.steps.config_migration import _migration_v18
@@ -1952,7 +1938,7 @@ class TestMigrationV18:
         raw: dict = {"specWorkflow": {"modelSwitch": True}, "codeReview": {"effort": "max"}}
         modified = _migration_v18(raw)
 
-        assert modified is False  # nothing to change: switch already on, effort deliberate
+        assert modified is False  # nothing to change: effort deliberate, switch untouched
         assert raw["codeReview"]["effort"] == "max"
 
     def test_full_migration_from_v17_forces_switch_and_flips_effort(self, tmp_path: Path) -> None:
@@ -1973,7 +1959,9 @@ class TestMigrationV18:
         assert result is True
         migrated = json.loads(config_path.read_text())
         assert migrated["_configVersion"] == CURRENT_CONFIG_VERSION
-        assert migrated["specWorkflow"]["modelSwitch"] is True
+        # The explicit pre-v18 opt-out survives to v20 and maps to "off"
+        # (the historical v18 force-enable is retired -- ordering bug fix).
+        assert migrated["specWorkflow"]["modelSwitchMode"] == "off"
         # v18 flips xhigh -> high, then v19 replaces effort with the mode defaults.
         assert migrated["codeReview"] == {"spec": "agent", "fix": "agent"}
 
@@ -2060,7 +2048,7 @@ class TestMigrationV19:
         migrated = json.loads(config_path.read_text())
         assert migrated["_configVersion"] == CURRENT_CONFIG_VERSION
         assert migrated["codeReview"] == {"spec": "agent", "fix": "agent"}
-        assert migrated["specWorkflow"]["modelSwitch"] is True  # unrelated keys untouched
+        assert migrated["specWorkflow"]["modelSwitchMode"] == "automated"  # v20 maps the forced switch to manual
 
     def test_idempotent_when_already_current(self, tmp_path: Path) -> None:
         from installer.steps.config_migration import CURRENT_CONFIG_VERSION, migrate_model_config
@@ -2078,3 +2066,65 @@ class TestMigrationV19:
 
         result = migrate_model_config(config_path)
         assert result is False
+
+
+class TestMigrationV20:
+    """v19 -> v20: three-way modelSwitchMode replaces the pin-era keys."""
+
+    def _migrate(self, tmp_path: Path, payload: dict) -> dict:
+        from installer.steps.config_migration import migrate_model_config
+
+        config_path = tmp_path / "config.json"
+        config_path.write_text(json.dumps(payload))
+        migrate_model_config(config_path=config_path)
+        return json.loads(config_path.read_text())
+
+    def test_legacy_true_maps_to_automated(self, tmp_path: Path) -> None:
+        result = self._migrate(tmp_path, {"_configVersion": 19, "specWorkflow": {"modelSwitch": True}})
+        sw = result["specWorkflow"]
+        assert sw["modelSwitchMode"] == "automated"
+        assert "modelSwitch" not in sw
+        assert result["_configVersion"] == 20
+
+    def test_legacy_false_maps_to_off(self, tmp_path: Path) -> None:
+        result = self._migrate(
+            tmp_path,
+            {"_configVersion": 19, "specWorkflow": {"modelSwitch": False, "planModel": "fable", "execModel": "opus"}},
+        )
+        sw = result["specWorkflow"]
+        assert sw["modelSwitchMode"] == "off"
+        for retired in ("modelSwitch", "planModel", "execModel"):
+            assert retired not in sw
+
+    def test_absent_keys_default_to_automated(self, tmp_path: Path) -> None:
+        result = self._migrate(tmp_path, {"_configVersion": 19, "specWorkflow": {"planApproval": True}})
+        assert result["specWorkflow"]["modelSwitchMode"] == "automated"
+        assert result["specWorkflow"]["planApproval"] is True  # untouched sibling
+
+    def test_explicit_mode_from_newer_console_is_preserved(self, tmp_path: Path) -> None:
+        result = self._migrate(
+            tmp_path,
+            {"_configVersion": 19, "specWorkflow": {"modelSwitchMode": "automated", "modelSwitch": True}},
+        )
+        sw = result["specWorkflow"]
+        assert sw["modelSwitchMode"] == "automated"
+        assert "modelSwitch" not in sw
+
+    def test_second_run_is_noop(self, tmp_path: Path) -> None:
+        from installer.steps.config_migration import migrate_model_config
+
+        config_path = tmp_path / "config.json"
+        config_path.write_text(json.dumps({"_configVersion": 19, "specWorkflow": {"modelSwitch": True}}))
+        assert migrate_model_config(config_path=config_path) is True
+        first = config_path.read_text()
+        assert migrate_model_config(config_path=config_path) is False
+        assert config_path.read_text() == first
+
+    def test_v19_code_review_output_untouched(self, tmp_path: Path) -> None:
+        # The shipped v19 changes-review migration result must survive v20.
+        result = self._migrate(
+            tmp_path,
+            {"_configVersion": 19, "codeReview": {"spec": "high", "fix": "agent"}, "specWorkflow": {}},
+        )
+        assert result["codeReview"] == {"spec": "high", "fix": "agent"}
+        assert result["specWorkflow"]["modelSwitchMode"] == "automated"

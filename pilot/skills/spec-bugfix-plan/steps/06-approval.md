@@ -2,14 +2,21 @@
 
 ### 6.0 Toggle interaction matrix
 
-Pull `$PILOT_PLAN_APPROVAL_ENABLED` and `$PILOT_MODEL_SWITCH_ENABLED` from Step 0 and follow the matching row. Model switching is now AUTOMATED — no manual handoff, no message. When `modelSwitch` is ON, the only difference is a `ExitPlanMode` call (Opus → Sonnet) before implementation — UNLESS the Fable sentinel from Step 0.1a exists (every `ExitPlanMode` below is gated by the sentinel check in 6.3).
+<!-- CC-ONLY -->
+Pull `$PILOT_PLAN_APPROVAL_ENABLED` (Step 0) and the fresh `MODE` (Step 0.1 — re-read config.json if this step runs after a compaction) and follow the matching row.
 
-| `planApproval` | `modelSwitch` | What this step does |
-|----------------|---------------|----------------------|
-| true | true | AskUserQuestion → on Yes: set Approved, **call `ExitPlanMode` (Opus → Sonnet) unless the 6.3 Fable check says skip, then auto-invoke `Skill('spec-implement')`** |
-| true | false | AskUserQuestion → on Yes: set Approved, **auto-invoke `Skill('spec-implement')`** (stays on the active model) |
-| false | true | Silently set `Approved: Yes`, run the 6.3 Fable check, call `ExitPlanMode` unless it says skip, auto-invoke `Skill('spec-implement')` |
-| false | false | Silently set `Approved: Yes`, auto-invoke `Skill('spec-implement')` (stays on the active model) |
+| `planApproval` | `MODE` | What this step does |
+|----------------|--------|----------------------|
+| true | automated | AskUserQuestion → on Yes: set Approved, **call `ExitPlanMode` (Opus → Sonnet), then auto-invoke `Skill('spec-implement')`** |
+| true | manual | AskUserQuestion → on Yes: set Approved, **show the 6.3 manual switch pause**, then auto-invoke `Skill('spec-implement')` |
+| true | off | AskUserQuestion → on Yes: set Approved, **auto-invoke `Skill('spec-implement')`** (stays on the active model) |
+| false | automated | Silently set `Approved: Yes`, call `ExitPlanMode`, auto-invoke `Skill('spec-implement')` |
+| false | manual | Silently set `Approved: Yes`, print the one-line manual notice (6.3 — no blocking pause in autonomous runs), auto-invoke `Skill('spec-implement')` |
+| false | off | Silently set `Approved: Yes`, auto-invoke `Skill('spec-implement')` (stays on the active model) |
+<!-- /CC-ONLY -->
+<!-- CODEX-START
+Pull `$PILOT_PLAN_APPROVAL_ENABLED` (Step 0): `true` → present the 6.2 approval options and wait; `false` → silently set `Approved: Yes`. Model switching and plan mode are not available in Codex — after approval, continue immediately with the `$spec-implement` skill instructions using arguments: `<plan-path>`.
+CODEX-END -->
 
 ### 6.1 Notify (always)
 
@@ -57,21 +64,12 @@ CODEX-END -->
    **No, I have feedback:** Re-run Step 5 (process Console annotations), re-read the plan file (in case the user edited it), then return to 6.2 and ask again (Codex: re-touch the `spec-approval-pending` sentinel and end your turn again).
    **Other free-text feedback:** Incorporate the changes into the plan, then re-ask with a fresh AskUserQuestion.
 
-### 6.3 Model switch + implementation handoff (automated)
+### 6.3 Model switch + implementation handoff (per mode)
 
 <!-- CC-ONLY -->
-**Fable exception first:** check the sentinel from Step 0.1a — sentinel presence, NOT conversation memory, decides (it survives compaction and pauses). The check is read-only: do NOT delete the sentinel here (a re-run after an interruption must see it again, and the spec-implement exit guard reads it too; Step 0.1a of the next planning run owns cleanup):
+**If `MODE` is `"automated"`:**
 
-```bash
-SPEC_SESS="${PILOT_SESSION_ID:-${CLAUDE_CODE_SESSION_ID:-${CODEX_THREAD_ID:-default}}}"
-if [ -f "$HOME/.pilot/sessions/$SPEC_SESS/plan-mode-skipped-fable" ]; then echo "SKIP_EXIT_PLAN_MODE=true"; else echo "SKIP_EXIT_PLAN_MODE=false"; fi
-```
-
-**If `SKIP_EXIT_PLAN_MODE=true`:** the planning leg ran on a Fable-class model and `EnterPlanMode` was never called — do NOT call `ExitPlanMode`. Invoke `Skill(skill='spec-implement', args='<plan-path>')` directly (the whole workflow runs single-model on Fable).
-
-**Otherwise, if `PILOT_MODEL_SWITCH_ENABLED` is `"true"` (default):**
-
-⛔ **`ExitPlanMode` MUST be the next tool call after the sentinel check above. No exploration, no file reads, no other Bash between approval and `ExitPlanMode`. Skipping it leaves the entire implementation leg running on Opus.**
+⛔ **`ExitPlanMode` MUST be the next tool call after approval. No exploration, no file reads, no other Bash between approval and `ExitPlanMode`. Skipping it leaves the entire implementation leg running on Opus.**
 
 ```
 ToolSearch(query="select:ExitPlanMode")   # deferred tool — load first
@@ -82,10 +80,36 @@ Then:
 
 1. **Note the permission mode after `ExitPlanMode`.** On Claude Code versions affected by #49525/#39973 it may land in `acceptEdits` instead of `bypassPermissions`. If it is NOT `bypassPermissions`, print one visible line: *"ℹ️ Implementation may prompt for permissions — press Shift+Tab to switch to Bypass Permissions for an uninterrupted run."* Then proceed regardless.
 2. **If `ToolSearch(query="select:ExitPlanMode")` returns no tool:** print a one-line warning ("ExitPlanMode unavailable — implementation will run on the current model") and proceed.
-3. **Phrase the handoff as a request, not an observation.** Say "exiting plan mode — implementation continues on the opusplan execution leg", never "Model switch complete (Opus planning → Sonnet implementation)": you cannot observe your own model, and Claude Code may not have delivered the expected leg (e.g. Opus usage-limit fallback served Sonnet during planning). The status bar shows the observed model; point the user there if they ask.
+3. **Phrase the handoff as a request, not an observation.** Say "exiting plan mode — implementation continues on the opusplan execution leg", never "Model switch complete": you cannot observe your own model. The status bar shows the observed model; point the user there if they ask.
 4. Invoke `Skill(skill='spec-implement', args='<plan-path>')` to continue in the same session.
 
-**If `PILOT_MODEL_SWITCH_ENABLED` is `"false"`:** do NOT call `ExitPlanMode`. Invoke `Skill(skill='spec-implement', args='<plan-path>')` directly — implementation continues on the active model.
+**If `MODE` is `"manual"` or `"off"` — plan-mode leak check FIRST:** if the Console mode was flipped away from Automated mid-run, plan mode may still be open from the Step 0.1a `EnterPlanMode`. Check the sentinel; when it exists, load and call `ExitPlanMode` BEFORE anything else — `ToolSearch(query="select:ExitPlanMode")` first (deferred tool), then `ExitPlanMode(...)`; if it errors with "not in plan mode", plan mode is already closed — proceed (the hook heals the stale sentinel). The leak check overrides Manual's "no ExitPlanMode" rule — that rule assumes plan mode was never entered:
+
+```bash
+SPEC_SESS="${PILOT_SESSION_ID:-${CLAUDE_CODE_SESSION_ID:-${CODEX_THREAD_ID:-default}}}"
+[ -f "$HOME/.pilot/sessions/$SPEC_SESS/plan-mode-active" ] && echo "PLAN_MODE_STILL_OPEN=true" || echo "PLAN_MODE_STILL_OPEN=false"
+```
+
+**If `MODE` is `"manual"`:**
+
+- **When `PILOT_PLAN_APPROVAL_ENABLED` is not `"false"` (a human is in the loop), pause ONCE for the implementation-model switch** — this is the single manual switch point of the workflow. ⛔ Do NOT use `AskUserQuestion` for this pause: slash commands cannot be typed while a question prompt is open, so the user could never run `/model`. Instead, END YOUR TURN so the user gets the input box back:
+
+  1. Touch the stop-guard sentinel so the session may pause here (the guard honors it once, only for an approved plan, then consumes it):
+
+     ```bash
+     SPEC_SESS="${PILOT_SESSION_ID:-${CLAUDE_CODE_SESSION_ID:-${CODEX_THREAD_ID:-default}}}"
+     mkdir -p "$HOME/.pilot/sessions/$SPEC_SESS" && touch "$HOME/.pilot/sessions/$SPEC_SESS/manual-switch-pending"
+     ```
+
+  2. Print a normal finish message and END YOUR TURN (no question, no more tool calls):
+
+     > ✅ Plan approved. Manual model switching: switch to your **implementation model** now via `/model` (e.g. `/model sonnet`, `/model opus[1m]`) — or keep the current one. If Claude Code shows a confirmation dialog about carrying the conversation over to the new model, confirm it. Then send any message (e.g. `continue`) to start implementation.
+
+  3. **On the user's next message** (whatever it says — `continue`, a model note, anything): treat it as the go signal and invoke `Skill(skill='spec-implement', args='<plan-path>')`. Do NOT re-ask, do NOT call `EnterPlanMode`/`ExitPlanMode` in Manual mode.
+
+- **When `PILOT_PLAN_APPROVAL_ENABLED` is `"false"` (fully autonomous run):** skip the pause entirely; print one line — "ℹ️ Manual model switching: implementation continues on the current /model choice." — and invoke `Skill(skill='spec-implement', args='<plan-path>')` immediately.
+
+**If `MODE` is `"off"`:** invoke `Skill(skill='spec-implement', args='<plan-path>')` directly — no model management.
 <!-- /CC-ONLY -->
 <!-- CODEX-START
 Codex has no callable phase-dispatch tool and model switching is not available in Codex CLI. Continue immediately with the `$spec-implement` skill instructions using arguments: `<plan-path>`.

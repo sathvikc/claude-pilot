@@ -5,37 +5,29 @@
 
 **⛔ This is the very first action — before reading the plan or doing any other work.**
 
-`spec-plan` should have called `ExitPlanMode` before invoking this skill. If it didn't (model skip, approval edge case, etc.), you are still on Opus in plan mode and implementation will run on the wrong model. Exit now.
+The guard is STATE-based, not mode-based: it checks whether plan mode is actually still open (the `plan-mode-active` sentinel the plan_mode_tracker hook maintains), so it works even when the Console mode changed mid-run or the config read fails.
 
 ```bash
-echo "MODEL_SWITCH=${PILOT_MODEL_SWITCH_ENABLED:-true}"
 SPEC_SESS="${PILOT_SESSION_ID:-${CLAUDE_CODE_SESSION_ID:-${CODEX_THREAD_ID:-default}}}"
-[ -f "$HOME/.pilot/sessions/$SPEC_SESS/plan-mode-skipped-fable" ] && echo "ON_FABLE=true" || echo "ON_FABLE=false"
+[ -f "$HOME/.pilot/sessions/$SPEC_SESS/plan-mode-active" ] && echo "PLAN_MODE_STILL_OPEN=true" || echo "PLAN_MODE_STILL_OPEN=false"
+MODE=$(python3 -c "import sys,os;sys.path.insert(0,os.path.expanduser('~/.pilot/hooks'));from _lib.util import read_model_switch_mode;print(read_model_switch_mode())" 2>/dev/null || echo "automated")
+echo "MODE=$MODE"
 ```
 
-**If `ON_FABLE=true`:** skip this guard entirely even when `MODEL_SWITCH=true` — the planning leg ran on a single-model Fable session (a saved `/model fable`), `EnterPlanMode` was never called, and there is no plan mode to exit. Proceed to 1.1.
+**If `PLAN_MODE_STILL_OPEN=true` (any mode):** `spec-plan` should have called `ExitPlanMode` before invoking this skill; it didn't (model skip, approval edge case, mid-run mode change). Exit now — implementation must never run in plan mode:
 
-**Otherwise, if `MODEL_SWITCH=true`:**
 ```
 ToolSearch(query="select:ExitPlanMode")   # deferred — load schema first
-ExitPlanMode(...)                          # safe to call even if already exited; exits plan mode → Sonnet
+ExitPlanMode(...)                          # safe to call even if already exited
 ```
 
-- If `ToolSearch` returns no tool: emit one visible line ("ExitPlanMode unavailable — implementation will run on current model") and continue.
-- If `MODEL_SWITCH=false`: skip entirely — no plan mode was entered. (Unset defaults to `true`, matching the plan-side default, so the ExitPlanMode safety net still fires.)
+- If `ToolSearch` returns no tool: emit one visible line ("ExitPlanMode unavailable — implementation will run on current model") and continue. If `ExitPlanMode` errors with "not in plan mode", plan mode is already closed (e.g. a Shift+Tab exit) — the hook heals the stale sentinel; proceed normally.
+- **Do NOT skip this step to save tokens. An extra ExitPlanMode call costs nothing; running the entire implementation leg in plan mode is expensive and wrong.**
 
-**Do NOT skip this step to save tokens. An extra ExitPlanMode call costs nothing; running the entire implementation leg on Opus is expensive and wrong.**
+**If `PLAN_MODE_STILL_OPEN=false` and `MODE=manual`:** when this skill was invoked directly (resume path — the 12.3/6.3 post-approval pause never ran in this session), print one line: "ℹ️ Manual model switching: implementation runs on your current /model choice (see the status bar)." Then proceed.
+
+**Otherwise:** proceed to 1.1 — nothing to exit.
 <!-- /CC-ONLY -->
-
-### 1.0b Open the execution model window (best-effort)
-
-When the Execution Model is Opus (Console → Settings → Model Switching, requires a Fable plan model), the sonnet-slot pin must apply for the implementation + verification legs. `ExitPlanMode` above already opened this window via the plan-mode hook, but a resumed session (`/spec <plan.md>` that skips plan mode) never fires that hook, so open it explicitly here. Idempotent and no-op unless config + the registered plan call for it:
-
-```bash
-~/.pilot/bin/pilot model-pin exec-enter --session "${PILOT_SESSION_ID:-${CLAUDE_CODE_SESSION_ID:-${CODEX_THREAD_ID:-default}}}" 2>/dev/null || true
-```
-
-The window closes automatically when `spec-verify` registers the plan `VERIFIED` (or at session end / by the PID sweep) — no manual close needed here.
 
 ### 1.1 Read Plan & Gather Context
 

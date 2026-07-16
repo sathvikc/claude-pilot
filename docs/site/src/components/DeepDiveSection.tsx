@@ -322,9 +322,8 @@ const DeepDiveSection = () => {
                 Model Switching <span className="text-xs font-normal text-muted-foreground">(Claude Code only)</span>
               </h3>
               <p className="text-sm text-muted-foreground">
-                Configurable Plan and Execution models — Opus (or Fable 5) for
-                planning, Sonnet (or Opus) for implementation — the cost-saving
-                swap, fully automatic.
+                Automated by default — /spec runs opusplan (Opus plans, Sonnet
+                executes) — or switch models yourself, or turn it off entirely.
               </p>
             </div>
           </div>
@@ -333,47 +332,44 @@ const DeepDiveSection = () => {
             <div className="rounded-lg p-5 border border-violet-400/30 bg-violet-400/5">
               <div className="flex items-center gap-2 mb-3">
                 <span className="text-sm font-mono font-semibold text-violet-400 bg-violet-400/10 px-3 py-1 rounded-lg">
-                  /model opusplan
+                  Manual
                 </span>
                 <span className="text-sm text-muted-foreground">
-                  set once
+                  you pick the models
                 </span>
               </div>
               <p className="text-xs text-muted-foreground leading-relaxed">
-                Set the Opus Plan model once (Pilot persists it for you). Planning
-                is where deep reasoning pays off most, so <code>/spec</code> enters
-                plan mode and runs the planning leg on Opus automatically.
+                Plan on your frontier model, implement on your fast one.{" "}
+                <code>/spec</code> pauses once after plan approval so your{" "}
+                <code>/model</code> switch lands before code is written.
               </p>
             </div>
             <div className="rounded-lg p-5 border border-primary/30 bg-primary/5">
               <div className="flex items-center gap-2 mb-3">
                 <span className="text-sm font-mono font-semibold text-primary bg-primary/10 px-3 py-1 rounded-lg">
-                  Sonnet
+                  Automated
                 </span>
                 <span className="text-sm text-muted-foreground">
-                  automatic
+                  default — opusplan
                 </span>
               </div>
               <p className="text-xs text-muted-foreground leading-relaxed">
-                When you approve the plan, Pilot drops to Sonnet automatically
-                and runs implementation and verification continuously — no
-                manual <code>/model</code> switch, no pause, no re-invoke.
+                <code>/spec</code> runs on Claude Code's native{" "}
+                <code>opusplan</code>: Opus 4.8 plans, Sonnet 5 executes —
+                switched automatically, with a pre-flight check that warns when
+                your conversation is too large for the Opus plan leg.
               </p>
             </div>
           </div>
 
           <div className="rounded-lg p-4 border border-border/30 bg-card/20">
             <p className="text-xs text-muted-foreground text-center">
-              Both legs at 1M — the opt-out <strong>Model Switching</strong>{" "}
-              automation flips your <strong>Plan Model</strong> (Opus 4.8, or
-              Fable 5) to your <strong>Execution Model</strong> (Sonnet 5, or
-              Opus) between planning and implementation for you. Fable planning
-              applies only during plan-mode windows, so real Opus stays
-              reachable the rest of the time (and any session can still switch
-              manually via <code>/model</code>). Turn it off in Console Settings →
-              Model Switching to run single-model on your <code>/model</code>{" "}
-              choice instead — including <strong>Claude Fable 5</strong>, whose
-              saved selection Pilot preserves while the toggle is off.
+              Three modes in Console Settings → Model Switching:{" "}
+              <strong>Automated</strong> (default), <strong>Manual</strong>, and{" "}
+              <strong>Off</strong> — no model management at all. Pilot never
+              remaps the model aliases, so <code>/model</code> always means
+              what it says — including <strong>Claude Fable 5</strong>, whose
+              saved selection Pilot preserves.
             </p>
           </div>
         </div>

@@ -7,23 +7,28 @@
 
 Do not stop or wait for the user to switch. The user's mode choice is respected — bypass permissions is recommended, not required.
 
-**0b. Automated model switching info (show this verbatim to the user).** Read the toggle and the configured model pair, then show the matching message:
+**0b. Model Switching mode info (show the matching message verbatim to the user).** Read the mode FRESH from config.json (session env is startup-frozen; a Console change must steer this /spec):
 
 ```bash
-echo "MODEL_SWITCH=${PILOT_MODEL_SWITCH_ENABLED:-true} PLAN_MODEL=${PILOT_PLAN_MODEL:-opus} EXEC_MODEL=${PILOT_EXEC_MODEL:-sonnet}"
+MODE=$(python3 -c "import sys,os;sys.path.insert(0,os.path.expanduser('~/.pilot/hooks'));from _lib.util import read_model_switch_mode;print(read_model_switch_mode())" 2>/dev/null || echo "automated")
+echo "MODE=$MODE"
 ```
 
-Render the model names from those values: `PLAN_MODEL` `opus` → **Opus 4.8 (1M)**, `fable` → **Fable 5 (1M)**; `EXEC_MODEL` `sonnet` → **Sonnet 5 (1M)**, `opus` → **Opus 4.8 (1M)**.
+- **If `MODE` is `manual` (default):**
 
-- **If `MODEL_SWITCH` is `true` (default):**
+  > ℹ️ Manual model switching — planning runs on your current `/model` choice (see the status bar). Switch now with `/model` if you want a different planning model; after plan approval you'll be prompted once to switch to your implementation model. Prefer automation? Console → Settings → Model Switching → Automated (requires `opusplan`).
 
-  > ℹ️ Automated model switching is ON — planning runs on **{Plan Model}**, implementation & verification on **{Execution Model}**, automatically. This **requires the Opus Plan model** (`/model opusplan`): switching works by remapping opusplan's slots, so it is a no-op on any other model — on plain **Fable** it would plan *and* execute on Fable and never engage your Execution Model. If your status bar isn't already on Opus Plan, run `/model opusplan` now (future sessions set this automatically). A **Fable 5** plan model is applied only during plan-mode windows, and an **Opus 4.8** execution model only during a running /spec — configure both in Pilot Console → Settings → Model Switching. Prefer one model for everything (Fable included)? Disable **Model Switching** in the Console, then pick it with `/model`.
+- **If `MODE` is `automated`:**
 
-- **If `MODEL_SWITCH` is `false`:**
+  > ℹ️ Automated model switching — `/spec` runs on the **opusplan** model: **Opus 4.8** plans, **Sonnet 5** executes, switched automatically. This requires `/model opusplan` (Pilot sets it for you; if your status bar shows something else, run `/model opusplan` now). Prefer picking models yourself? Console → Settings → Model Switching → Manual.
 
-  > ℹ️ Model Switching is OFF — `/spec` runs entirely on your active `/model` choice (Pilot defaults it to **Opus 4.8 (1M)**; a saved **Fable 5** model is preserved).
+- **If `MODE` is `off`:**
 
-We can only see the resolved execution-leg model — not whether it's really Opus Plan — so this is guidance, not a hard check. After showing the message, continue with the workflow.
+  > ℹ️ Model management is off — the whole workflow runs on your active `/model` choice.
+
+Also relay any `PRE-FLIGHT CONTEXT CHECK` note the spec_mode_guard hook injected (Automated mode with a large conversation): tell the user planning may stay on Sonnet at this context size and how to fix it, then continue on their call.
+
+We can only see the resolved model — this is guidance, not a hard check. After showing the message, continue with the workflow.
 <!-- /CC-ONLY -->
 <!-- CODEX-START
 **Skip** — permission mode and model switching are not applicable in Codex CLI. Proceed directly to Step 1.

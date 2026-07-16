@@ -68,6 +68,22 @@ def get_approval_sentinel_path() -> Path:
     return guard_dir / "spec-approval-pending"
 
 
+def get_manual_switch_sentinel_path() -> Path:
+    """Session-scoped path to the manual-switch-pending sentinel.
+
+    Manual Model Switching pauses ONCE after plan approval so the user can run
+    ``/model`` for the implementation leg. That pause cannot be an
+    AskUserQuestion -- slash commands cannot be typed while a question prompt is
+    open -- so the skill prints a normal finish message, touches this sentinel,
+    and ends its turn. The stop guard honors the sentinel ONE time (deleting it
+    on honor) and only for an APPROVED plan, so the pre-approval flow and the
+    implement-phase block are both preserved. Stale sentinels are discarded.
+    """
+    guard_dir = _sessions_base() / resolve_session_id()
+    guard_dir.mkdir(parents=True, exist_ok=True)
+    return guard_dir / "manual-switch-pending"
+
+
 def find_active_plan() -> tuple[Path | None, str | None]:
     """Find the active plan for THIS session via session-scoped active_plan.json."""
     plan_json = get_session_plan_path()
@@ -171,6 +187,24 @@ def main() -> int:
         else:
             approved, _ = _read_plan_approved_and_type(str(plan_path))
             if not approved:
+                return 0
+
+    # Manual-mode post-approval pause: the skill ends its turn so the user can
+    # run /model (impossible inside an AskUserQuestion prompt). Honored ONE time
+    # -- the sentinel is consumed on honor -- and only for an APPROVED plan, so
+    # the implement-phase block re-engages on the very next stop attempt.
+    manual_sentinel = get_manual_switch_sentinel_path()
+    if manual_sentinel.exists():
+        try:
+            age = time.time() - manual_sentinel.stat().st_mtime
+        except OSError:
+            age = 0.0
+        if age > SENTINEL_MAX_AGE_SECONDS:
+            manual_sentinel.unlink(missing_ok=True)
+        else:
+            approved, _ = _read_plan_approved_and_type(str(plan_path))
+            if approved:
+                manual_sentinel.unlink(missing_ok=True)
                 return 0
 
     state_file = get_stop_guard_path()

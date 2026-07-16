@@ -14,11 +14,13 @@ The sentinel lives at:
 
 Purpose: ensure spec-implement never runs on Opus because ExitPlanMode was
 accidentally skipped. The warning gives the model one last chance to call
-ExitPlanMode before touching implementation files.
+ExitPlanMode before touching implementation files. Plan mode is only entered
+by /spec in AUTOMATED Model Switching mode; Manual/Off never toggle it.
 
-Planning-leg model check: with Model Switching ON, plan mode under opusplan
+Planning-leg model check (Automated mode only): plan mode under opusplan
 must run on Opus - but Claude Code can silently serve the Sonnet leg instead
-(Opus usage-limit fallback on Max plans, or the session was never on the
+(Opus usage-limit fallback, a conversation grown past Opus's effective ~200K
+window on accounts without 1M entitlement, or the session was never on the
 opusplan model). EnterPlanMode itself cannot observe this (the statusline has
 not re-rendered in the new mode yet), so the check runs at the first plan-doc
 write after EnterPlanMode: by then the statusline cache carries a post-lever
@@ -30,19 +32,18 @@ the real model instead of narrating an unverified "switched to Opus".
 from __future__ import annotations
 
 import json
-import os
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 from _lib.util import (
     _sessions_base,
-    invoke_model_pin,
     pre_tool_use_context,
     read_hook_stdin,
+    read_model_switch_mode,
     resolve_session_id,
 )
-from spec_mode_guard import _is_fable, _is_opus
+from spec_mode_guard import _is_opus
 
 try:
     from _lib.util import PLAN_MODE_SENTINEL, PRE_PLAN_MODE_RECORD, spec_plan_awaiting_approval
@@ -58,8 +59,8 @@ _WARNING = (
     "[Pilot] PLAN MODE STILL ACTIVE - ExitPlanMode has NOT been called yet. "
     "Call ExitPlanMode NOW before editing any implementation file, or the "
     "entire implementation leg will run on Opus instead of Sonnet. "
-    "If you are inside spec-implement and MODEL_SWITCH=true, call ExitPlanMode "
-    "immediately as step 1.0 requires."
+    "If you are inside spec-implement, call ExitPlanMode immediately as "
+    "step 1.0 requires (plan mode is only entered in Automated mode)."
 )
 
 _PRE_APPROVAL_WARNING = (
@@ -76,16 +77,19 @@ _PRE_APPROVAL_WARNING = (
 PLAN_MODEL_WARNED_MARKER = "plan-model-warned"
 
 _MODEL_MISMATCH_WARNING = (
-    "[Pilot] PLANNING-LEG MODEL CHECK: Model Switching is ON and plan mode is "
-    "active, but the observed session model is '{model_id}' - planning is NOT "
-    "running on Opus or Fable (the configured plan models). Likely causes: (1) "
-    "Opus usage limit fallback on your Claude plan - under opusplan, Claude Code "
-    "silently serves Sonnet while the Opus pool is exhausted and switches back "
-    "when it frees up (this looks like 'uneven' mid-planning switching; check "
-    "/usage); (2) the session is not on the opusplan model - run /model opusplan. "
-    "Tell the user in one short paragraph which model planning is actually "
-    "running on and why, then continue planning on the current model. Do NOT "
-    "re-call EnterPlanMode and do NOT claim planning runs on Opus."
+    "[Pilot] PLANNING-LEG MODEL CHECK: Automated Model Switching is on and plan "
+    "mode is active, but the observed session model is '{model_id}' - planning "
+    "is NOT running on Opus. Likely causes: (1) the conversation has grown past "
+    "Opus's effective context window (~200K without 1M entitlement or with "
+    "exhausted usage credits), so Claude Code silently keeps serving the Sonnet "
+    "leg - /compact or /clear before planning fixes this; (2) Opus usage limit "
+    "fallback on your Claude plan (check /usage); (3) the session is not on the "
+    "opusplan model - run /model opusplan. Manual mode (Console -> Settings -> "
+    "Model Switching) avoids this class of surprise by letting the user pick "
+    "models explicitly. Tell the user in one short paragraph which model "
+    "planning is actually running on and why, then continue planning on the "
+    "current model. Do NOT re-call EnterPlanMode and do NOT claim planning "
+    "runs on Opus."
 )
 
 
@@ -100,11 +104,12 @@ def _planning_leg_model_context() -> str | None:
 
     Fires at most once per planning leg, and only on evidence: the statusline
     cache must carry a render newer than the EnterPlanMode sentinel (an older
-    render still shows the pre-lever leg and proves nothing). Opus- and
-    Fable-family models are the expected legs; anything else (Sonnet, Haiku)
-    means the opusplan plan-mode switch did not take effect.
+    render still shows the pre-lever leg and proves nothing). Opus is the only
+    expected leg (Automated's pair is fixed); anything else -- Sonnet, Haiku,
+    even a Fable render -- means the opusplan plan-mode switch did not take
+    effect.
     """
-    if os.environ.get("PILOT_MODEL_SWITCH_ENABLED", "true").strip().lower() == "false":
+    if read_model_switch_mode() != "automated":
         return None
 
     sentinel = sentinel_path()
@@ -126,7 +131,7 @@ def _planning_leg_model_context() -> str | None:
     model_id = data.get("model_id") if isinstance(data, dict) else None
     if not isinstance(model_id, str) or not model_id:
         return None
-    if _is_opus(model_id) or _is_fable(model_id):
+    if _is_opus(model_id):
         return None
 
     marker.write_text("")
@@ -149,26 +154,19 @@ def main() -> int:
         if tool_name == "EnterPlanMode":
             response = data.get("tool_response", {})
             if isinstance(response, dict) and response.get("is_error"):
-                # PreToolUse already opened the window; a failed EnterPlanMode
-                # means plan mode never engaged -- unwind WITHOUT plan-exit's
-                # exec-window logic.
-                invoke_model_pin("plan-abort", detached=False)
+                # A failed EnterPlanMode means plan mode never engaged.
                 return 0
             sentinel = sentinel_path()
             sentinel.write_text("")
             # New planning leg: allow the model check to warn again.
             (sentinel.parent / PLAN_MODEL_WARNED_MARKER).unlink(missing_ok=True)
-            # Idempotent re-assert of the window the PreToolUse hook opened
-            # (covers hooks-config skews where only PostToolUse fired).
-            invoke_model_pin("plan-enter", detached=False)
         elif tool_name == "ExitPlanMode":
-            response = data.get("tool_response", {})
-            if isinstance(response, dict) and response.get("is_error"):
-                return 0
+            # Unlink the sentinel even when the call errored: an ExitPlanMode
+            # that fails with "not in plan mode" proves plan mode is closed
+            # (e.g. the user exited via Shift+Tab), and a stale sentinel would
+            # otherwise re-trigger the leak checks and edit warnings all
+            # session with no recovery path.
             sentinel_path().unlink(missing_ok=True)
-            # Close the plan window (and open the execution window when config +
-            # a registered plan call for it -- the binary decides). Synchronous.
-            invoke_model_pin("plan-exit", detached=False)
     else:
         # PreToolUse(EnterPlanMode): the mode has not flipped to "plan" yet,
         # so permission_mode is the pre-plan mode. Record it as the bypass
@@ -183,11 +181,6 @@ def main() -> int:
                 # No field (older Claude Code): clear stale evidence so a
                 # previous leg's record cannot arm a later restore.
                 record.unlink(missing_ok=True)
-            # Open the window-scoped plan-mode pin BEFORE the mode flips: the
-            # first planning request fires immediately after EnterPlanMode
-            # returns, so a PostToolUse-only open can land too late for it.
-            # SYNCHRONOUS so open/close order equals program order.
-            invoke_model_pin("plan-enter", detached=False)
             return 0
         # PreToolUse: warn if editing a non-plan file while plan mode is active
         if not sentinel_path().exists():
@@ -196,11 +189,6 @@ def main() -> int:
         if not file_path:
             return 0
         if is_plan_file(file_path):
-            # Plan-doc write mid-planning: heartbeat the plan-mode pin lease so a
-            # long planning leg is never falsely swept (detached -- must not
-            # block the edit; touch is order-safe, it re-checks the sentinel
-            # under the lock).
-            invoke_model_pin("touch", detached=True)
             # The statusline has re-rendered since EnterPlanMode, so the observed
             # planning-leg model is now verifiable.
             context = _planning_leg_model_context()

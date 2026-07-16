@@ -1,46 +1,32 @@
 #!/usr/bin/env python3
 """Guard for /spec invocations (UserPromptSubmit hook).
 
-- Always blocks /spec when the user is manually in plan mode (the skill, not the
-  user, enters plan mode via EnterPlanMode for the Opus planning leg).
+- Always blocks /spec when the user is manually in plan mode (in Automated
+  mode the skill, not the user, enters plan mode via EnterPlanMode).
 - Warns when not in bypassPermissions mode.
-- Model gate (runs in BOTH toggle states, expected model flipped):
-    * Switching ON (default): the session runs `opusplan`, whose non-plan leg is
-      Sonnet, so at /spec-submit time a correct user shows Sonnet. A non-Sonnet
-      model (e.g. plain Opus or plain Fable) means they are not on `opusplan` --
+- Model gate (three-way Model Switching mode, read FRESH from config.json):
+    * automated: the session must run `opusplan`, whose non-plan leg is Sonnet,
+      so at /spec-submit time a correct user shows Sonnet. A non-Sonnet model
+      (e.g. plain Opus or plain Fable) means they are not on `opusplan` --
       blocked, UNLESS settings.json shows `opusplan` is the selected model AND
       the cache is not a Fable id (the async statusline cache may lag the
-      `/model opusplan` the user just ran; a Fable cache value, never an opusplan
-      resolution, is proof the session is live on Fable and stays blocked).
-      A user wrongly on plain Sonnet is indistinguishable from opusplan and is
-      allowed (accepted false-negative, avoids false-blocking correct users).
-    * Switching OFF: the whole workflow runs on Opus and only Opus may enter plan
-      mode, so a non-Opus model is blocked with a `/model opus[1m]` prompt. An
-      explicit `opusplan` selection is blocked with targeted guidance instead:
-      turn Model Switching ON (Console) or run `/model opus[1m]`.
-    * Fable-family models (e.g. `claude-fable-5`, `claude-mythos-5`, `best`)
-      pass the gate ONLY when Switching is OFF, where they run the whole
-      workflow single-model. Under Switching ON they are BLOCKED: the
-      window-scoped pins remap opusplan's slots, so switching is a no-op on any
-      model but `opusplan` (plain Fable would plan AND execute on Fable, never
-      engaging the configured execution model). Fix: `/model opusplan`, or turn
-      Model Switching OFF for single-model Fable.
+      `/model opusplan` the user just ran; a Fable cache value, never an
+      opusplan resolution, is proof the session is live on Fable and stays
+      blocked). A user wrongly on plain Sonnet is indistinguishable from
+      opusplan and is allowed (accepted false-negative).
+      Additionally, a pre-flight context check warns (non-blocking) when the
+      conversation likely exceeds the Opus plan leg's effective window --
+      Claude Code would then silently keep serving the Sonnet leg.
+    * manual / off: NO model gate. Manual mode's /spec flow reminds the user
+      to pick their planning model themselves; off means Pilot stays out of
+      model management entirely.
 
 Reads:
   - `permission_mode` from hook stdin (plan-mode block, bypassPermissions warn)
-  - `PILOT_MODEL_SWITCH_ENABLED` from env (selects expected model; default ON)
+  - the Model Switching mode fresh from ~/.pilot/config.json ("manual" fallback)
   - `model_id` from the statusline cache at ``~/.pilot/sessions/<sid>/context-pct.json``
-    -- the statusline writes this every render and Claude Code UserPromptSubmit
-    stdin does NOT include the active model field.
-  - `model` from ``$CLAUDE_CONFIG_DIR/settings.json`` (default ``~/.claude``)
-    -- the *selected* model alias, persisted synchronously by `/model`. The
-    statusline cache only ever holds the *resolved* model id (opusplan resolves
-    to its Sonnet leg outside plan mode), so this is the only place an explicit
-    `opusplan` selection is observable. Consulted as a tie-breaker when the
-    cache would block: ON + opusplan selected passes (the cache may lag the
-    `/model opusplan` the user just ran); OFF + opusplan selected blocks with
-    guidance naming the Model Switching toggle instead of the generic
-    requires-Opus message.
+  - `model` from ``$CLAUDE_CONFIG_DIR/settings.json`` (the *selected* alias,
+    persisted synchronously by `/model`) as the opusplan tie-breaker
 """
 
 from __future__ import annotations
@@ -53,7 +39,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from _lib.util import invoke_model_pin, plan_mode_sentinel_path, resolve_session_id
+from _lib.util import read_model_switch_mode, resolve_session_id
 
 _CLAUDE_OPUS_PREFIX_RE = re.compile(r"^claude-opus(-|$)")
 _CLAUDE_SONNET_PREFIX_RE = re.compile(r"^claude-sonnet(-|$)")
@@ -109,9 +95,9 @@ def _is_sonnet(model: str) -> bool:
 def _is_fable(model: str) -> bool:
     """Return True iff ``model`` is a Fable-family alias or explicit ID.
 
-    Mirror of :func:`_is_opus`. Fable-class models (Fable 5, Mythos 5) run the
-    whole /spec workflow single-model -- there is no fableplan split -- so they
-    pass the model gate in BOTH toggle states. Accepts the bare ``fable``,
+    Mirror of :func:`_is_opus`. Fable-class models (Fable 5, Mythos 5) have no
+    plan/execute alias split, so under Automated they are blocked (opusplan is
+    required); under Manual/Off there is no gate at all. Accepts the bare ``fable``,
     ``mythos``, and ``best`` aliases (``best`` resolves to Fable where
     available) and any explicit ID matching ``claude-(fable|mythos)(-|$)``
     (e.g. ``claude-fable-5``); rejects lookalikes like ``claude-fabletastic-1``.
@@ -140,22 +126,21 @@ def _is_opusplan(model: str) -> bool:
     return _strip_1m(model) == "opusplan"
 
 
-def is_single_model_fable_session() -> bool:
-    """True iff the session runs single-model on a Fable-class model.
+def _managed_opusplan_pin_present() -> bool:
+    """True when settings.json env carries a Pilot-managed ANTHROPIC_MODEL pin.
 
-    The settings.json *selection* is authoritative: `/model` persists it
-    synchronously, and an ``opusplan`` selection means model switching manages
-    the legs -- the skills must still toggle plan mode even if a stale
-    statusline cache shows a Fable id. Only without a usable selection does
-    the async cache decide. Consumed by the /spec skills' ON_FABLE check.
+    In Automated mode the env pin outranks the ``model`` field on the next
+    session start, so a Fable-family ``model`` value alongside the managed pin
+    still boots as opusplan -- the pin, not the field, is decisive there.
     """
-    selected = _read_selected_model_from_settings()
-    if selected is not None:
-        if _is_opusplan(selected):
-            return False
-        if _is_fable(selected):
-            return True
-    return _is_fable(_read_active_model_from_cache() or "")
+    claude_dir = Path(os.environ.get("CLAUDE_CONFIG_DIR", str(Path.home() / ".claude")))
+    try:
+        data = json.loads((claude_dir / "settings.json").read_text())
+    except (OSError, json.JSONDecodeError, UnicodeDecodeError):
+        return False
+    env = data.get("env") if isinstance(data, dict) else None
+    pin = env.get("ANTHROPIC_MODEL") if isinstance(env, dict) else None
+    return _is_opusplan(pin) if isinstance(pin, str) else False
 
 
 def _read_selected_model_from_settings() -> str | None:
@@ -238,18 +223,55 @@ def _is_resume_existing_plan(prompt: str) -> bool:
     return tokens[0].lower().endswith(".md")
 
 
-def _heartbeat_plan_pin() -> None:
-    """Detached model-pin touch when this session has an open plan-mode window.
+# Opus's effective context window when 1M isn't served for the account (no 1M
+# entitlement, exhausted usage credits): 200K. The pre-flight warns at 90% of
+# it -- the statusline `pct` is rounded and render-lagged, so the 10% margin
+# prevents false negatives right at the boundary (documented plan decision).
+OPUS_PLAN_CONTEXT_FLOOR = int(200_000 * 0.9)
 
-    Keeps a long planning leg's lease fresh (and self-heals a falsely swept
-    lease -- touch re-checks the sentinel under the pin lock). Best-effort; the
-    sentinel check short-circuits so ordinary prompts spawn no subprocess.
+
+def _opus_context_preflight() -> str | None:
+    """Warn when the conversation likely exceeds the Opus plan leg's window.
+
+    Automated mode only. opusplan can only switch the planning leg to Opus if
+    the conversation fits Opus's effective window; past it, Claude Code
+    silently keeps serving the Sonnet leg (verified against CC 2.1.209/2.1.211
+    -- print mode errors "Prompt is too long", interactive stays on Sonnet).
+    Estimates current tokens from the statusline cache; falls open silently
+    when the cache is missing or invalid.
     """
+    session_dir = Path.home() / ".pilot" / "sessions" / resolve_session_id()
+    marker = session_dir / "preflight-context-warned"
+    if marker.exists():
+        return None  # once per session -- accounts WITH Opus 1M need no nagging
+    cache_file = session_dir / "context-pct.json"
     try:
-        if plan_mode_sentinel_path().exists():
-            invoke_model_pin("touch", detached=True)
-    except Exception:
+        data = json.loads(cache_file.read_text())
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    pct = data.get("pct")
+    window = data.get("context_window_size")
+    if not isinstance(pct, (int, float)) or not isinstance(window, int) or window <= 0:
+        return None
+    est_tokens = int(pct / 100 * window)
+    if est_tokens <= OPUS_PLAN_CONTEXT_FLOOR:
+        return None
+    try:
+        marker.write_text("")
+    except OSError:
         pass
+    return (
+        f"[Pilot] PRE-FLIGHT CONTEXT CHECK: this conversation is at ~{est_tokens // 1000}K tokens, "
+        "which likely exceeds the Opus plan leg's effective 200K window (accounts without Opus 1M "
+        "entitlement, or with exhausted usage credits, cap at 200K). If so, Claude Code will "
+        "SILENTLY keep planning on Sonnet after EnterPlanMode. Tell the user in one short "
+        "paragraph BEFORE starting the /spec workflow: planning may stay on Sonnet at this "
+        "context size -- to plan on Opus, run /compact or /clear first, or switch Model "
+        "Switching to Manual (Console -> Settings) and pick the planning model yourself. "
+        "Then continue with the workflow on their call."
+    )
 
 
 def run_spec_mode_guard() -> int:
@@ -261,11 +283,6 @@ def run_spec_mode_guard() -> int:
 
     prompt = hook_data.get("prompt", "").strip()
     permission_mode = hook_data.get("permission_mode", "")
-
-    # Heartbeat the window-scoped model pin lease on every prompt while a
-    # plan-mode window is open, so a long planning leg is never falsely swept.
-    # Cheap sentinel .exists() gate first: non-planning prompts spawn nothing.
-    _heartbeat_plan_pin()
 
     if not _is_spec_invocation(prompt):
         return 0
@@ -292,148 +309,101 @@ def run_spec_mode_guard() -> int:
     if _is_resume_existing_plan(prompt):
         return 0
 
-    # Model gate -- runs in BOTH toggle states, with the expected model flipped.
-    # Claude Code's UserPromptSubmit stdin does not carry the active model, so it
-    # is read from the statusline cache.
+    # Model gate -- Automated mode only (mode read FRESH from config.json; env
+    # is startup-frozen and a Console change must reach running sessions).
     #
-    #   * Switching ON (default): the session runs the `opusplan` model, whose
-    #     non-plan leg is Sonnet. At /spec-submit time the skill has NOT yet
-    #     entered plan mode, so a correctly-configured user resolves to *Sonnet*.
-    #     Anything else (e.g. plain Opus) means they never ran `/model opusplan`
+    #   * automated: the session runs the `opusplan` model, whose non-plan leg
+    #     is Sonnet. At /spec-submit time the skill has NOT yet entered plan
+    #     mode, so a correctly-configured user resolves to *Sonnet*. Anything
+    #     else (plain Opus, plain Fable) means they never ran `/model opusplan`
     #     -- block and tell them to fix it. A user wrongly on plain Sonnet is
-    #     indistinguishable from opusplan and is allowed; that false-negative is
-    #     accepted to avoid false-blocking every correct user.
-    #   * Switching OFF: the whole workflow runs on Opus, and only Opus may enter
-    #     plan mode (planning on Sonnet is pointless) -- require Opus, block else.
-    #   * Fable passes in BOTH states: a Fable session runs the whole workflow on
-    #     one frontier model (no fableplan split), so prompting '/model opusplan'
-    #     or '/model opus[1m]' would force a downgrade.
-    #
-    # Unset env defaults to ON.
-    model_switch_on = os.environ.get("PILOT_MODEL_SWITCH_ENABLED", "true").strip().lower() != "false"
-    active_model = _read_active_model_from_cache()
+    #     indistinguishable from opusplan and is allowed (accepted
+    #     false-negative, avoids false-blocking every correct user).
+    #   * manual / off: NO model gate -- the user drives /model themselves.
+    mode = read_model_switch_mode()
+    context_notes: list[str] = []
 
-    if model_switch_on:
-        model_is_correct = _is_sonnet
+    if mode == "automated":
+        active_model = _read_active_model_from_cache()
         cache_warn = (
             "\033[0;33m[Pilot] Warning: could not verify active model for /spec "
             "(statusline cache unavailable). Proceeding without the model check -- "
             "if you are not on the opusplan model, run '/model opusplan' before planning.\033[0m\n"
         )
         block_reason = (
-            "[Pilot] /spec with Model Switching ON requires the 'opusplan' model. "
-            "If you have enabled Fable for Model Switching, this automatically works"
-            "Either run '/model opusplan' and try again, or turn Model Switching OFF "
-            "(Pilot Console -> Settings) to run /spec on whatever single model you pick."
-            "Resuming an existing plan with '/spec <path/to/plan.md>' is allowed on any model."
-        )
-        block_stderr = (
-            "\033[0;31m[Pilot] /spec blocked: Model Switching is ON, so /spec must run on "
-            "'opusplan' (shows as Sonnet before planning) -- plain Fable/Opus won't switch. "
-            "Current model: "
-            + (active_model or "unknown")
-            + ". Run '/model opusplan', or turn Model Switching OFF in the Console.\033[0m\n"
-        )
-    else:
-        model_is_correct = _is_opus
-        cache_warn = (
-            "\033[0;33m[Pilot] Warning: could not verify active model for /spec "
-            "(statusline cache unavailable). Proceeding without the Opus check -- "
-            "if you are on Sonnet, run '/model opus[1m]' before planning.\033[0m\n"
-        )
-        block_reason = (
-            "[Pilot] /spec requires Opus for planning (Model Switching is OFF). "
-            "Run '/model opus[1m]' (or '/model opus') and try again. "
+            "[Pilot] /spec with Automated Model Switching requires the 'opusplan' model. "
+            "Run '/model opusplan' and try again, or switch Model Switching to Manual or Off "
+            "(Pilot Console -> Settings) to run /spec on whatever model you pick. "
             "(Resuming an existing plan with '/spec <path/to/plan.md>' is allowed on any model.)"
         )
         block_stderr = (
-            "\033[0;31m[Pilot] /spec blocked: planning requires Opus. "
-            "Current model: " + (active_model or "unknown") + ". Run '/model opus[1m]' (or '/model opus').\033[0m\n"
+            "\033[0;31m[Pilot] /spec blocked: Automated Model Switching needs 'opusplan' "
+            "(shows as Sonnet before planning) -- plain Fable/Opus won't switch. "
+            "Current model: "
+            + (active_model or "unknown")
+            + ". Run '/model opusplan', or pick Manual/Off in the Console.\033[0m\n"
         )
 
-    # Fable passes ONLY when Switching is OFF (single-model Fable). Under Switching
-    # ON, opusplan is mandatory -- the slot-pin switch is a no-op on plain Fable --
-    # so Fable is blocked and routed to '/model opusplan' or the OFF toggle.
-    fable_allowed = not model_switch_on
-    model_ok = active_model is not None and (
-        model_is_correct(active_model) or (fable_allowed and _is_fable(active_model))
-    )
+        model_ok = active_model is not None and _is_sonnet(active_model)
 
-    # The cache can never show 'opusplan' -- only its resolved leg -- so when it
-    # would block, consult the alias the user actually SELECTED (settings.json,
-    # written synchronously by /model) before issuing model guidance. Read lazily:
-    # a cache that already passes the gate never needs (or touches) settings.
-    opusplan_selected = False
-    if not model_ok:
-        selected_model = _read_selected_model_from_settings()
-        opusplan_selected = selected_model is not None and _is_opusplan(selected_model)
+        # The cache can never show 'opusplan' -- only its resolved leg -- so when
+        # it would block, consult the alias the user actually SELECTED
+        # (settings.json, written synchronously by /model) before issuing model
+        # guidance. Read lazily: a passing cache never touches settings.
+        if not model_ok:
+            selected_model = _read_selected_model_from_settings()
+            opusplan_selected = selected_model is not None and _is_opusplan(selected_model)
+            if opusplan_selected:
+                # A Fable cache value is NEVER an opusplan resolution (opusplan
+                # resolves only to Opus or Sonnet), so it is proof the session is
+                # live on Fable despite the selection -- block so the switch
+                # actually engages. Any other cache value is either correct or a
+                # transient post-`/model opusplan` lag -- allow.
+                if active_model is not None and _is_fable(active_model):
+                    print(json.dumps({"decision": "block", "reason": block_reason}))
+                    sys.stderr.write(block_stderr)
+                    return 2
+            elif active_model is None:
+                # Cache may not have been written yet (very first prompt of a
+                # fresh session). A Fable-family SELECTION blocks even without a
+                # cache (a fresh Fable session must not enter plan mode under
+                # Automated) -- UNLESS the managed ANTHROPIC_MODEL env pin is
+                # present: the pin outranks the model field on session start,
+                # so the session actually boots on opusplan despite the Fable
+                # field (the injector deliberately preserves both in Automated).
+                if selected_model is not None and _is_fable(selected_model) and not _managed_opusplan_pin_present():
+                    print(json.dumps({"decision": "block", "reason": block_reason}))
+                    sys.stderr.write(block_stderr)
+                    return 2
+                sys.stderr.write(cache_warn)
+            else:
+                print(json.dumps({"decision": "block", "reason": block_reason}))
+                sys.stderr.write(block_stderr)
+                return 2
 
-    if not model_ok and opusplan_selected:
-        if not model_switch_on:
-            # OFF + an explicit opusplan selection is a real misconfiguration
-            # (the skills skip plan mode, so planning would run opusplan's
-            # Sonnet leg) -- block regardless of cache state, but name the
-            # actual conflict and BOTH ways out instead of the generic
-            # requires-Opus message that contradicts the user's /model choice.
-            print(
-                json.dumps(
-                    {
-                        "decision": "block",
-                        "reason": (
-                            "[Pilot] You are on the 'opusplan' model but Model Switching is OFF, "
-                            "so /spec would run planning on opusplan's execution leg instead of Opus. "
-                            "Either turn Model Switching ON (Pilot Console -> Settings -> "
-                            "Model Switching) to use opusplan, or run '/model opus[1m]' (or "
-                            "'/model opus') to run the whole workflow on Opus, then try again. "
-                            "(Resuming an existing plan with '/spec <path/to/plan.md>' is allowed "
-                            "on any model.)"
-                        ),
-                    }
-                )
-            )
-            sys.stderr.write(
-                "\033[0;31m[Pilot] /spec blocked: 'opusplan' needs Model Switching ON "
-                "(Console -> Settings -> Model Switching), or run '/model opus[1m]' (or "
-                "'/model opus') to stay single-model on Opus.\033[0m\n"
-            )
-            return 2
-        # ON + opusplan selected. A Fable cache value is NEVER an opusplan
-        # resolution (opusplan resolves only to Opus or Sonnet), so it is proof
-        # the session is live on Fable (e.g. a manual `/model fable`) despite the
-        # opusplan selection -- block so the switch actually engages. Any other
-        # cache value here is either correct or a transient post-`/model opusplan`
-        # lag (blocking would tell the user to re-run the command they just ran),
-        # so allow.
-        if active_model is not None and _is_fable(active_model):
-            print(json.dumps({"decision": "block", "reason": block_reason}))
-            sys.stderr.write(block_stderr)
-            return 2
-    elif active_model is None:
-        # Cache may not have been written yet (very first prompt of a fresh
-        # session, or a transient render that omitted model_id). Fall open but
-        # warn so the user knows the model check did not run.
-        sys.stderr.write(cache_warn)
-    elif not model_ok:
-        print(json.dumps({"decision": "block", "reason": block_reason}))
-        sys.stderr.write(block_stderr)
-        return 2
+        preflight = _opus_context_preflight()
+        if preflight:
+            context_notes.append(preflight)
 
     if permission_mode and permission_mode != "bypassPermissions":
         sys.stderr.write(
             f"\033[0;33m[Pilot] Warning: /spec works best in 'Bypass Permissions' mode "
             f"(current: {permission_mode}). Press Shift+Tab to switch.\033[0m\n"
         )
+        context_notes.append(
+            f"NOTE: Current permission mode is '{permission_mode}'. "
+            "For uninterrupted /spec execution, 'bypassPermissions' mode is recommended "
+            "(Shift+Tab to cycle). In the current mode the workflow may pause for "
+            "permission prompts. Briefly warn the user, then proceed with the workflow."
+        )
+
+    if context_notes:
         print(
             json.dumps(
                 {
                     "hookSpecificOutput": {
                         "hookEventName": "UserPromptSubmit",
-                        "additionalContext": (
-                            f"NOTE: Current permission mode is '{permission_mode}'. "
-                            "For uninterrupted /spec execution, 'bypassPermissions' mode is recommended "
-                            "(Shift+Tab to cycle). In the current mode the workflow may pause for "
-                            "permission prompts. Briefly warn the user, then proceed with the workflow."
-                        ),
+                        "additionalContext": "\n\n".join(context_notes),
                     }
                 }
             )

@@ -21,28 +21,24 @@ def _run_with_input(
     prompt: str,
     permission_mode: str,
     *,
-    model_switch: str = "false",
+    mode: str = "off",
     claude_config_dir: str = _NO_CLAUDE_DIR,
 ) -> tuple[int, str]:
     """Simulate hook invocation. Returns (exit_code, stdout_output).
 
-    By default the cached active model is mocked as None (no cache yet), which
-    bypasses the Opus check. Use ``_run_with_model_cache`` to override.
-
-    ``model_switch`` controls ``PILOT_MODEL_SWITCH_ENABLED`` -- defaults to
-    ``"false"`` so the Opus gate is active (the OFF behavior these legacy tests
-    encode). ON-path tests pass ``model_switch="true"``. ``claude_config_dir``
-    controls where the guard looks for the settings.json `model` field.
+    By default the cached active model is mocked as None (no cache yet).
+    ``mode`` pins the three-way Model Switching mode (the guard reads it fresh
+    from config.json in production; tests patch the reader). The pre-flight
+    context check is neutralized here; TestOpusContextPreflight covers it.
     """
     hook_data = {"prompt": prompt, "permission_mode": permission_mode}
     stdin = StringIO(json.dumps(hook_data))
     with (
-        patch.dict(
-            os.environ,
-            {"PILOT_MODEL_SWITCH_ENABLED": model_switch, "CLAUDE_CONFIG_DIR": claude_config_dir},
-        ),
+        patch.dict(os.environ, {"CLAUDE_CONFIG_DIR": claude_config_dir}),
         patch("sys.stdin", stdin),
         patch("sys.stdout", new_callable=StringIO) as stdout,
+        patch("spec_mode_guard.read_model_switch_mode", return_value=mode),
+        patch("spec_mode_guard._opus_context_preflight", return_value=None),
         patch("spec_mode_guard._read_active_model_from_cache", return_value=None),
     ):
         code = run_spec_mode_guard()
@@ -54,22 +50,18 @@ def _run_with_model_cache(
     permission_mode: str,
     model_id: str | None,
     *,
-    model_switch: str = "false",
+    mode: str = "off",
     claude_config_dir: str = _NO_CLAUDE_DIR,
 ) -> tuple[int, str]:
-    """Simulate hook invocation with a specific cached model_id.
-
-    ``model_switch`` defaults to ``"false"`` (Opus gate active -- OFF behavior).
-    """
+    """Simulate hook invocation with a specific cached model_id and mode."""
     hook_data = {"prompt": prompt, "permission_mode": permission_mode}
     stdin = StringIO(json.dumps(hook_data))
     with (
-        patch.dict(
-            os.environ,
-            {"PILOT_MODEL_SWITCH_ENABLED": model_switch, "CLAUDE_CONFIG_DIR": claude_config_dir},
-        ),
+        patch.dict(os.environ, {"CLAUDE_CONFIG_DIR": claude_config_dir}),
         patch("sys.stdin", stdin),
         patch("sys.stdout", new_callable=StringIO) as stdout,
+        patch("spec_mode_guard.read_model_switch_mode", return_value=mode),
+        patch("spec_mode_guard._opus_context_preflight", return_value=None),
         patch("spec_mode_guard._read_active_model_from_cache", return_value=model_id),
     ):
         code = run_spec_mode_guard()
@@ -172,37 +164,6 @@ class TestNonSpecPrompts:
         code, output = _run_with_input("/create-skill", "plan")
         assert code == 0
         assert output == ""
-
-
-class TestModelPinHeartbeat:
-    """UserPromptSubmit heartbeats the plan-mode pin lease when a window is open."""
-
-    def _run(self, prompt: str, sentinel_exists: bool) -> list:
-        calls = []
-        hook_data = {"prompt": prompt, "permission_mode": "default"}
-        stdin = StringIO(json.dumps(hook_data))
-
-        class _Sentinel:
-            def exists(self) -> bool:
-                return sentinel_exists
-
-        with (
-            patch.dict(os.environ, {"CLAUDE_CONFIG_DIR": _NO_CLAUDE_DIR}),
-            patch("sys.stdin", stdin),
-            patch("sys.stdout", new_callable=StringIO),
-            patch("spec_mode_guard._read_active_model_from_cache", return_value=None),
-            patch("spec_mode_guard.plan_mode_sentinel_path", return_value=_Sentinel()),
-            patch("spec_mode_guard.invoke_model_pin", side_effect=lambda op, *, detached: calls.append((op, detached))),
-        ):
-            run_spec_mode_guard()
-        return calls
-
-    def test_heartbeats_when_plan_window_open(self):
-        # Even a non-/spec prompt heartbeats while a plan window is open.
-        assert self._run("keep working on the plan", sentinel_exists=True) == [("touch", True)]
-
-    def test_no_heartbeat_without_window(self):
-        assert self._run("explain this code", sentinel_exists=False) == []
 
 
 class TestEdgeCases:
@@ -364,69 +325,46 @@ class TestFableModelGate:
 
     def test_on_blocks_spec_on_explicit_fable_id(self) -> None:
         code, output = _run_with_model_cache(
-            "/spec build a feature", "bypassPermissions", "claude-fable-5[1m]", model_switch="true"
+            "/spec build a feature", "bypassPermissions", "claude-fable-5[1m]", mode="automated"
         )
         assert code == 2
         reason = json.loads(output)["reason"]
         assert "opusplan" in reason
-        assert "Model Switching OFF" in reason
+        assert "Manual" in reason
 
     def test_on_blocks_bare_fable_alias(self) -> None:
-        code, output = _run_with_model_cache(
-            "/spec build a feature", "bypassPermissions", "fable", model_switch="true"
-        )
+        code, output = _run_with_model_cache("/spec build a feature", "bypassPermissions", "fable", mode="automated")
         assert code == 2
         assert "opusplan" in json.loads(output)["reason"]
 
     def test_off_allows_spec_on_explicit_fable_id(self) -> None:
         code, output = _run_with_model_cache(
-            "/spec build a feature", "bypassPermissions", "claude-fable-5[1m]", model_switch="false"
+            "/spec build a feature", "bypassPermissions", "claude-fable-5[1m]", mode="off"
         )
         assert code == 0
         assert output == ""
 
 
-class TestOpusModelBlocking:
-    """/spec on a non-Opus model is hard-blocked when the cache has a model_id."""
+class TestNoGateInManualAndOff:
+    """Manual and Off modes have NO model gate: any model may start /spec."""
 
-    def test_blocks_spec_when_active_model_is_sonnet(self) -> None:
-        code, output = _run_with_model_cache("/spec build a feature", "bypassPermissions", "sonnet")
-        assert code == 2
-        result = json.loads(output)
-        assert result["decision"] == "block"
-        assert "Opus" in result["reason"]
-        assert "/model opus[1m]" in result["reason"]
-
-    def test_blocks_spec_when_active_model_is_explicit_sonnet_id(self) -> None:
-        code, output = _run_with_model_cache("/spec build a feature", "bypassPermissions", "claude-sonnet-4-6")
-        assert code == 2
-
-    def test_allows_spec_when_active_model_is_opus(self) -> None:
-        code, output = _run_with_model_cache("/spec build a feature", "bypassPermissions", "opus")
+    def test_off_allows_spec_on_sonnet(self) -> None:
+        code, output = _run_with_model_cache("/spec build a feature", "bypassPermissions", "sonnet", mode="off")
         assert code == 0
         assert output == ""
 
-    def test_allows_spec_when_active_model_is_opus_1m(self) -> None:
-        code, output = _run_with_model_cache("/spec build a feature", "bypassPermissions", "opus[1m]")
-        assert code == 0
+    def test_manual_allows_spec_on_any_model(self) -> None:
+        for model in ("sonnet", "opus", "claude-fable-5[1m]", "haiku", None):
+            code, output = _run_with_model_cache("/spec build a feature", "bypassPermissions", model, mode="manual")
+            assert code == 0, model
+            assert output == ""
 
-    def test_allows_spec_when_active_model_is_explicit_opus_id(self) -> None:
-        code, output = _run_with_model_cache("/spec build a feature", "bypassPermissions", "claude-opus-4-6")
-        assert code == 0
-
-    def test_does_not_block_when_cache_missing(self) -> None:
-        """No statusline render yet → no cache → don't block (fall-through path)."""
-        code, output = _run_with_model_cache("/spec build a feature", "bypassPermissions", None)
-        assert code == 0
-        assert output == ""
-
-    def test_plan_mode_precedes_opus_block(self) -> None:
-        """When both checks would fire, Plan-mode block wins (it's the user's
-        more-actionable first step)."""
-        code, output = _run_with_model_cache("/spec build a feature", "plan", "sonnet")
-        assert code == 2
-        result = json.loads(output)
-        assert "Plan mode" in result["reason"]
+    def test_plan_mode_block_is_mode_independent(self) -> None:
+        """The plan-permission-mode block still fires in every mode."""
+        for mode in ("automated", "manual", "off"):
+            code, output = _run_with_model_cache("/spec build a feature", "plan", "sonnet", mode=mode)
+            assert code == 2, mode
+            assert "Plan mode" in json.loads(output)["reason"]
 
 
 class TestResumeExistingPlanBypass:
@@ -457,12 +395,13 @@ class TestResumeExistingPlanBypass:
         )
         assert code == 0
 
-    def test_new_plan_on_sonnet_still_blocks(self) -> None:
-        """Sanity: new plan prompts (without a `.md` argument) still hit the guard."""
-        code, output = _run_with_model_cache("/spec build a feature", "bypassPermissions", "sonnet")
+    def test_new_plan_on_wrong_model_still_blocks(self) -> None:
+        """Sanity: new plan prompts (without a `.md` argument) still hit the
+        Automated gate (plain Opus means the user never ran /model opusplan)."""
+        code, output = _run_with_model_cache("/spec build a feature", "bypassPermissions", "opus", mode="automated")
         assert code == 2
         result = json.loads(output)
-        assert "/model opus[1m]" in result["reason"]
+        assert "opusplan" in result["reason"]
 
     def test_plan_mode_still_blocks_resume(self) -> None:
         """Plan-mode block precedes the resume bypass — fix the permission mode first."""
@@ -480,8 +419,8 @@ class TestResumeExistingPlanBypass:
         assert code == 0
 
     def test_resume_with_bare_spec_does_not_match_resume(self) -> None:
-        """`/spec` with no argument is NOT a resume — still subject to Opus gate."""
-        code, output = _run_with_model_cache("/spec", "bypassPermissions", "sonnet")
+        """`/spec` with no argument is NOT a resume -- still subject to the gate."""
+        code, output = _run_with_model_cache("/spec", "bypassPermissions", "opus", mode="automated")
         assert code == 2
 
 
@@ -524,13 +463,13 @@ class TestSpecFamilyPrefixMatch:
         assert output == ""
 
     def test_plain_spec_with_space_still_blocked(self) -> None:
-        """Sanity: `/spec ...` (with whitespace) still triggers the gate."""
-        code, output = _run_with_model_cache("/spec build a feature", "bypassPermissions", "sonnet")
+        """Sanity: `/spec ...` (with whitespace) still triggers the Automated gate."""
+        code, output = _run_with_model_cache("/spec build a feature", "bypassPermissions", "opus", mode="automated")
         assert code == 2
 
     def test_plain_spec_alone_still_blocked(self) -> None:
-        """Sanity: bare `/spec` still triggers the gate."""
-        code, output = _run_with_model_cache("/spec", "bypassPermissions", "sonnet")
+        """Sanity: bare `/spec` still triggers the Automated gate."""
+        code, output = _run_with_model_cache("/spec", "bypassPermissions", "opus", mode="automated")
         assert code == 2
 
 
@@ -574,20 +513,19 @@ class TestCacheMissingEmitsWarning:
         hook_data = {"prompt": "/spec build a feature", "permission_mode": "bypassPermissions"}
         stdin = StringIO(json.dumps(hook_data))
         with (
-            patch.dict(
-                os.environ,
-                {"PILOT_MODEL_SWITCH_ENABLED": "false", "CLAUDE_CONFIG_DIR": _NO_CLAUDE_DIR},
-            ),
+            patch.dict(os.environ, {"CLAUDE_CONFIG_DIR": _NO_CLAUDE_DIR}),
             patch("sys.stdin", stdin),
             patch("sys.stdout", new_callable=StringIO),
             patch("sys.stderr", new_callable=_io.StringIO) as stderr,
+            patch("spec_mode_guard.read_model_switch_mode", return_value="automated"),
+            patch("spec_mode_guard._opus_context_preflight", return_value=None),
             patch("spec_mode_guard._read_active_model_from_cache", return_value=None),
         ):
             code = run_spec_mode_guard()
             assert code == 0
             err = stderr.getvalue()
             assert "Pilot" in err
-            assert "Opus" in err
+            assert "opusplan" in err
 
     def test_no_warning_when_cache_has_opus(self) -> None:
         """Sanity: when the cache resolves to Opus, no warning fires."""
@@ -596,10 +534,10 @@ class TestCacheMissingEmitsWarning:
         hook_data = {"prompt": "/spec build a feature", "permission_mode": "bypassPermissions"}
         stdin = StringIO(json.dumps(hook_data))
         with (
-            patch.dict(os.environ, {"PILOT_MODEL_SWITCH_ENABLED": "false"}),
             patch("sys.stdin", stdin),
             patch("sys.stdout", new_callable=StringIO),
             patch("sys.stderr", new_callable=_io.StringIO) as stderr,
+            patch("spec_mode_guard.read_model_switch_mode", return_value="off"),
             patch("spec_mode_guard._read_active_model_from_cache", return_value="opus"),
         ):
             code = run_spec_mode_guard()
@@ -613,10 +551,10 @@ class TestCacheMissingEmitsWarning:
         hook_data = {"prompt": "/spec docs/plans/foo.md", "permission_mode": "bypassPermissions"}
         stdin = StringIO(json.dumps(hook_data))
         with (
-            patch.dict(os.environ, {"PILOT_MODEL_SWITCH_ENABLED": "false"}),
             patch("sys.stdin", stdin),
             patch("sys.stdout", new_callable=StringIO),
             patch("sys.stderr", new_callable=_io.StringIO) as stderr,
+            patch("spec_mode_guard.read_model_switch_mode", return_value="automated"),
             patch("spec_mode_guard._read_active_model_from_cache", return_value=None),
         ):
             code = run_spec_mode_guard()
@@ -633,38 +571,34 @@ class TestModelSwitchToggle:
 
     def test_on_allows_spec_on_sonnet(self) -> None:
         """ON: a new /spec on Sonnet (the opusplan non-plan leg) is allowed."""
-        code, output = _run_with_model_cache(
-            "/spec build a feature", "bypassPermissions", "sonnet", model_switch="true"
-        )
+        code, output = _run_with_model_cache("/spec build a feature", "bypassPermissions", "sonnet", mode="automated")
         assert code == 0
         assert output == ""
 
     def test_on_allows_spec_on_explicit_sonnet_id(self) -> None:
         code, output = _run_with_model_cache(
-            "/spec build a feature", "bypassPermissions", "claude-sonnet-4-6", model_switch="true"
+            "/spec build a feature", "bypassPermissions", "claude-sonnet-4-6", mode="automated"
         )
         assert code == 0
         assert output == ""
 
     def test_on_blocks_spec_on_plain_opus(self) -> None:
         """ON: plain Opus means the user never ran /model opusplan -- block."""
-        code, output = _run_with_model_cache("/spec build a feature", "bypassPermissions", "opus", model_switch="true")
+        code, output = _run_with_model_cache("/spec build a feature", "bypassPermissions", "opus", mode="automated")
         assert code == 2
         result = json.loads(output)
         assert result["decision"] == "block"
         assert "opusplan" in result["reason"]
 
     def test_on_blocks_spec_on_opus_1m(self) -> None:
-        code, output = _run_with_model_cache(
-            "/spec build a feature", "bypassPermissions", "opus[1m]", model_switch="true"
-        )
+        code, output = _run_with_model_cache("/spec build a feature", "bypassPermissions", "opus[1m]", mode="automated")
         assert code == 2
         assert "opusplan" in json.loads(output)["reason"]
 
     def test_on_blocks_spec_on_explicit_opus_double_suffix(self) -> None:
         """The real-world cache value carries a doubled [1m] suffix -- still blocked."""
         code, output = _run_with_model_cache(
-            "/spec build a feature", "bypassPermissions", "claude-opus-4-8[1m][1m]", model_switch="true"
+            "/spec build a feature", "bypassPermissions", "claude-opus-4-8[1m][1m]", mode="automated"
         )
         assert code == 2
         assert "opusplan" in json.loads(output)["reason"]
@@ -672,7 +606,7 @@ class TestModelSwitchToggle:
     def test_on_resume_on_opus_not_blocked(self) -> None:
         """ON: resuming an existing plan bypasses the model gate on any model."""
         code, output = _run_with_model_cache(
-            "/spec docs/plans/2026-06-03-foo.md", "bypassPermissions", "opus", model_switch="true"
+            "/spec docs/plans/2026-06-03-foo.md", "bypassPermissions", "opus", mode="automated"
         )
         assert code == 0
         assert output == ""
@@ -684,13 +618,12 @@ class TestModelSwitchToggle:
         hook_data = {"prompt": "/spec build a feature", "permission_mode": "bypassPermissions"}
         stdin = StringIO(json.dumps(hook_data))
         with (
-            patch.dict(
-                os.environ,
-                {"PILOT_MODEL_SWITCH_ENABLED": "true", "CLAUDE_CONFIG_DIR": _NO_CLAUDE_DIR},
-            ),
+            patch.dict(os.environ, {"CLAUDE_CONFIG_DIR": _NO_CLAUDE_DIR}),
             patch("sys.stdin", stdin),
             patch("sys.stdout", new_callable=StringIO),
             patch("sys.stderr", new_callable=_io.StringIO) as stderr,
+            patch("spec_mode_guard.read_model_switch_mode", return_value="automated"),
+            patch("spec_mode_guard._opus_context_preflight", return_value=None),
             patch("spec_mode_guard._read_active_model_from_cache", return_value=None),
         ):
             code = run_spec_mode_guard()
@@ -701,93 +634,31 @@ class TestModelSwitchToggle:
 
     def test_on_still_blocks_manual_plan_mode(self) -> None:
         """ON: the plan-mode block is independent of the toggle -- still blocks."""
-        code, output = _run_with_model_cache("/spec build a feature", "plan", "sonnet", model_switch="true")
+        code, output = _run_with_model_cache("/spec build a feature", "plan", "sonnet", mode="automated")
         assert code == 2
         result = json.loads(output)
         assert "Plan mode" in result["reason"]
 
-    def test_unset_env_defaults_to_on(self) -> None:
-        """Unset PILOT_MODEL_SWITCH_ENABLED defaults to ON -> Sonnet allowed."""
-        hook_data = {"prompt": "/spec build a feature", "permission_mode": "bypassPermissions"}
-        stdin = StringIO(json.dumps(hook_data))
-        env_no_switch = {k: v for k, v in os.environ.items() if k != "PILOT_MODEL_SWITCH_ENABLED"}
-        with (
-            patch.dict(os.environ, env_no_switch, clear=True),
-            patch("sys.stdin", stdin),
-            patch("sys.stdout", new_callable=StringIO) as stdout,
-            patch("spec_mode_guard._read_active_model_from_cache", return_value="sonnet"),
-        ):
-            code = run_spec_mode_guard()
-            assert code == 0
-            assert stdout.getvalue() == ""
-
-    def test_off_still_blocks_sonnet(self) -> None:
-        """OFF: the Opus gate is enforced -- Sonnet new-plan is blocked."""
-        code, output = _run_with_model_cache(
-            "/spec build a feature", "bypassPermissions", "sonnet", model_switch="false"
-        )
-        assert code == 2
-        result = json.loads(output)
-        assert "Opus" in result["reason"]
+    def test_off_has_no_model_gate(self) -> None:
+        """Off: no model gate at all -- even Sonnet/Haiku pass (user decision)."""
+        for model in ("sonnet", "haiku", "opus"):
+            code, output = _run_with_model_cache("/spec build a feature", "bypassPermissions", model, mode="off")
+            assert code == 0, model
+            assert output == ""
 
 
 class TestOpusplanSelectedModel:
     """The gate consults the *selected* model (settings.json `model`, written
     synchronously by /model) whenever the resolved statusline cache would
-    block. The cache can never show 'opusplan' -- only its resolved leg -- so
-    on its own it cannot tell an opusplan user from a plain-Sonnet user (OFF)
-    or from a stale pre-switch render (ON, the "run /model opusplan" loop the
-    user just satisfied)."""
+    block (Automated mode only -- Manual/Off have no gate). The cache can never
+    show 'opusplan' -- only its resolved leg -- so on its own it cannot tell an
+    opusplan user from a stale pre-switch render (the "run /model opusplan"
+    loop the user just satisfied)."""
 
     @staticmethod
     def _settings_dir(tmp_path, model: str) -> str:
         (tmp_path / "settings.json").write_text(json.dumps({"model": model}))
         return str(tmp_path)
-
-    def test_off_blocks_opusplan_selection_with_toggle_guidance(self, tmp_path) -> None:
-        """OFF + /model opusplan: still blocked (planning would run the Sonnet
-        leg), but the reason must name the opusplan conflict and BOTH ways out
-        -- the Model Switching toggle and /model opus."""
-        code, output = _run_with_model_cache(
-            "/spec add feature",
-            "bypassPermissions",
-            "claude-sonnet-5",
-            model_switch="false",
-            claude_config_dir=self._settings_dir(tmp_path, "opusplan"),
-        )
-        assert code == 2
-        reason = json.loads(output)["reason"]
-        assert "opusplan" in reason
-        assert "Model Switching" in reason
-        assert "Console" in reason
-        assert "/model opus" in reason
-
-    def test_off_blocks_opusplan_selection_even_when_cache_missing(self, tmp_path) -> None:
-        """OFF + /model opusplan is provably misconfigured from settings alone
-        -- block even when the cache has not been written yet."""
-        code, output = _run_with_input(
-            "/spec add feature",
-            "bypassPermissions",
-            model_switch="false",
-            claude_config_dir=self._settings_dir(tmp_path, "opusplan"),
-        )
-        assert code == 2
-        assert "opusplan" in json.loads(output)["reason"]
-
-    def test_off_detects_legacy_opusplan_1m_value(self, tmp_path) -> None:
-        """A legacy 'opusplan[1m]' settings value from an older Pilot still
-        counts as an opusplan selection."""
-        code, output = _run_with_model_cache(
-            "/spec add feature",
-            "bypassPermissions",
-            "claude-sonnet-5",
-            model_switch="false",
-            claude_config_dir=self._settings_dir(tmp_path, "opusplan[1m]"),
-        )
-        assert code == 2
-        reason = json.loads(output)["reason"]
-        assert "opusplan" in reason
-        assert "Console" in reason
 
     def test_on_allows_stale_opus_cache_when_opusplan_selected(self, tmp_path) -> None:
         """ON + /model opusplan just ran: the async cache may still hold the
@@ -797,7 +668,7 @@ class TestOpusplanSelectedModel:
             "/spec add feature",
             "bypassPermissions",
             "claude-opus-4-8",
-            model_switch="true",
+            mode="automated",
             claude_config_dir=self._settings_dir(tmp_path, "opusplan"),
         )
         assert code == 0
@@ -813,13 +684,13 @@ class TestOpusplanSelectedModel:
             "/spec add feature",
             "bypassPermissions",
             "claude-fable-5[1m]",
-            model_switch="true",
+            mode="automated",
             claude_config_dir=self._settings_dir(tmp_path, "opusplan"),
         )
         assert code == 2
         reason = json.loads(output)["reason"]
         assert "opusplan" in reason
-        assert "Model Switching OFF" in reason
+        assert "Manual" in reason
 
     def test_on_missing_cache_with_opusplan_selected_allows_without_warning(self, tmp_path) -> None:
         """ON + opusplan selected + cache never written: the persisted selection
@@ -832,35 +703,18 @@ class TestOpusplanSelectedModel:
         hook_data = {"prompt": "/spec add feature", "permission_mode": "bypassPermissions"}
         stdin = StringIO(json.dumps(hook_data))
         with (
-            patch.dict(
-                os.environ,
-                {
-                    "PILOT_MODEL_SWITCH_ENABLED": "true",
-                    "CLAUDE_CONFIG_DIR": self._settings_dir(tmp_path, "opusplan"),
-                },
-            ),
+            patch.dict(os.environ, {"CLAUDE_CONFIG_DIR": self._settings_dir(tmp_path, "opusplan")}),
             patch("sys.stdin", stdin),
             patch("sys.stdout", new_callable=StringIO) as stdout,
             patch("sys.stderr", new_callable=_io.StringIO) as stderr,
+            patch("spec_mode_guard.read_model_switch_mode", return_value="automated"),
+            patch("spec_mode_guard._opus_context_preflight", return_value=None),
             patch("spec_mode_guard._read_active_model_from_cache", return_value=None),
         ):
             code = run_spec_mode_guard()
         assert code == 0
         assert stdout.getvalue() == ""
         assert stderr.getvalue() == ""
-
-    def test_off_non_opusplan_selection_keeps_generic_block(self, tmp_path) -> None:
-        """OFF + a non-opusplan selection on a Sonnet cache keeps the generic
-        requires-Opus block."""
-        code, output = _run_with_model_cache(
-            "/spec add feature",
-            "bypassPermissions",
-            "claude-sonnet-5",
-            model_switch="false",
-            claude_config_dir=self._settings_dir(tmp_path, "claude-fable-5[1m]"),
-        )
-        assert code == 2
-        assert "requires Opus for planning" in json.loads(output)["reason"]
 
     def test_off_opus_cache_wins_over_opusplan_selection(self, tmp_path) -> None:
         """OFF + this session actually on Opus: the per-session cache stays
@@ -869,44 +723,139 @@ class TestOpusplanSelectedModel:
             "/spec add feature",
             "bypassPermissions",
             "claude-opus-4-8[1m]",
-            model_switch="false",
+            mode="off",
             claude_config_dir=self._settings_dir(tmp_path, "opusplan"),
         )
         assert code == 0
         assert output == ""
 
 
-class TestSingleModelFableSession:
-    """is_single_model_fable_session: settings.json selection is authoritative."""
+class TestOpusContextPreflight:
+    """Automated-mode pre-flight: warn when the conversation likely exceeds the
+    Opus plan leg's effective 200K window (opusplan then silently stays on the
+    Sonnet leg). Fails open on missing/corrupt cache."""
 
-    def _check(self, tmp_path, *, settings_model: str | None, cache_model: str | None) -> bool:
-        from spec_mode_guard import is_single_model_fable_session
+    def _preflight(self, tmp_path, cache: object) -> str | None:
+        import spec_mode_guard as g
 
-        claude_dir = tmp_path / ".claude"
-        claude_dir.mkdir(parents=True, exist_ok=True)
-        if settings_model is not None:
-            (claude_dir / "settings.json").write_text(json.dumps({"model": settings_model}))
+        session_dir = tmp_path / "sessions" / "test-preflight"
+        session_dir.mkdir(parents=True)
+        if cache is not None:
+            (session_dir / "context-pct.json").write_text(cache if isinstance(cache, str) else json.dumps(cache))
         with (
-            patch.dict(os.environ, {"CLAUDE_CONFIG_DIR": str(claude_dir)}),
-            patch("spec_mode_guard._read_active_model_from_cache", return_value=cache_model),
+            patch.dict(os.environ, {"PILOT_SESSION_ID": "test-preflight"}),
+            patch("spec_mode_guard.Path.home", return_value=tmp_path / "fake-home"),
         ):
-            return is_single_model_fable_session()
+            # Point the cache path at our fixture via a fake home.
+            real = tmp_path / "fake-home" / ".pilot" / "sessions" / "test-preflight"
+            real.mkdir(parents=True, exist_ok=True)
+            if cache is not None:
+                (real / "context-pct.json").write_text(cache if isinstance(cache, str) else json.dumps(cache))
+            return g._opus_context_preflight()
 
-    def test_false_when_opusplan_selected_even_with_fable_cache(self, tmp_path):
-        # An opusplan session whose execution leg is Fable is NOT a single-model
-        # Fable session -- the skills must still toggle plan mode.
-        assert self._check(tmp_path, settings_model="opusplan", cache_model="claude-fable-5") is False
+    def test_warns_above_floor(self, tmp_path) -> None:
+        msg = self._preflight(tmp_path, {"pct": 42.0, "context_window_size": 1_000_000})
+        assert msg is not None
+        assert "420K" in msg
+        assert "/compact" in msg
+        assert "Manual" in msg
 
-    def test_true_when_fable_selected(self, tmp_path):
-        assert self._check(tmp_path, settings_model="fable", cache_model=None) is True
+    def test_silent_below_floor(self, tmp_path) -> None:
+        assert self._preflight(tmp_path, {"pct": 10.0, "context_window_size": 1_000_000}) is None
 
-    def test_true_when_no_selection_but_fable_cache(self, tmp_path):
-        assert self._check(tmp_path, settings_model=None, cache_model="claude-fable-5") is True
+    def test_silent_on_missing_cache(self, tmp_path) -> None:
+        assert self._preflight(tmp_path, None) is None
 
-    def test_false_when_no_selection_and_sonnet_cache(self, tmp_path):
-        assert self._check(tmp_path, settings_model=None, cache_model="claude-sonnet-5") is False
+    def test_silent_on_corrupt_cache(self, tmp_path) -> None:
+        assert self._preflight(tmp_path, "{ not json") is None
 
-    def test_true_when_non_managed_selection_and_fable_cache(self, tmp_path):
-        # A user-selected non-opusplan model with a Fable cache render counts
-        # as single-model (e.g. `best` resolving to Fable).
-        assert self._check(tmp_path, settings_model="best", cache_model="claude-fable-5") is True
+    def test_silent_on_200k_window_below_floor(self, tmp_path) -> None:
+        # 82% of 200K = 164K < 180K floor -> no warning.
+        assert self._preflight(tmp_path, {"pct": 82.0, "context_window_size": 200_000}) is None
+
+    def test_guard_emits_preflight_context_in_automated_mode(self) -> None:
+        hook_data = {"prompt": "/spec build a feature", "permission_mode": "bypassPermissions"}
+        stdin = StringIO(json.dumps(hook_data))
+        with (
+            patch("sys.stdin", stdin),
+            patch("sys.stdout", new_callable=StringIO) as stdout,
+            patch("spec_mode_guard.read_model_switch_mode", return_value="automated"),
+            patch("spec_mode_guard._read_active_model_from_cache", return_value="sonnet"),
+            patch("spec_mode_guard._opus_context_preflight", return_value="[Pilot] PRE-FLIGHT TEST"),
+        ):
+            code = run_spec_mode_guard()
+        assert code == 0
+        payload = json.loads(stdout.getvalue())
+        assert "PRE-FLIGHT TEST" in payload["hookSpecificOutput"]["additionalContext"]
+
+    def test_guard_never_runs_preflight_in_manual_mode(self) -> None:
+        hook_data = {"prompt": "/spec build a feature", "permission_mode": "bypassPermissions"}
+        stdin = StringIO(json.dumps(hook_data))
+        with (
+            patch("sys.stdin", stdin),
+            patch("sys.stdout", new_callable=StringIO) as stdout,
+            patch("spec_mode_guard.read_model_switch_mode", return_value="manual"),
+            patch("spec_mode_guard._read_active_model_from_cache", return_value="sonnet"),
+            patch("spec_mode_guard._opus_context_preflight") as preflight,
+        ):
+            code = run_spec_mode_guard()
+        assert code == 0
+        preflight.assert_not_called()
+        assert stdout.getvalue() == ""
+
+
+class TestFreshConfigModeResolution:
+    """The guard reads the mode fresh from config.json -- a Console change must
+    reach running sessions whose env is startup-frozen."""
+
+    def test_config_wins_over_stale_env(self, tmp_path) -> None:
+        import sys as _sys
+
+        _lib = __import__("_lib.util", fromlist=["util"])
+        config = tmp_path / ".pilot" / "config.json"
+        config.parent.mkdir(parents=True)
+        config.write_text(json.dumps({"specWorkflow": {"modelSwitchMode": "automated"}}))
+        with (
+            patch.dict(os.environ, {"PILOT_MODEL_SWITCH_MODE": "manual"}),
+            patch.object(_lib.Path, "home", return_value=tmp_path),
+        ):
+            assert _lib.read_model_switch_mode() == "automated"
+
+    def test_automated_fallback_when_config_unreadable(self, tmp_path) -> None:
+        # Unified with the launcher's get_model_switch_mode: unreadable config
+        # falls back to "automated" (the default) everywhere. The env var is
+        # display metadata, deliberately NOT a decision fallback (startup-frozen;
+        # readers could otherwise disagree mid-session).
+        _lib = __import__("_lib.util", fromlist=["util"])
+        with (
+            patch.dict(os.environ, {"PILOT_MODEL_SWITCH_MODE": "off"}),
+            patch.object(_lib.Path, "home", return_value=tmp_path / "nope"),
+        ):
+            assert _lib.read_model_switch_mode() == "automated"
+
+    def test_legacy_boolean_mapping_in_config(self, tmp_path) -> None:
+        _lib = __import__("_lib.util", fromlist=["util"])
+        config = tmp_path / ".pilot" / "config.json"
+        config.parent.mkdir(parents=True)
+        config.write_text(json.dumps({"specWorkflow": {"modelSwitch": False}}))
+        with patch.object(_lib.Path, "home", return_value=tmp_path):
+            assert _lib.read_model_switch_mode() == "off"
+
+
+class TestPreflightWarnsOncePerSession:
+    def test_marker_suppresses_second_warning(self, tmp_path) -> None:
+        import spec_mode_guard as g
+
+        home = tmp_path / "home"
+        session = home / ".pilot" / "sessions" / "pf-once"
+        session.mkdir(parents=True)
+        (session / "context-pct.json").write_text(json.dumps({"pct": 42.0, "context_window_size": 1_000_000}))
+        with (
+            patch.dict(os.environ, {"PILOT_SESSION_ID": "pf-once"}),
+            patch("spec_mode_guard.Path.home", return_value=home),
+        ):
+            first = g._opus_context_preflight()
+            second = g._opus_context_preflight()
+        assert first is not None
+        assert second is None  # once per session
+        assert (session / "preflight-context-warned").exists()

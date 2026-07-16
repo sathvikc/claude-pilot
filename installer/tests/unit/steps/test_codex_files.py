@@ -468,10 +468,10 @@ class TestCodexSkillsInstallation:
         assert "Environment blocker protocol" in cc_result
         assert "! <command>" in cc_result
 
-    def test_spec_plan_codex_skill_strips_fable_plan_mode_skip(self) -> None:
-        """Fable plan-mode skip is CC-ONLY (Codex has no model switching).
+    def test_spec_plan_codex_skill_strips_model_switch_mode(self) -> None:
+        """Model Switching is CC-ONLY (Codex has no model switching).
 
-        The sentinel-based skip in the planning skills must survive the CC
+        The three-way mode read in the planning skills must survive the CC
         build and be stripped from the Codex build (skill-sync parity rule).
         """
         from installer.skill_builder import build_skill_md
@@ -479,10 +479,12 @@ class TestCodexSkillsInstallation:
 
         for skill in ("spec-plan", "spec-bugfix-plan"):
             codex_result = build_codex_skill_md(Path("pilot/skills") / skill)
-            assert "plan-mode-skipped-fable" not in codex_result, skill
+            assert "read_model_switch_mode" not in codex_result, skill
+            assert "EnterPlanMode" not in codex_result, skill
+            assert "ExitPlanMode" not in codex_result, skill
 
             cc_result = build_skill_md(Path("pilot/skills") / skill)
-            assert "plan-mode-skipped-fable" in cc_result, skill
+            assert "read_model_switch_mode" in cc_result, skill
 
 
 class TestCodexRulesInstallation:

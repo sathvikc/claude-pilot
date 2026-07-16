@@ -1,12 +1,13 @@
 """Shipped Claude subagents must pin a full base model id, not a 1m-inheriting alias.
 
-The ``[1m]`` context-window suffix on ``ANTHROPIC_DEFAULT_OPUS_MODEL`` /
-``ANTHROPIC_DEFAULT_SONNET_MODEL`` applies to *all* usage of the ``opus`` and
-``sonnet`` aliases, including subagents whose frontmatter says ``model: sonnet``.
-A subagent spawned from a ``[1m]`` parent then inherits the 1M context window and
-dies with "Extra usage is required for 1M context" (claude-code#44117, #42082).
-Pinning a full base model id (e.g. ``claude-sonnet-4-6``) bypasses the alias and
-keeps subagents on the standard 200K window.
+A subagent whose frontmatter says ``model: sonnet`` resolves through the alias,
+and a ``[1m]``-suffixed parent session (e.g. a user-selected ``fable[1m]`` or a
+``[1m]`` alias remap) can make it inherit the 1M context window and die with
+"Extra usage is required for 1M context" (claude-code#44117, #42082). Pinning a
+full base model id (e.g. ``claude-sonnet-4-6``) bypasses the alias and keeps
+subagents on the standard 200K window. (Pilot's own ``ANTHROPIC_DEFAULT_*``
+slot pins are retired, but alias inheritance is a Claude Code behavior and the
+defense stays.)
 """
 
 from __future__ import annotations

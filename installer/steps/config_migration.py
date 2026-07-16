@@ -11,7 +11,7 @@ import os
 from pathlib import Path
 from typing import Any
 
-CURRENT_CONFIG_VERSION = 19
+CURRENT_CONFIG_VERSION = 20
 
 _STALE_AGENT_KEYS = frozenset(
     {
@@ -133,6 +133,9 @@ def migrate_model_config(
 
     if version < 19:
         modified = _migration_v19(raw) or modified
+
+    if version < 20:
+        modified = _migration_v20(raw) or modified
 
     if raw.get("_configVersion") != CURRENT_CONFIG_VERSION:
         raw["_configVersion"] = CURRENT_CONFIG_VERSION
@@ -562,19 +565,17 @@ def _migration_v12(raw: dict[str, Any]) -> bool:
 
 
 def _migration_v13(raw: dict[str, Any]) -> bool:
-    """v12 -> v13: force-enable automated model switching; strip dead isolated-impl keys.
+    """v12 -> v13: strip dead isolated-impl keys.
 
-    Two changes:
-    1. Force-enables specWorkflow.modelSwitch=True for all users. The toggle now
-       drives AUTOMATED switching (Opus planning via plan mode, Sonnet for
-       implementation + verification), replacing the old manual /clear + /model
-       handoff. Force-on so users who disabled the old manual handoff get the new
-       automated flow. The accompanying one-time announcement explains how to turn
-       it off (Console -> Settings -> Automation) for users who want Opus everywhere.
-    2. Removes specWorkflow.isolatedImplementation and specWorkflow.implementationModel
-       -- dead keys left by the reverted "isolated implementation via context:fork"
-       plan (config schema v12 cycle). The validator flags them as unknown; this
-       migration cleans them up so existing installs stop emitting warnings.
+    Historical note: this migration (like the later v18) originally ALSO
+    force-enabled ``specWorkflow.modelSwitch=True``. That half is retired for
+    the same reason as v18's: v20 maps the legacy boolean to the three-way
+    ``modelSwitchMode`` (``False`` -> ``"off"``), and a force-enable earlier in
+    the same migrate pass would destroy a pre-v13 user's explicit OFF choice
+    before v20 can see it. Remaining change: removes
+    specWorkflow.isolatedImplementation and specWorkflow.implementationModel
+    -- dead keys left by the reverted "isolated implementation via context:fork"
+    plan (config schema v12 cycle).
     """
     modified = False
 
@@ -588,10 +589,6 @@ def _migration_v13(raw: dict[str, Any]) -> bool:
         if dead_key in spec_workflow:
             del spec_workflow[dead_key]
             modified = True
-
-    if spec_workflow.get("modelSwitch") is not True:
-        spec_workflow["modelSwitch"] = True
-        modified = True
 
     return modified
 
@@ -676,18 +673,17 @@ def _migration_v17(raw: dict[str, Any]) -> bool:
 
 
 def _migration_v18(raw: dict[str, Any]) -> bool:
-    """v17 -> v18: force-enable model switching again; relax code-review effort to high.
+    """v17 -> v18: relax code-review effort to high.
 
-    Two changes:
-    1. Force-enables ``specWorkflow.modelSwitch=True`` for ALL users -- re-asserting
-       automated switching as the standard even for those who disabled it after the
-       v13 force-enable. (Deliberate product decision; the toggle can be turned off
-       again in Console -> Settings -> Automation.)
-    2. Flips ``codeReview.effort`` from ``"xhigh"`` to ``"high"``. ``_migration_v15``
-       seeded ``xhigh`` into EVERY config, so that value is rarely a deliberate
-       choice; the new default is ``high`` because ``/code-review`` spawns many
-       subagents and cost scales steeply with effort. A deliberate non-``xhigh``
-       value (``low``/``medium``/``high``/``max``) is left untouched.
+    Historical note: this migration originally ALSO force-enabled
+    ``specWorkflow.modelSwitch=True`` for all users. That half is retired: v20
+    maps the legacy boolean to the three-way ``modelSwitchMode`` (``False`` ->
+    ``"off"``, else ``"manual"``), and force-enabling here first would destroy a
+    pre-v18 user's explicit OFF choice before v20 can see it (the v18 flip ran
+    in the same migrate pass). The remaining change flips ``codeReview.effort``
+    from ``"xhigh"`` to ``"high"`` -- ``_migration_v15`` seeded ``xhigh`` into
+    EVERY config, so that value is rarely a deliberate choice; a deliberate
+    non-``xhigh`` value (``low``/``medium``/``high``/``max``) is left untouched.
     """
     modified = False
 
@@ -695,9 +691,6 @@ def _migration_v18(raw: dict[str, Any]) -> bool:
     if not isinstance(spec_workflow, dict):
         spec_workflow = {}
         raw["specWorkflow"] = spec_workflow
-        modified = True
-    if spec_workflow.get("modelSwitch") is not True:
-        spec_workflow["modelSwitch"] = True
         modified = True
 
     code_review = raw.get("codeReview")
@@ -745,6 +738,36 @@ def _migration_v19(raw: dict[str, Any]) -> bool:
         return False
     raw["codeReview"] = dict(_V19_CODE_REVIEW_DEFAULT)
     return True
+
+
+_V20_MODEL_SWITCH_MODES = frozenset({"automated", "manual", "off"})
+
+
+def _migration_v20(raw: dict[str, Any]) -> bool:
+    """v19 -> v20: three-way ``modelSwitchMode`` replaces the pin-era keys.
+
+    The window-scoped slot-pin machinery (boolean ``modelSwitch`` plus the
+    configurable ``planModel``/``execModel`` pair) was removed. Mapping
+    (``automated`` is the default -- it matches what pre-mode users on the old
+    ON toggle were already getting): ``modelSwitch`` ``False`` -> ``"off"``,
+    anything else (true / absent) -> ``"automated"``. An explicit valid
+    ``modelSwitchMode`` written by a newer Console build is preserved. The
+    retired keys are deleted either way.
+    """
+    workflow = raw.get("specWorkflow")
+    if not isinstance(workflow, dict):
+        workflow = {}
+        raw["specWorkflow"] = workflow
+    modified = False
+    mode = workflow.get("modelSwitchMode")
+    if not (isinstance(mode, str) and mode in _V20_MODEL_SWITCH_MODES):
+        workflow["modelSwitchMode"] = "off" if workflow.get("modelSwitch") is False else "automated"
+        modified = True
+    for retired in ("modelSwitch", "planModel", "execModel"):
+        if retired in workflow:
+            del workflow[retired]
+            modified = True
+    return modified
 
 
 def _write_atomic(path: Path, data: dict[str, Any]) -> None:

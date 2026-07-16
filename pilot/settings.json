@@ -1,7 +1,5 @@
 {
   "env": {
-    "ANTHROPIC_DEFAULT_OPUS_MODEL": "claude-opus-4-8[1m]",
-    "ANTHROPIC_DEFAULT_SONNET_MODEL": "claude-sonnet-4-6",
     "CLAUDE_CODE_DISABLE_1M_CONTEXT": "false",
     "CLAUDE_CODE_EFFORT_LEVEL": "xhigh",
     "CLAUDE_CODE_WORKFLOWS": "true",

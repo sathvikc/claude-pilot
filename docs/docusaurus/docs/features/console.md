@@ -32,7 +32,7 @@ Each view that supports project filtering has an inline **Project Filter** dropd
 | **Extensions** | All extensions - local, plugin, remote - with team sharing via git (push, pull, diff), color-coded categories, and scope filtering. |
 | **Changes** | Git diff viewer with staged/unstaged files, branch info, worktree context. Hosts Code Review and Spec Task Correlation (below). |
 | **Usage** | Daily token costs, model routing breakdown (Opus vs Sonnet), and usage trends. |
-| **Settings** | Spec workflow toggles (branch isolation, ask questions, plan approval, Model Switching), reviewer toggles. See [Settings](#settings) below. |
+| **Settings** | Spec workflow toggles (branch isolation, ask questions, plan approval), the Model Switching mode, reviewer toggles. See [Settings](#settings) below. |
 | **Documentation** | Embedded pilot-shell.com documentation - full technical reference without leaving the Console. |
 
 ## Plan Annotation
@@ -138,16 +138,16 @@ The billed cloud `ultra` mode stays excluded. Pick **Single Sub-Agent** to keep 
 
 ### Spec Workflow -> Automation
 
-Four toggles control user interaction points during `/spec`. Disable all four for fully autonomous end-to-end execution.
+Three toggles control user interaction points, plus the Model Switching mode during `/spec`. Disable all three for fully autonomous end-to-end execution.
 
 | Toggle | Default | Enabled | Disabled |
 |--------|---------|---------|----------|
 | **Branch Isolation** | On | Asks how to isolate `/spec` changes (new branch or worktree) | Always works on the current branch |
 | **Ask Questions** | On | Asks clarifying questions during planning | Planning makes autonomous default choices |
 | **Plan Approval** | On | Requires your approval before implementation starts | Implementation begins automatically after planning |
-| **Model Switching** *(Claude Code only; own Settings block with Plan Model + Execution Model dropdowns)* | On | Automatically runs `/spec` planning on the configurable **Plan Model** (Opus 4.8 default, or Fable 5) and implementation + verification on the **Execution Model** (Sonnet 5 default, or Opus 4.8) - requires the `opusplan` model (see [Model Routing](model-routing)). A Fable plan model applies only during plan-mode windows and an Opus execution model only during a running `/spec`, so the cross-family remap is transient (Opus execution requires Fable planning); window reverts rewrite the slot pins back to their explicit baselines so running sessions switch back too. No manual `/model` step. | The whole `/spec` workflow runs on your active `/model` choice (Pilot defaults it to Opus 4.8 at 1M; a saved Fable model is preserved) |
+| **Model Switching** *(Claude Code only; own Settings block with three mode cards)* | Automated | **Automated** (default): `/spec` runs on `opusplan` (Opus 4.8 plans, Sonnet 5 executes, switched natively; requires `/model opusplan`). **Manual**: you drive `/model` yourself -- `/spec` pauses once after plan approval. **Off**: no model management at all. See [Model Routing](model-routing). | n/a -- pick one of the three modes |
 
-With all four workflow toggles off, `/spec add user authentication` plans, implements, and verifies the feature end-to-end without checkpoints, entirely on your active model.
+With all three workflow toggles off, `/spec add user authentication` plans, implements, and verifies the feature end-to-end without checkpoints, entirely on your active model.
 
 :::warning Token usage in autonomous mode
 No checkpoints means your agent executes the entire workflow without asking. Make sure your prompt is specific enough to avoid misinterpretation. You can always interrupt with Escape.
@@ -171,7 +171,7 @@ All settings are stored in `~/.pilot/config.json`:
     "branchIsolation": true,
     "askQuestionsDuringPlanning": true,
     "planApproval": true,
-    "modelSwitch": true
+    "modelSwitchMode": "manual"
   },
   "codeReview": {
     "spec": "agent",
