@@ -119,6 +119,7 @@ const rulesCategories = [
       "Context management and compaction resilience",
       "Code review reception and change handling",
       "Documentation sync — keep README, API docs, and AGENTS.md current with code changes",
+      "Response shape — answer first, numbered steps, no preamble or filler",
     ],
   },
   {

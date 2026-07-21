@@ -18,15 +18,39 @@ Use the absolute `FIND_BIN` form above. In Pilot Shell sessions the shell hook m
 
 ### 1b: Resolve the review diff scope and stage (before ANY reviewer launches)
 
-**Resolve `DIFF_SCOPE` once — every reviewer launch below AND every Step 2 audit uses exactly this scope.** It depends on the plan's `Worktree:` mode, because that determines whether the change is committed:
+**Resolve `DIFF_SCOPE` once with the resolver — every reviewer launch below AND every Step 2 audit uses exactly this scope.** ⛔ Do NOT derive it by hand. `pilot review-scope` is the single source of truth; deriving the range from prose is what let issue #168 hide at nine separate sites at once.
 
-- **Non-worktree mode (`Worktree: No`, the default):** the implementation phase does NOT commit, so the work sits in the WORKING TREE (modified files plus brand-new untracked ones). Stage the change's own files (below), then **`DIFF_SCOPE` = `git diff HEAD -- <changed files>`** — which now includes the staged additions.
-- **Worktree mode (`Worktree: Yes`):** the implementation phase per-task-commits (`spec-implement` TDD loop), so the work is already committed on the worktree branch. Do NOT stage. Resolve the base ref (`~/.pilot/bin/pilot worktree status --json <slug>` → `base_branch`, default `main`) and **`DIFF_SCOPE` = `git diff <base_ref>..HEAD -- <changed files>`**. A plain `git diff HEAD` here would review an EMPTY diff.
+```bash
+SCOPE=$(~/.pilot/bin/pilot review-scope --slug <plan-slug> --json 2>/dev/null \
+  | python3 -c 'import json,sys; print(json.dumps(json.load(sys.stdin)))' 2>/dev/null)
+echo "${SCOPE:-UNAVAILABLE — use the manual fallback below}"
+# {"mode":"worktree","base_ref":"dev","diff_range":"dev...HEAD","diff_command":"git diff dev...HEAD"}
+# {"mode":"working-tree","base_ref":"HEAD","diff_range":"HEAD","diff_command":"git diff HEAD"}
+```
+
+⛔ The `json.load` parse is a guard, not decoration. A `pilot` binary predating `review-scope` does not fail on it — it prints the "runs directly inside Claude Code" transition banner and exits **0**. Without the parse, `$SCOPE` would silently become that banner text. Empty `$SCOPE` means "unavailable"; use the manual fallback below.
+
+**`DIFF_SCOPE` = `git diff <diff_range> -- <changed files>`**, and `mode` tells you whether to stage:
+
+| `mode` | Meaning | Action |
+|---|---|---|
+| `working-tree` | The change is uncommitted — `spec-implement` did not commit (the `Worktree: No` default) | **Stage the change's own files first** (below), so new files are in the diff |
+| `worktree` | The change is per-task-committed on the worktree branch | **Do NOT stage.** A plain `git diff HEAD` here would review an EMPTY diff |
+
+If the JSON carries a `warning`, surface it — the scope degraded to the working-tree diff and may not cover commits already on the branch.
+
+**If the command is unavailable** (older `pilot` binary — `review-scope` ships alongside this step), resolve it by hand instead:
+
+- Change uncommitted → `git diff HEAD`.
+- Worktree mode → `git diff <base_ref>...HEAD`, taking `<base_ref>` from `~/.pilot/bin/pilot worktree detect --json <slug>`.
+- Three dots, always. Two dots diff against the base branch's live tip, rendering its post-fork commits into the review inverted.
+- The *detected* base branch, never a hardcoded `main` — a worktree forked from `dev` would otherwise drag in every `dev`-only commit.
+- `pilot worktree status` is the wrong command here: it takes no slug and is session-scoped, not plan-scoped.
 
 A review of the unstaged tree (non-worktree) misfires both ways: a reviewer reading `git status --untracked-files=all` reports a spurious `critical` ("deliverable depends on untracked files"), while one reading only `git diff HEAD` silently OMITS new files. Staging fixes both:
 
 ```bash
-# Non-worktree mode ONLY — stage the plan's files (paths from each task's `Files:` block)
+# `mode: working-tree` ONLY — stage the plan's files (paths from each task's `Files:` block)
 # plus documented deviations — NOT unrelated dirty or untracked files.
 git add <path/from/plan/Files-block-1> <path/from/plan/Files-block-2> ...
 git status --short --untracked-files=all | grep '^??' || true   # anything still untracked must NOT be part of this change
@@ -62,8 +86,10 @@ Agent(
   **Changed files:** <paths from the plan's Files: blocks + documented deviations>
   **Runtime environment:** <plan's Runtime Environment section, if present>
   **Output path:** <absolute findings path above>
+  **Base ref:** <the `base_ref` field from the Step 1b resolver output, verbatim. Substitute the real value; never leave the placeholder, and never let the reviewer fall back to a guessed branch name.>
+  **Diff range:** <the `diff_range` field from the Step 1b resolver output, verbatim.>
 
-  Review the diff (DIFF_SCOPE resolved in Step 1b — `git diff HEAD -- <changed files>` in non-worktree mode, `git diff <base_ref>..HEAD -- <changed files>` in worktree mode) against the plan: compliance, quality, goal achievement.
+  Review the diff (`git diff <diff_range> -- <changed files>`, exactly as resolved in Step 1b) against the plan: compliance, quality, goal achievement.
   Write findings JSON to output_path using the Write tool.
   IMPORTANT: Include the plan file path in your output JSON as the "plan_file" field.
   """
@@ -104,7 +130,7 @@ PROJECT_ROOT="${CLAUDE_PROJECT_ROOT:-$(pwd)}"
 2. Build the review prompt file by rendering the **template at `$HOME/.claude/agents/changes-review-codex.md`**. The template is the single source of truth for code-review semantics — do NOT re-state the prompt inline in this skill. Substitute four placeholders:
    - `{{PLAN_PATH}}` — absolute path to the plan file
    - `{{PLAN_GOAL}}` — the 1–2 sentence Goal sentence from the plan's `## Summary`
-   - `{{BASE_REF}}` — consistent with the Step 1b `DIFF_SCOPE`: **`HEAD` in non-worktree mode** (the change is uncommitted/staged, so the template's `git diff <BASE_REF>..HEAD` is empty and it falls back to `git diff HEAD` — the staged implementation; a `main` base would instead review prior branch commits on a dirty branch ahead of main), and the **worktree base branch** (`pilot worktree status --json` → `base_branch`) in worktree mode.
+   - `{{BASE_REF}}` — the `base_ref` field from the Step 1b resolver output, verbatim. That is `HEAD` in working-tree mode (the change is uncommitted/staged, so the template's `git diff <BASE_REF>...HEAD` is empty and it falls back to `git diff HEAD` — the staged implementation), and the detected base branch in worktree mode. Never substitute a hardcoded branch name.
    - `{{CHANGED_FILES}}` — newline-separated paths to the files the plan said it would touch (extracted from each task's `Files:` block)
 
 ```bash
@@ -114,7 +140,7 @@ PROMPT_FILE="$SESS_DIR/codex-changes-review-<plan-slug>.md"
 
 PLAN_PATH="/absolute/path/to/docs/plans/YYYY-MM-DD-<slug>.md"
 PLAN_GOAL="<one or two sentences from the plan Summary>"
-BASE_REF="HEAD"   # non-worktree: HEAD → template falls back to `git diff HEAD` (the staged change). Worktree: set to the base_branch from `pilot worktree status --json`.
+BASE_REF=$(~/.pilot/bin/pilot review-scope --slug <plan-slug> --json 2>/dev/null | python3 -c 'import json,sys;print(json.load(sys.stdin)["base_ref"])' 2>/dev/null || echo HEAD)
 CHANGED_FILES=$(printf -- '- %s\n' \
   path/to/changed/file-1 \
   path/to/changed/file-2)
@@ -194,6 +220,8 @@ review = multi_agent_v1.spawn_agent(
     Plan file: <plan-path>
     User request: <original task description that invoked $spec>
     Changed files: [file list]
+    Base ref: <the `base_ref` field from the Step 1b resolver output, verbatim — never a guessed branch name.>
+    Diff range: <the `diff_range` field from the Step 1b resolver output, verbatim.>
     Runtime environment: [how to start, port, deploy path]
     Test framework constraints: [what it can/cannot test]
 

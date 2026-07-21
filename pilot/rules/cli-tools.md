@@ -7,7 +7,8 @@
 | Group | Commands |
 |-------|----------|
 | Session | `pilot check-context --json`, `pilot register-plan <path> <status>` |
-| Worktree | `pilot worktree detect\|create\|diff\|sync\|cleanup\|status --json <slug>` (slug = plan filename without date prefix and `.md`; `create` auto-stashes) |
+| Review | `pilot review-scope [--slug <slug>] [--json]` — **the** resolver for a code review's `git diff` scope; never derive the range by hand. `--json` returns `mode` (`working-tree` \| `worktree`), `base_ref`, `diff_range`, and a `warning` when the scope degraded. The bare form prints just the range (`git diff $(pilot review-scope) -- <files>`) — handy interactively, but **scripts and skills must use `--json` and parse it**: a `pilot` older than this subcommand prints a banner and exits 0, so a `\|\| echo HEAD` fallback never fires and the banner text gets spliced into `git diff`. |
+| Worktree | `pilot worktree detect\|create\|diff\|sync\|cleanup --json <slug>` (slug = plan filename without date prefix and `.md`; `create` auto-stashes). `pilot worktree status --json` takes **no** slug — it reports the worktree registered for the *current session* (or `{"active": false}`). Use `detect` when you need a specific plan's branch or base branch. |
 | License | `pilot activate <key>`, `pilot deactivate`, `pilot status`, `pilot verify`, `pilot trial --check\|--start` |
 | Updates | `pilot update [--yes] [--json]` (alias: `pilot upgrade`) — updates Pilot Shell. User-initiated; don't invoke on the user's behalf without explicit ask. |
 | Other | `pilot greet`, `pilot statusline` |

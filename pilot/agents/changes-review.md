@@ -21,7 +21,7 @@ Verify implemented code against the plan: compliance, quality, and goal achievem
 
 ## Scope
 
-The orchestrator provides: `plan_file`, `changed_files`, `output_path`, `runtime_environment` (optional), `test_framework_constraints` (optional).
+The orchestrator provides: `plan_file`, `changed_files`, `output_path`, `base_ref` (the diff base — `HEAD` when the change is uncommitted/staged, the worktree's detected base branch when it is committed), `diff_range` (the ready-to-use `git diff` argument, resolved by `pilot review-scope`), `runtime_environment` (optional), `test_framework_constraints` (optional).
 
 ## Workflow
 
@@ -35,7 +35,9 @@ The orchestrator provides: `plan_file`, `changed_files`, `output_path`, `runtime
 git diff HEAD -- <file1> <file2> ...
 ```
 
-If the output is empty (changes are committed on a branch), run `git diff main..HEAD -- <file1> <file2> ...` instead.
+If the orchestrator gave you a `diff_range`, prefer it directly: `git diff <diff_range> -- <file1> <file2> ...`. Otherwise, if the output above is empty (changes are committed on a branch), run `git diff <base_ref>...HEAD -- <file1> <file2> ...` using the `base_ref` the orchestrator gave you.
+
+⛔ **Use the supplied `base_ref`, and three dots.** Do NOT substitute a hardcoded branch name: a worktree forked from `dev` (or any non-`main` base) reviewed against `main` pulls in every commit that base has beyond `main`, so you would review a corrupted superset of the change. And `...` diffs from the point the branch forked, so commits the base branch took *after* the fork stay out; two dots would diff against the base branch's live tip and render those commits inverted — a line the base branch added would appear as a line this branch deleted. If the orchestrator gave you no `base_ref` and the working-tree diff is empty, say so in your findings rather than guessing a branch name.
 
 **Cross-reference** the diff files against `changed_files` from the orchestrator. Files in `changed_files` but not in the plan may be legitimate (transitive updates) — review only if they look spec-related.
 

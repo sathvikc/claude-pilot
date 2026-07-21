@@ -52,7 +52,17 @@ Outcomes:
 
 ### 1.4 Root-cause + scope audit
 
-**Resolve the diff base once:** in non-worktree mode (the default) the fix is UNCOMMITTED in the working tree, so diff against `HEAD` (`DIFF=HEAD`); in worktree mode the fix is per-task-committed, so diff against the worktree base ref (`~/.pilot/bin/pilot worktree status --json <slug>` → `base_branch`, `DIFF=<base_ref>..HEAD`). A committed ref-range in non-worktree mode shows nothing and would falsely fire rule 1 every run.
+**Resolve the diff base once with the resolver** — ⛔ do NOT derive it by hand:
+
+```bash
+DIFF=$(~/.pilot/bin/pilot review-scope --slug <plan-slug> --json 2>/dev/null \
+  | python3 -c 'import json,sys; print(json.load(sys.stdin)["diff_range"])' 2>/dev/null) || DIFF=""
+[ -n "$DIFF" ] || DIFF=HEAD   # older pilot binary: resolve by hand if the fix is worktree-committed
+```
+
+⛔ Pipe through `--json` + a parse — do NOT use `... 2>/dev/null || echo HEAD`. A `pilot` binary predating `review-scope` does not fail on it: it prints the "runs directly inside Claude Code" transition banner and exits **0**, so `||` never fires and `$DIFF` silently becomes the banner text. The `json.load` parse fails on that banner, so the fallback actually runs.
+
+That yields `HEAD` when the fix is UNCOMMITTED in the working tree (the default), and `<base_branch>...HEAD` when it is per-task-committed in a worktree. A committed ref-range in the uncommitted case shows nothing and would falsely fire rule 1 every run; a two-dot range in the worktree case would fold the base branch's own post-fork commits into this diff **inverted** — a base-branch addition reading as a deletion the fix never made — silently corrupting both the root-cause check and the scope check below. `pilot review-scope` encodes both rules; see `launcher/worktree.py:resolve_review_scope`.
 
 ```bash
 git diff --name-only $DIFF

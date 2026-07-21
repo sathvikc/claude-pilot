@@ -20,8 +20,10 @@ Use your tools — do NOT rely on a pre-bundled diff. The plan is gitignored or 
 1. Read the plan file first. Note the tasks, Definition-of-Done criteria, risk mitigations, and Goal Verification truths.
 2. Get the diff with Bash. Take the bare paths from the "Files the plan said it would touch" list above (strip the leading `- ` bullet from each line, one path per line) and pass them to `git diff` as space-separated pathspecs:
    ```bash
-   git diff {{BASE_REF}}..HEAD -- <path1> <path2> ...
+   git diff {{BASE_REF}}...HEAD -- <path1> <path2> ...
    ```
+   Three dots, not two: `...` diffs from the point the branch forked, so a base branch that moved on after the fork does not leak its own commits into this diff inverted (a base-branch addition showing up as a deletion the branch never made). Two dots would diff against the base branch's live tip.
+
    If that is empty (changes are uncommitted on the base branch), fall back to:
    ```bash
    git diff HEAD -- <path1> <path2> ...
