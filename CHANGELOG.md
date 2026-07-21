@@ -2,6 +2,12 @@
 
 All notable changes to Pilot Shell will be documented in this file.
 
+## [9.13.1] - 2026-07-21
+
+### Bug Fixes
+
+- Resolve code review diff scope through a single resolver
+
 ## [9.13.0] - 2026-07-16
 
 ### Features
