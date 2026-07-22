@@ -2,6 +2,12 @@
 
 All notable changes to Pilot Shell will be documented in this file.
 
+## [9.13.2] - 2026-07-22
+
+### Bug Fixes
+
+- Poll teammate feedback for shared requirements and worktree plans
+
 ## [9.13.1] - 2026-07-21
 
 ### Bug Fixes
